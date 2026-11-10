@@ -18,6 +18,7 @@ public class OpenZombiesDeployToolScreenS2CPacket {
     private final boolean openScreen;
     private final ZombiesDeployToolActionC2SPacket.Action responseAction;
     private final long requestId;
+    private final String npcEditorData;
 
     public OpenZombiesDeployToolScreenS2CPacket(ZombiesDeploySnapshot snapshot) {
         this(snapshot, true);
@@ -34,11 +35,19 @@ public class OpenZombiesDeployToolScreenS2CPacket {
 
     public OpenZombiesDeployToolScreenS2CPacket(
             ZombiesDeploySnapshot snapshot, boolean openScreen, ZombiesDeployToolActionC2SPacket.Action responseAction, long requestId) {
+        this(snapshot, openScreen, responseAction, requestId, "");
+    }
+
+    public OpenZombiesDeployToolScreenS2CPacket(ZombiesDeploySnapshot snapshot, boolean openScreen,
+            ZombiesDeployToolActionC2SPacket.Action responseAction, long requestId, String npcEditorData) {
         this.snapshot = snapshot;
         this.openScreen = openScreen;
         this.responseAction = responseAction == null ? ZombiesDeployToolActionC2SPacket.Action.REFRESH : responseAction;
         this.requestId = requestId;
+        this.npcEditorData = npcEditorData;
     }
+
+    public String npcEditorData() { return npcEditorData; }
 
     public ZombiesDeploySnapshot snapshot() {
         return snapshot;
@@ -146,6 +155,9 @@ public class OpenZombiesDeployToolScreenS2CPacket {
         buf.writeVarInt(snapshot.redoCount());
         writeNullableBlockPos(buf, snapshot.registeredMapPos1());
         writeNullableBlockPos(buf, snapshot.registeredMapPos2());
+        if (responseAction == ZombiesDeployToolActionC2SPacket.Action.NPC_EDITOR) {
+            com.cdp.codpattern.app.zombies.npc.ZombiesNpcEditorWire.write(buf, npcEditorData, false);
+        }
     }
 
     public static OpenZombiesDeployToolScreenS2CPacket decode(FriendlyByteBuf buf) {
@@ -281,7 +293,9 @@ public class OpenZombiesDeployToolScreenS2CPacket {
                 buf.readVarInt(),
                 readNullableBlockPos(buf),
                 readNullableBlockPos(buf));
-        return new OpenZombiesDeployToolScreenS2CPacket(snapshot, openScreen, responseAction, requestId);
+        String npcEditorData = responseAction == ZombiesDeployToolActionC2SPacket.Action.NPC_EDITOR
+                ? com.cdp.codpattern.app.zombies.npc.ZombiesNpcEditorWire.read(buf, false) : "";
+        return new OpenZombiesDeployToolScreenS2CPacket(snapshot, openScreen, responseAction, requestId, npcEditorData);
     }
 
     public void handle(Supplier<NetworkEvent.Context> ctx) {

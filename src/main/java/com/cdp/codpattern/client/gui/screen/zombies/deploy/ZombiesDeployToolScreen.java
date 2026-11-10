@@ -83,6 +83,15 @@ public class ZombiesDeployToolScreen extends Screen {
                 withCommitted(() -> changePage(!mapPage()))).active = !session.busy() && (mapPage() ? !snapshot().selectedMap().isBlank() : true);
         button(tr("editor.details") + (session.details ? " ▴" : " ▾"), width - 130, 38, 118, () ->
                 withCommitted(() -> { session.details = !session.details; rebuild(); }));
+        int npcButtonX = 20 + Math.min(118, width / 3);
+        button(Component.translatable("gui.codpattern.zombies.npc.title").getString(), npcButtonX, 38,
+                Math.min(104, width - 138 - npcButtonX), () -> withCommitted(() -> {
+                    if (session.dirty()) {
+                        localError = Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();
+                        return;
+                    }
+                    ZombiesDeployClientActionHandler.openNpcEditor(this, session.draft(false));
+                })).active = !session.busy() && !snapshot().selectedMap().isBlank();
         if (!compactDetails) {
             if (mapPage()) { buildMaps(); buildRegistration(); }
             else { buildTypes(); buildObjects(); buildFields(); }

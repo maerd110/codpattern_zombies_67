@@ -247,6 +247,27 @@ tasks.register('syncGameTestStructures', Copy) {
     include '**/*.snbt'
 }
 
+if (project.hasProperty('npcClientPreview')) {
+    tasks.register('stageNpcClientPreview', Sync) {
+        dependsOn tasks.named('testClasses')
+        from(sourceSets.test.output.classesDirs) {
+            include 'com/cdp/codpattern/client/gui/screen/zombies/deploy/ZombiesNpcClientPreview*'
+        }
+        into layout.buildDirectory.dir('verification/npc-client/classes')
+    }
+    minecraft.runs.client {
+        workingDirectory file('build/verification/npc-client/run')
+        property 'codpattern.npc.clientPreview', 'true'
+        property 'codpattern.npc.clientPreviewOutput', file('build/verification/npc-client').absolutePath
+        environment 'MOD_CLASSES', [
+                "codpattern_zombies%%${layout.buildDirectory.dir('resources/main').get().asFile.absolutePath}",
+                "codpattern_zombies%%${layout.buildDirectory.dir('classes/java/main').get().asFile.absolutePath}",
+                "codpattern_zombies%%${layout.buildDirectory.dir('verification/npc-client/classes').get().asFile.absolutePath}"
+        ].join(File.pathSeparator)
+    }
+    tasks.matching { it.name == 'runClient' }.configureEach { dependsOn tasks.named('stageNpcClientPreview') }
+}
+
 tasks.register('compileBarrierGroupRulesGameTests', JavaCompile) {
     group = 'verification'
     description = 'Compile only the barrier-group rule checks and their Forge GameTest entrypoints.'
@@ -499,7 +520,7 @@ dependencies {
     // Keep the addon-side client run equivalent to the main mod's normal
     // client environment.  These are external runtime mods, not addon
     // project sources fetched by the main build.
-    if (!dedicatedServerRunRequested) {
+    if (!dedicatedServerRunRequested && !project.hasProperty('npcClientPreview')) {
         runtimeOnly fg.deobf('maven.modrinth:physicsmod:JkM3OTEl')
         runtimeOnly fg.deobf('maven.modrinth:taczaddon:1.1.6')
     }

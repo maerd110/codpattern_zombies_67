@@ -38,7 +38,8 @@ public class ZombiesDeployToolActionC2SPacket {
         CREATE_MAP,
         JUMP_TO_ISSUE,
         JUMP_TO_ISSUE_TARGET,
-        REDO_LAST
+        REDO_LAST,
+        NPC_EDITOR
     }
 
     private final Action action;
@@ -121,6 +122,10 @@ public class ZombiesDeployToolActionC2SPacket {
         return requestId;
     }
 
+    public static ZombiesDeployToolActionC2SPacket npcEditor(ZombiesDeployDraft draft, String operation, String payload, long requestId) {
+        return new ZombiesDeployToolActionC2SPacket(Action.NPC_EDITOR, draft, operation, payload, "", "", -1, false, -1, requestId);
+    }
+
     public void encode(FriendlyByteBuf buf) {
         buf.writeEnum(action);
         buf.writeUtf(draft.workspaceStage());
@@ -139,7 +144,8 @@ public class ZombiesDeployToolActionC2SPacket {
             buf.writeUtf(value);
         });
         buf.writeUtf(fieldKey);
-        buf.writeUtf(fieldValue);
+        if (action == Action.NPC_EDITOR) com.cdp.codpattern.app.zombies.npc.ZombiesNpcEditorWire.write(buf, fieldValue, true);
+        else buf.writeUtf(fieldValue);
         buf.writeUtf(issueWorkflowStep);
         buf.writeUtf(issueObjectType);
         buf.writeVarInt(issueTargetIndex);
@@ -165,6 +171,8 @@ public class ZombiesDeployToolActionC2SPacket {
         for (int i = 0; i < fieldCount; i++) {
             fields.put(buf.readUtf(), buf.readUtf());
         }
+        String fieldKey = buf.readUtf();
+        String fieldValue = action == Action.NPC_EDITOR ? com.cdp.codpattern.app.zombies.npc.ZombiesNpcEditorWire.read(buf, true) : buf.readUtf();
         return new ZombiesDeployToolActionC2SPacket(
                 action,
                 new ZombiesDeployDraft(
@@ -179,8 +187,8 @@ public class ZombiesDeployToolActionC2SPacket {
                         selectedIndex,
                         validationView,
                         fields),
-                buf.readUtf(),
-                buf.readUtf(),
+                fieldKey,
+                fieldValue,
                 buf.readUtf(),
                 buf.readUtf(),
                 buf.readVarInt(),
@@ -219,6 +227,14 @@ public class ZombiesDeployToolActionC2SPacket {
             if (!ToolAccessHelper.ensureAdminAccess(player)) {
                 return;
             }
+            if (action == Action.NPC_EDITOR) {
+                var data = com.cdp.codpattern.app.zombies.npc.ZombiesNpcEditorService.perform(player, draft.selectedMap(), fieldKey, fieldValue);
+                var result = ZombiesDeployToolService.instance().snapshot(player, stack, draft, "", "ok", "");
+                result.value().ifPresent(snapshot -> FPSMatch.sendToPlayer(player,
+                        new OpenZombiesDeployToolScreenS2CPacket(snapshot, false, action, requestId,
+                                com.cdp.codpattern.app.zombies.npc.ZombiesNpcRepository.GSON.toJson(data))));
+                return;
+            }
             ZombiesDeployServiceResult<ZombiesDeploySnapshot> result = dispatch(player, stack);
             // Only sendScreen opens the editor; delayed action replies must not reopen it.
             boolean openScreen = false;
@@ -231,6 +247,7 @@ public class ZombiesDeployToolActionC2SPacket {
     private ZombiesDeployServiceResult<ZombiesDeploySnapshot> dispatch(ServerPlayer player, ItemStack stack) {
         ZombiesDeployToolService service = ZombiesDeployToolService.instance();
         return switch (action) {
+            case NPC_EDITOR -> throw new IllegalStateException("NPC editor packets have a dedicated handler");
             case REFRESH, SELECT_MAP, SELECT_OBJECT -> service.snapshot(
                     player,
                     stack,

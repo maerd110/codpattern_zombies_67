@@ -1,0 +1,480 @@
+package com.cdp.codpattern.client.gui.screen.zombies.deploy;
+
+import com.cdp.codpattern.app.zombies.deploy.ZombiesDeployDraft;
+import com.cdp.codpattern.app.zombies.npc.*;
+import com.cdp.codpattern.client.zombies.ZombiesDeployClientActionHandler;
+import com.google.gson.*;
+import com.phasetranscrystal.fpsmatch.FPSMatch;
+import com.phasetranscrystal.fpsmatch.common.packet.zombies.OpenZombiesDeployToolScreenS2CPacket;
+import com.phasetranscrystal.fpsmatch.common.packet.zombies.ZombiesDeployToolActionC2SPacket;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.ConfirmScreen;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.commands.arguments.blocks.BlockStateParser;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.phys.BlockHitResult;
+import org.lwjgl.glfw.GLFW;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Consumer;
+import java.util.concurrent.atomic.AtomicLong;
+
+/** NPC authoring pages inside the deployment tool. The working copy survives page switches and collapse. */
+public final class ZombiesNpcDeployScreen extends Screen {
+    private static final AtomicLong REQUESTS = new AtomicLong();
+    private static final int ROW = 25;
+    private final ZombiesDeployToolScreen parent;
+    private final ZombiesDeployDraft deployment;
+    private ZombiesNpcEditorDraft draft;
+    private String revision = "";
+    private List<Integer> barriers = List.of();
+    private boolean editable;
+    private boolean suspended;
+    private long pending = -1;
+    private long deadline;
+    private Runnable afterReply;
+    private String message = "";
+    private int npcIndex = -1, ruleIndex = -1, actionIndex = -1;
+    private int page, scroll, npcScroll;
+    private int top, bottom, leftWidth, formX, formWidth;
+    private final List<FormRow> rows = new ArrayList<>();
+    private final List<EditBox> textBoxes = new ArrayList<>();
+    private final List<Label> labels = new ArrayList<>();
+
+    public ZombiesNpcDeployScreen(ZombiesDeployToolScreen parent, ZombiesDeployDraft deployment) {
+        super(Component.translatable("gui.codpattern.zombies.npc.title"));
+        this.parent = parent;
+        this.deployment = deployment.withFields(java.util.Map.of());
+    }
+    private static String tr(String key, Object... values) { return Component.translatable("gui.codpattern.zombies.npc." + key, values).getString(); }
+    private boolean busy() { return pending >= 0; }
+    private boolean canEdit() { return editable && !busy() && draft != null; }
+    public boolean suspended() { return suspended; }
+    public String mapName() { return deployment.selectedMap(); }
+
+    public void load() { request("load", "", null); }
+    public void reopen() { suspended = false; minecraft.setScreen(this); }
+
+    private void request(String operation, String payload, Runnable next) {
+        if (busy()) return;
+        try {
+            ZombiesNpcEditorWire.checkRequest(payload);
+            pending = REQUESTS.incrementAndGet();
+            deadline = System.currentTimeMillis() + 20_000;
+            afterReply = next;
+            message = tr("waiting");
+            FPSMatch.sendToServer(ZombiesDeployToolActionC2SPacket.npcEditor(deployment, operation, payload, pending));
+        } catch (RuntimeException failure) {
+            pending = -1;
+            message = detail(failure);
+        }
+        rebuildWidgets();
+    }
+
+    public void accept(OpenZombiesDeployToolScreenS2CPacket packet) {
+        if (packet.requestId() != pending || pending < 0) return;
+        pending = -1;
+        Runnable next = afterReply;
+        afterReply = null;
+        try {
+            var response = ZombiesNpcRepository.GSON.fromJson(packet.npcEditorData(), ZombiesNpcEditorService.Snapshot.class);
+            if (!response.mapName().equals(mapName())) return;
+            editable = response.editable();
+            if (!response.error().isBlank()) {
+                message = response.error().startsWith("gui.") ? Component.translatable(response.error()).getString() : response.error();
+                rebuildWidgets();
+                return;
+            }
+            if (draft == null) draft = new ZombiesNpcEditorDraft(response.config());
+            else draft.accept(response.config());
+            revision = response.revision();
+            barriers = response.barriers();
+            npcIndex = Math.min(Math.max(0, npcIndex), draft.npcs().size() - 1);
+            clampSelection();
+            message = tr("status." + response.status());
+            rebuildWidgets();
+            if (next != null) next.run();
+        } catch (RuntimeException failure) {
+            message = detail(failure);
+            rebuildWidgets();
+        }
+    }
+
+    @Override protected void init() {
+        rows.clear(); textBoxes.clear(); labels.clear();
+        top = 74; bottom = height - 92;
+        leftWidth = Math.max(84, Math.min(144, width / 4));
+        formX = leftWidth + 24; formWidth = width - formX - 12;
+        int tabWidth = (width - 32) / 3;
+        for (int i = 0; i < 3; i++) {
+            int target = i;
+            button((page == i ? "● " : "") + tr("page." + i), 12 + i * (tabWidth + 4), 42, tabWidth, () -> {
+                page = target; scroll = 0; rebuildWidgets();
+            }, !busy() && draft != null);
+        }
+        if (draft != null) {
+            buildNpcList();
+            if (npc() != null) {
+                switch (page) { case 0 -> basic(); case 1 -> rules(); case 2 -> actions(); }
+            } else heading("empty");
+            int visible = visibleRows();
+            scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.size() - visible)));
+            for (int i = scroll; i < Math.min(rows.size(), scroll + visible); i++) rows.get(i).draw(formX, top + (i - scroll) * ROW, formWidth);
+        }
+        footer();
+    }
+
+    private int visibleRows() { return Math.max(1, (bottom - top) / ROW); }
+    private JsonObject npc() { return object(draft == null ? null : draft.npcs(), npcIndex); }
+    private JsonObject rule() { return object(npc() == null ? null : npc().getAsJsonArray("rules"), ruleIndex); }
+    private JsonObject action() { return object(rule() == null ? null : rule().getAsJsonArray("actions"), actionIndex); }
+    private static JsonObject object(JsonArray array, int index) { return array != null && index >= 0 && index < array.size() ? array.get(index).getAsJsonObject() : null; }
+    private static String value(JsonObject object, String key, String fallback) { return object.has(key) && !object.get(key).isJsonNull() ? object.get(key).getAsString() : fallback; }
+    private void clampSelection() {
+        if (npc() == null) { ruleIndex = -1; actionIndex = -1; return; }
+        ruleIndex = Math.min(Math.max(0, ruleIndex), npc().getAsJsonArray("rules").size() - 1);
+        actionIndex = rule() == null ? -1 : Math.min(Math.max(0, actionIndex), rule().getAsJsonArray("actions").size() - 1);
+    }
+
+    private void buildNpcList() {
+        int count = Math.max(1, (bottom - top - 48) / ROW);
+        npcScroll = Math.max(0, Math.min(npcScroll, Math.max(0, draft.npcs().size() - count)));
+        for (int row = 0; row < count && row + npcScroll < draft.npcs().size(); row++) {
+            int index = row + npcScroll;
+            JsonObject npc = draft.npcs().get(index).getAsJsonObject();
+            String caption = value(npc.getAsJsonObject("appearance"), "name", value(npc, "id", ""));
+            button((index == npcIndex ? "● " : "") + caption, 12, top + row * ROW, leftWidth, () -> {
+                npcIndex = index; ruleIndex = 0; actionIndex = 0; scroll = 0; clampSelection(); rebuildWidgets();
+            }, !busy());
+        }
+        button(tr("add_npc"), 12, bottom - 44, leftWidth, () -> {
+            draft.addNpc(currentPosition()); npcIndex = draft.npcs().size() - 1; ruleIndex = -1; actionIndex = -1;
+            page = 0; scroll = 0; npcScroll = npcIndex; rebuildWidgets();
+        }, canEdit() && draft.npcs().size() < 128);
+        button(tr("delete_npc"), 12, bottom - 20, leftWidth, () -> {
+            draft.npcs().remove(npcIndex); npcIndex = Math.min(Math.max(0, npcIndex - 1), draft.npcs().size() - 1);
+            clampSelection(); scroll = 0; rebuildWidgets();
+        }, canEdit() && npc() != null);
+    }
+
+    private void basic() {
+        JsonObject npc = npc();
+        text("id", value(npc, "id", ""), next -> draft.renameNpc(npc, next));
+        JsonObject appearance = npc.getAsJsonObject("appearance");
+        text("name", appearance, "name", "");
+        text("skin", appearance, "skin", "minecraft:textures/entity/player/wide/steve.png");
+        choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
+        bool("alive", appearance, "alive", true);
+        position(appearance, "position");
+        multiline("dialogue", npc, "dialogue");
+        rowButton("duplicate_npc", () -> {
+            JsonObject clone = npc.deepCopy();
+            String newId = draft.addNpc(currentPosition()).get("id").getAsString();
+            clone.addProperty("id", newId);
+            // Internal prerequisites of the copy follow its new ID.
+            for (JsonElement rule : clone.getAsJsonArray("rules")) {
+                JsonArray prerequisites = rule.getAsJsonObject().getAsJsonArray("requires");
+                for (int i = 0; i < prerequisites.size(); i++) {
+                    String prerequisite = prerequisites.get(i).getAsString();
+                    String old = value(npc, "id", "") + ".";
+                    if (prerequisite.startsWith(old)) prerequisites.set(i, new JsonPrimitive(newId + "." + prerequisite.substring(old.length())));
+                }
+                for (JsonElement action : rule.getAsJsonObject().getAsJsonArray("actions")) {
+                    JsonObject candidate = action.getAsJsonObject();
+                    if (value(candidate, "target", "").equals(value(npc, "id", ""))) candidate.addProperty("target", newId);
+                }
+            }
+            draft.npcs().set(draft.npcs().size() - 1, clone); npcIndex = draft.npcs().size() - 1; scroll = 0; rebuildWidgets();
+        });
+    }
+
+    private void rules() {
+        ruleSelector();
+        rowButton("add_rule", () -> { draft.addRule(npc()); ruleIndex = npc().getAsJsonArray("rules").size() - 1; actionIndex = 0; scroll = 0; rebuildWidgets(); });
+        if (rule() == null) { heading("no_rules"); return; }
+        JsonObject rule = rule();
+        text("rule_id", value(rule, "id", ""), next -> draft.renameRule(npc(), rule, next));
+        selection("trigger", value(rule, "trigger", "INTERACT"), List.of("INTERACT", "AUTO"), "trigger.", selected -> {
+            if (selected.equals("AUTO") && rule.getAsJsonArray("actions").asList().stream()
+                    .anyMatch(element -> List.of("TAKE_ITEM", "GIVE_ITEM").contains(value(element.getAsJsonObject(), "kind", "")))) {
+                message = tr("error.auto_items"); return;
+            }
+            rule.addProperty("trigger", selected); rebuildWidgets();
+        });
+        text("min_wave", rule, "minWave", "0");
+        bool("any_condition", rule, "anyCondition", false);
+        heading("barriers");
+        var groups = new java.util.TreeSet<>(barriers);
+        for (JsonElement group : rule.getAsJsonArray("openedBarriers")) groups.add(group.getAsInt());
+        if (groups.isEmpty()) heading("no_barriers");
+        for (int group : groups) toggleMember(tr("barrier", group), rule.getAsJsonArray("openedBarriers"), new JsonPrimitive(group));
+        heading("prerequisites");
+        var prerequisites = new java.util.TreeSet<String>();
+        for (JsonElement requirement : rule.getAsJsonArray("requires")) prerequisites.add(requirement.getAsString());
+        for (JsonElement element : draft.npcs()) {
+            JsonObject candidate = element.getAsJsonObject();
+            for (JsonElement candidateRule : candidate.getAsJsonArray("rules")) if (candidateRule != rule) {
+                String key = value(candidate, "id", "") + "." + value(candidateRule.getAsJsonObject(), "id", "");
+                prerequisites.add(key);
+            }
+        }
+        for (String key : prerequisites) toggleMember(key, rule.getAsJsonArray("requires"), new JsonPrimitive(key));
+        reorder(npc().getAsJsonArray("rules"), ruleIndex, index -> ruleIndex = index);
+        rowButton("delete_rule", () -> { npc().getAsJsonArray("rules").remove(ruleIndex); ruleIndex--; clampSelection(); scroll = 0; rebuildWidgets(); });
+    }
+
+    private void ruleSelector() {
+        JsonArray rules = npc().getAsJsonArray("rules");
+        if (rules.isEmpty()) return;
+        List<String> ids = rules.asList().stream().map(element -> value(element.getAsJsonObject(), "id", "")).toList();
+        selection("selected_rule", rule() == null ? ids.get(0) : value(rule(), "id", ""), ids, "", selected -> {
+            ruleIndex = ids.indexOf(selected); actionIndex = 0; scroll = 0; clampSelection(); rebuildWidgets();
+        });
+    }
+
+    private void actions() {
+        ruleSelector();
+        if (rule() == null) { heading("no_rules"); return; }
+        JsonArray actions = rule().getAsJsonArray("actions");
+        if (!actions.isEmpty()) {
+            List<String> options = new ArrayList<>();
+            for (int i = 0; i < actions.size(); i++) options.add((i + 1) + ". " + tr("kind." + value(actions.get(i).getAsJsonObject(), "kind", "DIALOGUE")));
+            selection("selected_action", options.get(Math.max(0, actionIndex)), options, "", selected -> {
+                actionIndex = options.indexOf(selected); rebuildWidgets();
+            });
+        }
+        rowButton("add_action", () -> {
+            draft.addAction(rule(), ZombiesNpcConfig.Kind.DIALOGUE, currentPosition()); actionIndex = actions.size() - 1; rebuildWidgets();
+        });
+        if (action() == null) return;
+        JsonObject action = action();
+        List<String> kinds = Arrays.stream(ZombiesNpcConfig.Kind.values()).map(Enum::name)
+                .filter(kind -> !value(rule(), "trigger", "INTERACT").equals("AUTO") || (!kind.equals("TAKE_ITEM") && !kind.equals("GIVE_ITEM"))).toList();
+        selection("kind", value(action, "kind", "DIALOGUE"), kinds, "kind.", selected -> {
+            ZombiesNpcEditorDraft.setKind(action, ZombiesNpcConfig.Kind.valueOf(selected), currentPosition()); rebuildWidgets();
+        });
+        String kind = value(action, "kind", "DIALOGUE");
+        if (kind.equals("NPC") || kind.equals("DIALOGUE")) {
+            List<String> targets = new ArrayList<>(List.of(""));
+            for (JsonElement npc : draft.npcs()) targets.add(value(npc.getAsJsonObject(), "id", ""));
+            selection("target", value(action, "target", ""), targets, "", selected -> {
+                if (selected.isEmpty()) action.remove("target"); else action.addProperty("target", selected);
+                rebuildWidgets();
+            });
+        }
+        switch (kind) {
+            case "NPC" -> appearancePatch(action);
+            case "DIALOGUE" -> multiline("dialogue", action, "text");
+            case "TAKE_ITEM", "GIVE_ITEM" -> {
+                text("item", action, "item", "minecraft:emerald"); text("count", action, "count", "1");
+                rowButton("held_item", () -> {
+                    var stack = minecraft.player.getMainHandItem();
+                    if (stack.isEmpty() || stack.getItem() instanceof com.phasetranscrystal.fpsmatch.common.item.zombies.ZombiesDeployTool) stack = minecraft.player.getOffhandItem();
+                    if (stack.isEmpty()) { message = tr("error.no_item"); return; }
+                    action.addProperty("item", stack.save(new CompoundTag()).toString()); action.addProperty("count", stack.getCount()); rebuildWidgets();
+                });
+            }
+            case "SET_BLOCK" -> {
+                position(action, "position"); text("block", action, "block", "minecraft:stone");
+                rowButton("looked_block", () -> {
+                    if (minecraft.hitResult instanceof BlockHitResult hit && hit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                        action.add("position", ZombiesNpcEditorDraft.position(new ZombiesNpcConfig.Position(hit.getBlockPos().getX(), hit.getBlockPos().getY(), hit.getBlockPos().getZ(), 0)));
+                        action.addProperty("block", BlockStateParser.serialize(minecraft.level.getBlockState(hit.getBlockPos()))); rebuildWidgets();
+                    } else message = tr("error.no_block");
+                });
+            }
+            case "OPEN_BARRIER" -> {
+                List<String> groups = barriers.stream().map(String::valueOf).toList();
+                if (groups.isEmpty()) heading("no_barriers");
+                else selection("barrier_group", value(action, "barrierGroup", groups.get(0)), groups, "", selected -> {
+                    action.addProperty("barrierGroup", Integer.parseInt(selected)); rebuildWidgets();
+                });
+            }
+        }
+        reorder(actions, actionIndex, index -> actionIndex = index);
+        rowButton("delete_action", () -> { actions.remove(actionIndex); actionIndex--; clampSelection(); rebuildWidgets(); });
+    }
+
+    private void appearancePatch(JsonObject action) {
+        JsonObject patch = action.getAsJsonObject("appearance");
+        if (patch == null) { patch = new JsonObject(); action.add("appearance", patch); }
+        optional(patch, "name", "name", new JsonPrimitive(""));
+        if (patch.has("name")) text("name", patch, "name", "");
+        optional(patch, "skin", "skin", new JsonPrimitive("minecraft:textures/entity/player/wide/steve.png"));
+        if (patch.has("skin")) text("skin", patch, "skin", "");
+        optional(patch, "pose", "pose", new JsonPrimitive("STANDING"));
+        if (patch.has("pose")) choice("pose", patch, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
+        optional(patch, "alive", "alive", new JsonPrimitive(true));
+        if (patch.has("alive")) bool("alive", patch, "alive", true);
+        optional(patch, "position", "position", ZombiesNpcEditorDraft.position(currentPosition()));
+        if (patch.has("position")) position(patch, "position");
+        optional(action, "dialogue", "dialogue", new JsonPrimitive(""));
+        if (action.has("dialogue")) multiline("dialogue", action, "dialogue");
+    }
+
+    private void optional(JsonObject object, String key, String label, JsonElement defaultValue) {
+        rows.add((x, y, w) -> button(tr(object.has(key) ? "change" : "keep", tr(label)), x, y, w, () -> {
+            if (object.has(key)) object.remove(key); else object.add(key, defaultValue.deepCopy());
+            rebuildWidgets();
+        }, canEdit()));
+    }
+    private void position(JsonObject object, String key) {
+        JsonObject position = object.getAsJsonObject(key);
+        rowButton("current_position", () -> { object.add(key, ZombiesNpcEditorDraft.position(currentPosition())); rebuildWidgets(); });
+        for (String axis : List.of("x", "y", "z", "yaw")) text(axis, position, axis, "0");
+    }
+    private ZombiesNpcConfig.Position currentPosition() {
+        var player = minecraft.player;
+        return player == null ? new ZombiesNpcConfig.Position(0, 64, 0, 0)
+                : new ZombiesNpcConfig.Position(player.getX(), player.getY(), player.getZ(), player.getYRot());
+    }
+    private void multiline(String label, JsonObject object, String key) {
+        List<String> lines = new ArrayList<>(Arrays.asList(value(object, key, "").split("\n", -1)));
+        for (int i = 0; i < lines.size(); i++) {
+            int index = i;
+            rows.add((x, y, w) -> {
+                input(label, lines.get(index), next -> { lines.set(index, next); object.addProperty(key, String.join("\n", lines)); }, x, y, w - 26);
+                button("−", x + w - 22, y, 22, () -> {
+                    lines.remove(index); object.addProperty(key, String.join("\n", lines)); rebuildWidgets();
+                }, canEdit());
+            });
+        }
+        rowButton("add_line", () -> { object.addProperty(key, value(object, key, "") + "\n"); rebuildWidgets(); });
+    }
+    private void text(String label, JsonObject object, String key, String fallback) {
+        text(label, value(object, key, fallback), next -> object.addProperty(key, next));
+    }
+    private void text(String label, String value, Consumer<String> change) {
+        rows.add((x, y, w) -> input(label, value, change, x, y, w));
+    }
+    private void input(String label, String value, Consumer<String> change, int x, int y, int w) {
+        int labelWidth = Math.min(100, w / 3);
+        labels.add(new Label(tr(label), x, y + 6, labelWidth - 5));
+        EditBox box = addRenderableWidget(new EditBox(font, x + labelWidth, y, w - labelWidth, 20, Component.literal(tr(label))));
+        box.setMaxLength(32767); box.setValue(value); box.setResponder(change); box.setEditable(canEdit());
+        box.setTooltip(Tooltip.create(Component.literal(tr(label)))); textBoxes.add(box);
+    }
+    private void bool(String label, JsonObject object, String key, boolean fallback) {
+        selection(label, value(object, key, Boolean.toString(fallback)), List.of("false", "true"), "bool.", selected -> {
+            object.addProperty(key, Boolean.parseBoolean(selected)); rebuildWidgets();
+        });
+    }
+    private void choice(String label, JsonObject object, String key, List<String> options, String fallback, String translation) {
+        selection(label, value(object, key, fallback), options, translation, selected -> { object.addProperty(key, selected); rebuildWidgets(); });
+    }
+    private void selection(String label, String selected, List<String> choices, String translation, Consumer<String> change) {
+        rows.add((x, y, w) -> {
+            int labelWidth = Math.min(100, w / 3);
+            labels.add(new Label(tr(label), x, y + 6, labelWidth - 5));
+            String caption = selected.isEmpty() ? tr("self") : translation.isEmpty() ? selected : tr(translation + selected);
+            button(caption + " ▾", x + labelWidth, y, w - labelWidth, () -> {
+                if (choices.size() > 2) {
+                    minecraft.setScreen(new ZombiesNpcChoiceScreen(this, tr(label), choices, selected,
+                            option -> option.isEmpty() ? tr("self") : translation.isEmpty() ? option : tr(translation + option), change));
+                } else {
+                    int next = (choices.indexOf(selected) + 1) % choices.size(); change.accept(choices.get(next));
+                }
+            }, canEdit() && !choices.isEmpty());
+        });
+    }
+    private void toggleMember(String caption, JsonArray values, JsonElement member) {
+        rows.add((x, y, w) -> button((values.contains(member) ? "☑ " : "☐ ") + caption, x, y, w, () -> {
+            if (values.contains(member)) values.remove(member); else values.add(member);
+            rebuildWidgets();
+        }, canEdit()));
+    }
+    private void reorder(JsonArray array, int index, Consumer<Integer> change) {
+        rows.add((x, y, w) -> {
+            for (int direction : List.of(-1, 1)) {
+                int destination = index + direction;
+                button(tr(direction < 0 ? "up" : "down"), x + (direction < 0 ? 0 : w / 2 + 2), y, w / 2 - 2, () -> {
+                    JsonElement swapped = array.get(destination); array.set(destination, array.get(index)); array.set(index, swapped);
+                    change.accept(destination); rebuildWidgets();
+                }, canEdit() && destination >= 0 && destination < array.size());
+            }
+        });
+    }
+    private void heading(String key) { rows.add((x, y, w) -> labels.add(new Label(tr(key), x, y + 6, w))); }
+    private void rowButton(String key, Runnable action) { rows.add((x, y, w) -> button(tr(key), x, y, w, action, canEdit())); }
+    private Button button(String caption, int x, int y, int w, Runnable action, boolean enabled) {
+        var button = addRenderableWidget(Button.builder(Component.literal(font.plainSubstrByWidth(caption, Math.max(8, w - 8))), ignored -> {
+            try { action.run(); } catch (RuntimeException failure) { message = detail(failure); }
+        }).bounds(x, y, Math.max(18, w), 20).build());
+        button.active = enabled; button.setTooltip(Tooltip.create(Component.literal(caption))); return button;
+    }
+
+    private void save(Runnable next) {
+        if (!canEdit()) return;
+        try { request("save", draft.request(revision), next); }
+        catch (RuntimeException failure) { message = detail(failure); }
+    }
+    private void footer() {
+        int w = (width - 32) / 3;
+        button(tr("save"), 12, height - 60, w, () -> save(null), canEdit());
+        button(tr("preview"), 16 + w, height - 60, w, () -> save(() -> request("preview", "", this::collapse)), canEdit());
+        button(tr("clear_preview"), 20 + w * 2, height - 60, w, () -> request("clear", "", null), canEdit());
+        button(tr("back"), 12, height - 34, w, this::onClose, !busy());
+        button(tr("collapse"), 16 + w, height - 34, w, this::collapse, !busy());
+        button(tr("reload"), 20 + w * 2, height - 34, w, () -> confirmDiscard(this::load), !busy());
+    }
+    private void collapse() { suspended = true; minecraft.setScreen(null); }
+    private void confirmDiscard(Runnable next) {
+        if (draft == null || !draft.dirty()) { next.run(); return; }
+        minecraft.setScreen(new ConfirmScreen(confirmed -> {
+            minecraft.setScreen(this); if (confirmed) next.run();
+        }, Component.literal(tr("unsaved")), Component.literal(tr("discard_warning")), Component.literal(tr("discard")), Component.literal(tr("continue_editing"))));
+    }
+    @Override public void onClose() {
+        if (busy()) return;
+        confirmDiscard(() -> { ZombiesDeployClientActionHandler.clearNpcEditor(this); minecraft.setScreen(parent); });
+    }
+    @Override public boolean mouseScrolled(double x, double y, double delta) {
+        if (busy() || delta == 0 || draft == null) return true;
+        int direction = delta > 0 ? -1 : 1;
+        if (x < formX) npcScroll += direction; else scroll += direction;
+        rebuildWidgets(); return true;
+    }
+    @Override public void tick() {
+        textBoxes.forEach(EditBox::tick);
+        if (busy() && System.currentTimeMillis() > deadline) {
+            pending = -1; afterReply = null; message = tr("error.timeout"); rebuildWidgets();
+        }
+    }
+    @Override public boolean keyPressed(int key, int scan, int modifiers) {
+        if (key == GLFW.GLFW_KEY_ESCAPE) { onClose(); return true; }
+        if (hasControlDown() && key == GLFW.GLFW_KEY_S) { save(null); return true; }
+        return super.keyPressed(key, scan, modifiers);
+    }
+    @Override public boolean isPauseScreen() { return false; }
+    @Override public boolean shouldCloseOnEsc() { return false; }
+    @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.fill(0, 0, width, height, 0xE512191D);
+        graphics.drawString(font, title, 12, 10, 0xFFE8EFED, false);
+        String subtitle = mapName() + (draft != null && draft.dirty() ? "  * " + tr("unsaved") : "") + (!editable && draft != null ? "  " + tr("read_only") : "");
+        graphics.drawString(font, font.plainSubstrByWidth(subtitle, width - 24), 12, 26, 0xFF7FD6A0, false);
+        graphics.fill(formX - 7, top, formX - 6, bottom, 0x605B796D);
+        for (Label label : labels) graphics.drawString(font, font.plainSubstrByWidth(label.text, label.width), label.x, label.y, 0xFFE8EFED, false);
+        graphics.drawString(font, font.plainSubstrByWidth(message, width - 24), 12, height - 77, 0xFFFFCD78, false);
+        if (rows.size() > visibleRows()) {
+            int total = Math.max(1, bottom - top);
+            int thumb = Math.max(6, total * visibleRows() / rows.size());
+            int offset = (total - thumb) * scroll / Math.max(1, rows.size() - visibleRows());
+            graphics.fill(width - 5, top + offset, width - 3, top + offset + thumb, 0xFF7FD6A0);
+        }
+        super.render(graphics, mouseX, mouseY, partialTick);
+        if (mouseY >= height - 82 && mouseY < height - 65 && !message.isBlank()) graphics.renderTooltip(font, Component.literal(message), mouseX, mouseY);
+    }
+    private static String detail(Throwable failure) {
+        Throwable cause = failure;
+        while (cause.getCause() != null) cause = cause.getCause();
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+    }
+    private interface FormRow { void draw(int x, int y, int width); }
+    private record Label(String text, int x, int y, int width) { }
+}
