@@ -31,5 +31,6 @@ public final class ZombiesBootstrap {
         CodPatternBlockRegister.ITEMS.register(modEventBus);
         ZombiesItemRegister.ITEMS.register(modEventBus);
         ZombiesSoundRegister.SOUNDS.register(modEventBus);
+        com.cdp.codpattern.app.zombies.npc.ZombiesNpcRegister.install(modEventBus);
     }
 }

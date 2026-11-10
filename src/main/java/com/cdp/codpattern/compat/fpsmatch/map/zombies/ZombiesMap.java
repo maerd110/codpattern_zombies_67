@@ -18,6 +18,9 @@ import com.cdp.codpattern.app.zombies.map.object.ZombiesZombieSpawnData;
 import com.cdp.codpattern.app.zombies.model.ZombiesGamePhase;
 import com.cdp.codpattern.app.zombies.model.ZombiesPlayerRuntimeState;
 import com.cdp.codpattern.app.zombies.model.ZombiesTeamNames;
+import com.cdp.codpattern.app.zombies.npc.ZombiesNpcConfig;
+import com.cdp.codpattern.app.zombies.npc.ZombiesNpcRepository;
+import com.cdp.codpattern.app.zombies.npc.ZombiesNpcRuntime;
 import com.cdp.codpattern.app.zombies.runtime.ZombiesLifecycleRuntime;
 import com.cdp.codpattern.app.zombies.runtime.ZombiesPhaseStateMachine;
 import com.cdp.codpattern.app.zombies.runtime.ZombiesRoomRuntimeState;
@@ -156,11 +159,13 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     private List<ZombiesValidationIssue> rulesValidationIssues = List.of();
     private final Map<UUID, Integer> combatRegenCooldowns = new LinkedHashMap<>();
     private int rosterVersion = 1;
+    private final ZombiesNpcRuntime npcRuntime;
 
     public ZombiesMap(ServerLevel serverLevel, String mapName, AreaData areaData) {
         super(serverLevel, mapName, areaData);
         addTeam(ZombiesTeamNames.SURVIVORS, SURVIVOR_LIMIT);
         this.roomId = RoomId.of(BuiltInGameModes.ZOMBIES, mapName);
+        this.npcRuntime = new ZombiesNpcRuntime(this);
         loadStartupConfigs(serverLevel == null ? null : serverLevel.getServer());
         this.runtimeState = new ZombiesRoomRuntimeState(roomId);
         this.playerStateService = new ZombiesPlayerStateService();
@@ -315,6 +320,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
             startVoteService.tickVoteSession();
         }
         lifecycleRuntime.tick();
+        npcRuntime.tick(npcWave());
         tickCombatRegen();
         syncBuffRuntimeEffects();
         syncBarrierVisuals();
@@ -754,6 +760,51 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
         return objects;
     }
 
+    public ZombiesNpcRuntime npcRuntime() { return npcRuntime; }
+
+    public int npcWave() { return runtimeState.waveState().targetWave(); }
+
+    public void failNpcRound() { lifecycleRuntime.fail(ZombiesErrorCode.of("npc.action_failed")); }
+
+    public void sendNpcDialogue(Component message) { notifySurvivors(message); }
+
+    public boolean npcBarrierOpen(int group) {
+        return runtimeBarriers().stream().anyMatch(barrier -> barrier.group() == group && objectStateStore.isBarrierCleared(barrier));
+    }
+
+    public void validateNpcBarrierOpens(List<Integer> groups) {
+        var next = new java.util.HashSet<>(activePlayerSpawnGroupService.snapshot());
+        for (int group : new java.util.LinkedHashSet<>(groups)) {
+            if (runtimeBarriers().stream().noneMatch(barrier -> barrier.group() == group)) throw new IllegalArgumentException("Unknown NPC barrier " + group);
+            if (npcBarrierOpen(group)) continue;
+            var rule = runtimeBarrierGroupRules().rule(group).orElseThrow(() -> new IllegalArgumentException("Missing NPC barrier rules " + group));
+            var zombieGroups = runtimeObjects().zombieSpawns().stream().map(ZombiesZombieSpawnData::group).collect(java.util.stream.Collectors.toSet());
+            var playerGroups = runtimeObjects().initialSpawns().stream().map(ZombiesInitialSpawnData::group).collect(java.util.stream.Collectors.toSet());
+            if (!zombieGroups.containsAll(rule.spawnGroupChanges().referencedGroups())
+                    || !playerGroups.containsAll(rule.playerSpawnGroupChanges().referencedGroups())) {
+                throw new IllegalArgumentException("NPC barrier references missing spawn groups");
+            }
+            next.removeAll(rule.playerSpawnGroupChanges().disable());
+            next.addAll(rule.playerSpawnGroupChanges().enable());
+            if (!rule.playerSpawnGroupChanges().referencedGroups().isEmpty()
+                    && runtimeObjects().initialSpawns().stream().noneMatch(spawn -> next.contains(spawn.group()))) {
+                throw new IllegalArgumentException("NPC barrier would disable all player spawn groups");
+            }
+        }
+    }
+
+    /** Story rewards open a whole group and apply its spawn policy without a purchase charge. */
+    public void openNpcBarrier(int group) {
+        if (npcBarrierOpen(group)) return;
+        var rule = runtimeBarrierGroupRules().rule(group).orElseThrow();
+        var result = objectStateStore.clearBarrierGroup(group, runtimeBarriers());
+        if (!result.success()) throw new IllegalStateException("Cannot open NPC barrier " + group);
+        activeSpawnGroupService.apply(rule.spawnGroupChanges());
+        activePlayerSpawnGroupService.apply(rule.playerSpawnGroupChanges());
+        syncConfiguredInitialSpawnsToTeam();
+        barrierBlockRuntimeService.clearGroup(roomId, group, this::levelForDimension);
+    }
+
     public void applyObjects(ZombiesMapObjects objects) {
         this.objects = objects == null ? ZombiesMapObjects.EMPTY : objects;
         if (objectsFrozen) {
@@ -1150,6 +1201,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     }
 
     private void clearFrozenObjectsAndResetRuntime() {
+        npcRuntime.reset();
         waveTextScheduler.cancel();
         if (objectsFrozen) {
             powerService.reset();
@@ -1457,6 +1509,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     }
 
     private final class ZombiesStartupMapParticipant implements ZombiesStartupFlow.ZombiesStartupParticipant {
+        private ZombiesNpcConfig preparedNpcConfig;
         @Override
         public String name() {
             return "zombies_map_startup";
@@ -1468,6 +1521,9 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                 ZombiesStartupFlow.ZombiesStartupContext context
         ) {
             if (stage == ZombiesStartupFlow.ParticipantStage.BEFORE_OCCUPANCY_ACQUIRE) {
+                preparedNpcConfig = ZombiesNpcRepository.load(
+                        ZombiesNpcRepository.path(getServerLevel().getServer(), getMapName()));
+                npcRuntime.validate(preparedNpcConfig);
                 if (recoveryBlocked()) throw new IllegalStateException("Terminated match cannot start");
                 for (UUID id : context.memberIds()) {
                     var player = getServerLevel().getServer().getPlayerList().getPlayer(id);
@@ -1524,6 +1580,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                 placeRuntimeBarrierBlocks();
                 ZombiesPurchasableBlockService.PlacementChanges purchasePointChanges;
                 try {
+                    npcRuntime.start(preparedNpcConfig, false);
                     purchasePointChanges = ZombiesPurchasableBlockService.ensureMissingObjects(
                             runtimeObjects(), ZombiesMap.this::levelForDimension);
                 } catch (RuntimeException failure) {
@@ -1638,6 +1695,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     private final class ZombiesCleanupHooks implements ZombiesCleanupService.Hooks {
         @Override
         public void beforeCleanup(ZombiesCleanupParticipant.ZombiesCleanupContext context) {
+            npcRuntime.reset();
             clearRuntimeBarrierBlocks();
             clearBarrierVisuals();
         }

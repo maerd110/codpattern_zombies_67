@@ -18,6 +18,7 @@ base {
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 def barrierGroupRulesGameTests = project.hasProperty('barrierGroupRulesGameTests')
+def npcGameTests = project.hasProperty('npcGameTests')
 def backpackGameTests = project.hasProperty('backpackGameTests')
 def baseAmmoArcanaGameTests = project.hasProperty('baseAmmoArcanaGameTests')
 if (baseAmmoArcanaGameTests && !backpackGameTests) {
@@ -90,7 +91,7 @@ def navigationDiagnostic = navigationReference || navigationDropMatrix || naviga
         || navigationQualification || navigationChunks || navigationDoors || navigationRaid || navigationScaledRoutes
         || navigationArrival || navigationRetarget || navigationStairs
 def navigationVerification = navigationRegression || navigationDiagnostic || navigationMultiRoomLoad || navigationLoadSize != null
-def selectedTestGroups = [backpackGameTests, barrierGroupRulesGameTests, navigationLoadSize != null,
+def selectedTestGroups = [npcGameTests, backpackGameTests, barrierGroupRulesGameTests, navigationLoadSize != null,
                           navigationMultiRoomLoad, navigationRegression, navigationReference, navigationDropMatrix, navigationDropChanges, navigationDropShapes, navigationLifecycle,
                           navigationDropSurfaces, navigationDropContext, navigationRoomLifecycle,
                           navigationQualification, navigationChunks, navigationDoors, navigationRaid, navigationScaledRoutes,
@@ -204,7 +205,7 @@ minecraft {
             workingDirectory gameTestRunDirectory
             property 'codpattern.test.workspace', project.projectDir.absolutePath
             property 'codpattern.test.results', (findProperty('barrierGroupRulesResultsPath') ?: 'build/verification/barrier-group-rules/forge-results.txt').toString()
-            property 'forge.enabledGameTestNamespaces', backpackGameTests ? backpackTestNamespaces
+            property 'forge.enabledGameTestNamespaces', npcGameTests ? 'codpattern_npc' : backpackGameTests ? backpackTestNamespaces
                     : barrierGroupRulesGameTests ? 'codpattern_barrier_rules'
                     : navigationVerification ? navigationHolder
                     : project.hasProperty('forceEndGameTests') ? 'codpattern_termination' : 'codpattern'
@@ -268,7 +269,15 @@ tasks.register('compileBarrierGroupRulesGameTests', JavaCompile) {
 tasks.register('syncZombiesDeployGameTestClasses', Sync) {
     group = 'verification'
     description = 'Stage addon-owned deploy tests without the test packages shared with the main mod.'
-    if (backpackGameTests) {
+    if (npcGameTests) {
+        dependsOn tasks.named('testClasses')
+        from(sourceSets.test.output.classesDirs) {
+            include 'com/cdp/codpattern/app/zombies/npc/**'
+            include 'com/cdp/codpattern/compat/fpsmatch/map/zombies/ZombiesNpcLifecycleGameTests*'
+            include 'com/cdp/codpattern/app/zombies/deploy/ZombiesDeployGameTestBootstrap*'
+        }
+        from('src/test/resources') { include 'data/codpattern_npc/**' }
+    } else if (backpackGameTests) {
         dependsOn tasks.named('testClasses')
         from(sourceSets.test.output.classesDirs) {
             include 'com/cdp/codpattern/app/zombies/deploy/ZombiesBackpackGameTests*'
