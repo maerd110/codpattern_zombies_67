@@ -199,6 +199,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
                     String old = value(npc, "id", "") + ".";
                     if (prerequisite.startsWith(old)) prerequisites.set(i, new JsonPrimitive(newId + "." + prerequisite.substring(old.length())));
                 }
+                if (rule.getAsJsonObject().has("graph")) rule.getAsJsonObject().getAsJsonObject("graph").addProperty("canvasVersion",0);
                 String oldId = value(npc, "id", "");
                 ZombiesNpcGraphDraft.references(rule.getAsJsonObject(), v -> v.equals(oldId) ? newId : v,
                         v -> v.startsWith(oldId + ".") ? newId + v.substring(oldId.length()) : v);

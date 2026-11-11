@@ -560,7 +560,15 @@
     "gui.codpattern.zombies.npc.graph.true": "满足",
     "gui.codpattern.zombies.npc.graph.false": "不满足",
     "gui.codpattern.zombies.npc.graph.empty": "点击上方“新增触发规则”开始编写",
-    "gui.codpattern.zombies.npc.graph.help": "拖动节点或空白平移 · 滚轮缩放 · 端口拖线或点选连接 · 右键出口断线 · Ctrl+S 保存",
+    "gui.codpattern.zombies.npc.graph.help": "关卡共享画布 · 拖动标题移动整组 · 紫线：规则完成依赖 · 滚轮缩放 · Ctrl+S 保存",
     "gui.codpattern.zombies.npc.graph.full_properties": "位置、状态和多方块请打开完整参数",
-    "gui.codpattern.zombies.npc.graph.error.actor": "自动检查没有交互玩家，请移除物品交收动作并把交互玩家物品条件改为房间玩家物品条件。"
+    "gui.codpattern.zombies.npc.graph.error.actor": "自动检查没有交互玩家，请移除物品交收动作并把交互玩家物品条件改为房间玩家物品条件。",
+    "gui.codpattern.zombies.npc.shared.focus": "定位当前规则",
+    "gui.codpattern.zombies.npc.shared.dependencies": "需要先完成的规则（全部）",
+    "gui.codpattern.zombies.npc.shared.remove_dependency": "解除前置：%s",
+    "gui.codpattern.zombies.npc.shared.link_hint": "将“完成后”连到其他入口的“前置”",
+    "gui.codpattern.zombies.npc.shared.completed": "完成后",
+    "gui.codpattern.zombies.npc.shared.dependency_in": "前置",
+    "gui.codpattern.zombies.npc.shared.entry_required": "完成依赖必须连接到另一条规则的事件入口。",
+    "gui.codpattern.zombies.npc.shared.local_only": "不同规则之间请用事件入口的“完成后”连接目标入口；修改其他 NPC 可在动作中选择目标。"
 }

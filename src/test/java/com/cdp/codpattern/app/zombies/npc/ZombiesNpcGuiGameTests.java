@@ -70,6 +70,9 @@ public final class ZombiesNpcGuiGameTests {
             String dialogue = "任务对话\n".repeat(4000);
             rule.getAsJsonArray("actions").get(0).getAsJsonObject().addProperty("text", dialogue);
             ZombiesNpcGraphDraft.ensure(rule);
+            var secondNpc=working.addNpc(new ZombiesNpcConfig.Position(origin.getX()+1.5,origin.getY(),origin.getZ()+.5,0));
+            working.addRule(secondNpc);ZombiesNpcSharedCanvas.ensure(working);
+            ZombiesNpcSharedCanvas.connect(working,"npc_1.rule_1","npc_2.rule_1");
             String request = working.request(initial.revision());
             var c2sBuffer = new FriendlyByteBuf(Unpooled.buffer());
             var originalPacket = ZombiesDeployToolActionC2SPacket.npcEditor(deployment, "save", request, 71);
@@ -81,6 +84,7 @@ public final class ZombiesNpcGuiGameTests {
             var saved = ZombiesNpcEditorService.perform(player, name, "save", request);
             helper.assertTrue(saved.error().isBlank() && Files.exists(path), "GUI saves actual NPC configuration " + saved.error());
             helper.assertTrue(saved.config().npcs().get(0).rules().get(0).graph().actions().get(0).text().equals(dialogue), "long graph dialogue preserved");
+            helper.assertTrue(saved.config().npcs().get(1).rules().get(0).requires().equals(List.of("npc_1.rule_1")) && saved.config().npcs().get(0).rules().get(0).graph().canvasVersion()==1,"shared layout and cross-NPC dependency survive actual save packets");
             String before = Files.readString(path);
             var stale = ZombiesNpcEditorService.perform(player, name, "save", request);
             helper.assertTrue(stale.error().endsWith("conflict") && Files.readString(path).equals(before), "stale GUI must not overwrite newer data");

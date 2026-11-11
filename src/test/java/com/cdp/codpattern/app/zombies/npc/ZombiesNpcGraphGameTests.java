@@ -21,6 +21,55 @@ import static com.cdp.codpattern.app.zombies.npc.ZombiesNpcGraph.*;
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGraphGameTests {
     @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
+    public static void sharedCanvasLayoutDependenciesAndSnapshots(GameTestHelper h) {
+        var draft=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());
+        var a=draft.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));var a1=draft.addRule(a);var a2=draft.addRule(a);
+        var b=draft.addNpc(new ZombiesNpcConfig.Position(2,64,1,0));var b1=draft.addRule(b);
+        ZombiesNpcSharedCanvas.ensure(draft);String initial=draft.snapshot();ZombiesNpcSharedCanvas.ensure(draft);
+        h.assertTrue(initial.equals(draft.snapshot()),"shared layout migration is idempotent");
+        var flows=ZombiesNpcSharedCanvas.flows(draft);
+        h.assertTrue(flows.size()==3 && flows.stream().allMatch(f->f.rule().getAsJsonObject("graph").get("canvasVersion").getAsInt()==1),"all NPCs and rules share the saved layout");
+        double bottom=Double.NEGATIVE_INFINITY;
+        for(var flow:flows){double top=flow.nodes().stream().mapToDouble(n->n.get("y").getAsDouble()).min().orElseThrow();h.assertTrue(top>bottom,"old independent layouts become non-overlapping groups");bottom=flow.nodes().stream().mapToDouble(n->n.get("y").getAsDouble()+88).max().orElseThrow();}
+        ZombiesNpcSharedCanvas.connect(draft,"npc_1.rule_1","npc_1.rule_2");
+        ZombiesNpcSharedCanvas.connect(draft,"npc_1.rule_2","npc_2.rule_1");
+        ZombiesNpcSharedCanvas.connect(draft,"npc_1.rule_2","npc_2.rule_1");
+        h.assertTrue(b1.getAsJsonArray("requires").size()==1,"duplicate wires do not duplicate prerequisites");
+        rejects(()->ZombiesNpcSharedCanvas.connect(draft,"npc_2.rule_1","npc_1.rule_1"));
+        String saved=draft.snapshot();draft.renameNpc(a,"doctor");draft.renameRule(a,a2,"followup");
+        h.assertTrue(b1.getAsJsonArray("requires").get(0).getAsString().equals("doctor.followup"),"renaming updates cross-NPC wires");
+        draft.restoreWorking(saved);h.assertTrue(draft.snapshot().equals(saved),"global undo restores every NPC and rule together");
+        ZombiesNpcSharedCanvas.delete(draft,"npc_1.rule_2");
+        h.assertTrue(draft.npcs().get(1).getAsJsonObject().getAsJsonArray("rules").get(0).getAsJsonObject().getAsJsonArray("requires").isEmpty(),"deleting a rule removes its outgoing dependency wires");
+        var config=draft.validated();h.assertTrue(config.equals(ZombiesNpcRepository.GSON.fromJson(ZombiesNpcRepository.GSON.toJson(config),ZombiesNpcConfig.class)),"shared positions and dependency wires round trip");
+        h.succeed();
+    }
+    @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
+    public static void crossNpcCompletionUnlocksAutomaticAndInteractionRules(GameTestHelper h) {
+        var f=new Fixture(h);
+        var sourceGraph=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"take"),action("take",item(ZombiesNpcConfig.Kind.TAKE_ITEM,"minecraft:emerald"),"say"),
+                action("say",new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.DIALOGUE,"guard",null,"delivered",null,0,null,null,0),"end"),node("end",Type.END,"")));
+        var autoGraph=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"say"),action("say",say("ready"),"end"),node("end",Type.END,"")));
+        var interactionGraph=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"say"),action("say",say("next interaction"),"end"),node("end",Type.END,"")));
+        var source=new ZombiesNpcConfig.Rule("delivery",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(),0,"",1,sourceGraph);
+        var automatic=new ZombiesNpcConfig.Rule("ready",ZombiesNpcConfig.Trigger.AUTO,0,List.of(),false,List.of("guide.delivery"),List.of(),0,"",1,autoGraph);
+        var interaction=new ZombiesNpcConfig.Rule("followup",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of("guard.ready"),List.of(),0,"",1,interactionGraph);
+        var guide=new ZombiesNpcConfig.Npc("guide",new ZombiesNpcConfig.Appearance("guide",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin)),"",List.of(source),0);
+        var guard=new ZombiesNpcConfig.Npc("guard",new ZombiesNpcConfig.Appearance("guard",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin.offset(4,0,0))),"",List.of(automatic,interaction),0);
+        var config=new ZombiesNpcConfig(1,List.of(guide,guard));f.actor.getInventory().setItem(12,new ItemStack(Items.EMERALD));
+        f.map.npcRuntime().start(config,false);f.map.npcRuntime().tick(1);
+        h.assertTrue(f.map.lines.isEmpty(),"target cannot start before source completes");
+        f.interact();f.map.npcRuntime().tick(1);f.map.npcRuntime().tick(1);
+        h.assertTrue(f.map.lines.equals(List.of("[guard] delivered","[guard] ready")),"cross-NPC target action and automatic dependency execute in order, interaction rule waits");
+        h.runAtTickTime(20,()->{try{
+            var entity=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin.offset(4,0,0)).inflate(1)).stream().findFirst().orElseThrow();
+            f.map.npcRuntime().interact(f.actor,"guard",entity);
+            h.assertTrue(f.map.lines.size()==3 && f.map.lines.get(2).equals("[guard] next interaction"),"linked interaction rule still requires interaction with its own NPC");
+            f.map.npcRuntime().start(config,false);f.map.npcRuntime().tick(1);
+            h.assertTrue(f.map.lines.size()==3,"a new round clears completion dependencies");
+        }finally{f.close();}h.succeed();});
+    }
+    @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
     public static void graphDialogueTimingAndSeparateInteractions(GameTestHelper h) {
         var f = new Fixture(h); var other = f.player();
         var firstGraph = new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"talk"),action("talk",say("one\ntwo\nthree"),"give"),

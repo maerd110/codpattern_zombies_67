@@ -560,7 +560,15 @@
     "gui.codpattern.zombies.npc.graph.true": "True",
     "gui.codpattern.zombies.npc.graph.false": "False",
     "gui.codpattern.zombies.npc.graph.empty": "Add a trigger rule above to begin",
-    "gui.codpattern.zombies.npc.graph.help": "Drag nodes / background · Wheel: zoom · Drag or click ports to connect · Right-click output: unlink · Ctrl+S: save",
+    "gui.codpattern.zombies.npc.graph.help": "Shared map canvas · Drag headers to move groups · Purple: completion dependency · Wheel: zoom · Ctrl+S: save",
     "gui.codpattern.zombies.npc.graph.full_properties": "Use full properties for position/state/blocks",
-    "gui.codpattern.zombies.npc.graph.error.actor": "Automatic entries have no interacting player. Remove item transfers and use room-player item conditions."
+    "gui.codpattern.zombies.npc.graph.error.actor": "Automatic entries have no interacting player. Remove item transfers and use room-player item conditions.",
+    "gui.codpattern.zombies.npc.shared.focus": "Focus current rule",
+    "gui.codpattern.zombies.npc.shared.dependencies": "Required completed rules (all)",
+    "gui.codpattern.zombies.npc.shared.remove_dependency": "Unlink: %s",
+    "gui.codpattern.zombies.npc.shared.link_hint": "Connect Completed to another entry prerequisite",
+    "gui.codpattern.zombies.npc.shared.completed": "Completed",
+    "gui.codpattern.zombies.npc.shared.dependency_in": "Requires",
+    "gui.codpattern.zombies.npc.shared.entry_required": "Completion dependencies must connect to another rule entry.",
+    "gui.codpattern.zombies.npc.shared.local_only": "Use entry completion ports between rules. To affect another NPC, choose the action target."
 }

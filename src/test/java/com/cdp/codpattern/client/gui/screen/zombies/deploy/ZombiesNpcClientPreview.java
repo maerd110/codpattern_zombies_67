@@ -135,7 +135,8 @@ public final class ZombiesNpcClientPreview {
             if (working.validated().npcs().get(2).rules().get(0).actions().get(0).blockPlacements().size() != 2) throw new AssertionError("Multiple block GUI placements");
             render(screen, 640, 480, output.resolve("multi-blocks-640.png"));
             graphChecks(screen, working, client, output);
-            Files.writeString(output.resolve("result.txt"), "PASS 23 client renders, legacy controls, graph entry/migration, palette, branch inspector, port wiring/unlink/cycle rejection, drag/pan/zoom, undo/redo, action properties, rule priority and small viewport\n");
+            sharedGraphChecks(screen,client,output);
+            Files.writeString(output.resolve("result.txt"), "PASS 26 client renders, legacy controls, local graph execution wiring, shared NPC/rule visibility, cross-rule dependency wiring/cycles/unlink, global undo/redo, group dragging, focus and cross-NPC property editing\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -165,8 +166,9 @@ public final class ZombiesNpcClientPreview {
         picker.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("DIALOGUE");
         button(picker,"● " + net.minecraft.network.chat.Component.translatable("gui.codpattern.zombies.npc.kind.DIALOGUE").getString()).onPress();
         rule=owner.graphRule();
+        double baseY=ZombiesNpcGraphDraft.find(rule,"node_1").get("y").getAsDouble();
         String[][] positions={{"node_1","20","160"},{"node_4","230","160"},{"node_2","440","60"},{"node_5","440","280"},{"node_3","650","160"}};
-        for(var p:positions){var n=ZombiesNpcGraphDraft.find(rule,p[0]);n.addProperty("x",Double.parseDouble(p[1]));n.addProperty("y",Double.parseDouble(p[2]));}
+        for(var p:positions){var n=ZombiesNpcGraphDraft.find(rule,p[0]);n.addProperty("x",Double.parseDouble(p[1]));n.addProperty("y",baseY+Double.parseDouble(p[2]));}
         set(graph,"selected","node_2");graph.init(client,960,540);
         graph.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox).map(c->(net.minecraft.client.gui.components.EditBox)c).filter(b->b.getMessage().getString().equals("对话内容")).findFirst().orElseThrow().setValue("准备好，通道即将开启。");
         ZombiesNpcGraphDraft.find(rule,"node_5").getAsJsonObject("action").addProperty("text","请先找来绿宝石。");
@@ -203,12 +205,55 @@ public final class ZombiesNpcClientPreview {
         if(owner.graphRuleIndex()!=0 || !owner.graphRule().get("id").getAsString().equals(currentRule))throw new AssertionError("Entry properties retain rule-priority ordering");
         working.validated();
     }
+    private static void sharedGraphChecks(ZombiesNpcDeployScreen previous,Minecraft client,Path output)throws Exception{
+        var owner=new ZombiesNpcDeployScreen((ZombiesDeployToolScreen)get(previous,"parent"),new ZombiesDeployDraft("协同剧情关卡","INITIAL",-1,"MVP1_MINIMAL",java.util.Map.of()));
+        var draft=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());
+        var doctor=draft.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));draft.renameNpc(doctor,"doctor");doctor.getAsJsonObject("appearance").addProperty("name","医生");
+        var trade=draft.addRule(doctor);draft.renameRule(doctor,trade,"trade");trade.getAsJsonArray("actions").get(0).getAsJsonObject().addProperty("text","请帮我找到药品。");
+        var follow=draft.addRule(doctor);draft.renameRule(doctor,follow,"followup");follow.getAsJsonArray("actions").get(0).getAsJsonObject().addProperty("text","药品收到了，去找守卫吧。");
+        var guard=draft.addNpc(new ZombiesNpcConfig.Position(5,64,1,0));draft.renameNpc(guard,"guard");guard.getAsJsonObject("appearance").addProperty("name","守卫");
+        var welcome=draft.addRule(guard);draft.renameRule(guard,welcome,"welcome");welcome.addProperty("trigger","AUTO");welcome.getAsJsonArray("actions").get(0).getAsJsonObject().addProperty("text","通道已开启，请继续前进。");
+        set(owner,"draft",draft);set(owner,"editable",true);owner.graphSelect(0,0);owner.init(client,1280,720);press(owner,"逻辑画布");
+        var graph=(ZombiesNpcGraphScreen)client.screen;graph.init(client,1280,720);press(graph,"适应画布");
+        if(((java.util.Map<?,?>)get(graph,"index")).size()!=9)throw new AssertionError("All rules and both NPCs are visible on one canvas");
+        crossConnect(graph,trade,"node_1","completed",follow,"node_1");crossConnect(graph,follow,"node_1","completed",welcome,"node_1");
+        if(!follow.getAsJsonArray("requires").get(0).getAsString().equals("doctor.trade")||!welcome.getAsJsonArray("requires").get(0).getAsString().equals("doctor.followup"))throw new AssertionError("Cross-rule wires compile into completion dependencies");
+        crossConnect(graph,welcome,"node_1","completed",trade,"node_1");
+        if(!trade.getAsJsonArray("requires").isEmpty())throw new AssertionError("Cross-rule cycle must not alter prerequisites");
+        // Pick the guard node by mouse, despite all flows using the same local node_2 ID.
+        var n=ZombiesNpcGraphDraft.find(welcome,"node_2");double z=(double)get(graph,"zoom"),px=(double)get(graph,"panX"),py=(double)get(graph,"panY");
+        double x=8+px+(n.get("x").getAsDouble()+50)*z,y=94+py+(n.get("y").getAsDouble()+10)*z;
+        graph.mouseClicked(x,y,0);graph.mouseReleased(x,y,0);
+        if(!owner.graphNpc().get("id").getAsString().equals("guard"))throw new AssertionError("Selecting another NPC activates its own property context");
+        graph.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox).map(c->(net.minecraft.client.gui.components.EditBox)c).filter(b->b.getMessage().getString().equals("对话内容")).findFirst().orElseThrow().setValue("医生让我为你开启通道。");
+        if(!ZombiesNpcGraphDraft.find(welcome,"node_2").getAsJsonObject("action").get("text").getAsString().equals("医生让我为你开启通道。")||ZombiesNpcGraphDraft.find(trade,"node_2").getAsJsonObject("action").get("text").getAsString().equals("医生让我为你开启通道。"))throw new AssertionError("Repeated local node IDs do not mix NPC data");
+        render(graph,1280,720,output.resolve("shared-canvas-1280.png"));
+        var entry=ZombiesNpcGraphDraft.find(follow,"node_1");z=(double)get(graph,"zoom");px=(double)get(graph,"panX");py=(double)get(graph,"panY");
+        graph.mouseClicked(8+px+(entry.get("x").getAsDouble()+170)*z,94+py+(entry.get("y").getAsDouble()+68)*z,1);
+        if(!welcome.getAsJsonArray("requires").isEmpty())throw new AssertionError("Completion output disconnects outgoing rule dependencies");
+        press(graph,"撤销");welcome=ZombiesNpcSharedCanvas.find(draft,"guard.welcome").rule();trade=ZombiesNpcSharedCanvas.find(draft,"doctor.trade").rule();
+        if(welcome.getAsJsonArray("requires").size()!=1)throw new AssertionError("Global undo restores another NPC's dependency");
+        var f=ZombiesNpcSharedCanvas.find(draft,"doctor.trade");entry=f.entry();z=(double)get(graph,"zoom");px=(double)get(graph,"panX");py=(double)get(graph,"panY");
+        double oldX=entry.get("x").getAsDouble(),oldOther=ZombiesNpcGraphDraft.find(welcome,"node_1").get("x").getAsDouble();
+        x=8+px+(entry.get("x").getAsDouble()+20)*z;y=94+py+(entry.get("y").getAsDouble()-20)*z;
+        graph.mouseClicked(x,y,0);graph.mouseDragged(x+35,y+10,0,35,10);graph.mouseReleased(x+35,y+10,0);
+        double moved=f.entry().get("x").getAsDouble()-oldX;
+        if(moved<=0 || Math.abs(f.nodes().get(1).get("x").getAsDouble()-250-moved)>.001 || ZombiesNpcGraphDraft.find(welcome,"node_1").get("x").getAsDouble()!=oldOther)throw new AssertionError("Header drag moves exactly one complete rule group");
+        press(graph,"撤销");press(graph,"重做");
+        f=ZombiesNpcSharedCanvas.find(draft,"doctor.trade");if(f.entry().get("x").getAsDouble()<=oldX)throw new AssertionError("Global redo restores group movement");
+        press(graph,"定位当前规则");if(((java.util.Map<?,?>)get(graph,"index")).size()!=9)throw new AssertionError("Focus moves the viewport without hiding other NPCs");
+        render(graph,960,540,output.resolve("shared-focused-960.png"));render(graph,320,240,output.resolve("shared-small-320.png"));
+        draft.validated();
+    }
     private static Object get(Object target,String name)throws Exception{var f=target.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(target);}
     private static void connect(ZombiesNpcGraphScreen graph,com.google.gson.JsonObject rule,String from,String port,String to)throws Exception{
-        var a=ZombiesNpcGraphDraft.find(rule,from);var b=ZombiesNpcGraphDraft.find(rule,to);
+        crossConnect(graph,rule,from,port,rule,to);
+    }
+    private static void crossConnect(ZombiesNpcGraphScreen graph,com.google.gson.JsonObject fromRule,String from,String port,com.google.gson.JsonObject toRule,String to)throws Exception{
+        var a=ZombiesNpcGraphDraft.find(fromRule,from);var b=ZombiesNpcGraphDraft.find(toRule,to);
         double z=(double)get(graph,"zoom"),px=(double)get(graph,"panX"),py=(double)get(graph,"panY");
-        double ax=8+px+(a.get("x").getAsDouble()+170)*z,ay=94+py+(a.get("y").getAsDouble()+(port.equals("onFalse")?68:43))*z;
-        double bx=8+px+b.get("x").getAsDouble()*z,by=94+py+(b.get("y").getAsDouble()+43)*z;
+        double ax=8+px+(a.get("x").getAsDouble()+170)*z,ay=94+py+(a.get("y").getAsDouble()+(port.equals("onFalse")||port.equals("completed")?68:43))*z;
+        double bx=8+px+b.get("x").getAsDouble()*z,by=94+py+(b.get("y").getAsDouble()+(b.get("type").getAsString().equals("ENTRY")?68:43))*z;
         graph.mouseClicked(ax,ay,0);graph.mouseReleased(ax,ay,0);graph.mouseClicked(bx,by,0);graph.mouseReleased(bx,by,0);
     }
 

@@ -3,7 +3,8 @@ package com.cdp.codpattern.app.zombies.npc;
 import java.util.*;
 
 /** Saved execution graph. The same edges drawn by the editor drive the server interpreter. */
-public record ZombiesNpcGraph(List<Node> nodes) {
+public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
+    public ZombiesNpcGraph(List<Node> nodes) { this(nodes, 0); }
     public enum Type { ENTRY, ACTION, BRANCH, WAIT, AWAIT, END }
     public enum TestKind { WAVE, BARRIER, ITEM_ROOM, ITEM_ACTOR, RULE_DONE, NPC_ALIVE }
     public enum Match { ALL, ANY }
@@ -47,6 +48,8 @@ public record ZombiesNpcGraph(List<Node> nodes) {
         }
     }
     public ZombiesNpcGraph {
+        canvasVersion = canvasVersion == null ? 0 : canvasVersion;
+        if (canvasVersion < 0 || canvasVersion > 1) throw new IllegalArgumentException("未知画布布局版本");
         if (nodes == null || nodes.isEmpty() || nodes.size() > 128) throw new IllegalArgumentException("每张流程图需要 1 至 128 个节点");
         nodes = List.copyOf(nodes);
         Map<String, Node> byId = new LinkedHashMap<>();

@@ -15,6 +15,8 @@ public final class ZombiesNpcEditorDraft {
         saved = data.toString();
     }
     public boolean dirty() { return !saved.equals(data.toString()); }
+    public String snapshot() { return data.toString(); }
+    public void restoreWorking(String snapshot) { data = com.google.gson.JsonParser.parseString(snapshot).getAsJsonObject(); }
     public JsonArray npcs() { return data.getAsJsonArray("npcs"); }
     public ZombiesNpcConfig validated() { return ZombiesNpcRepository.GSON.fromJson(data, ZombiesNpcConfig.class); }
     public String request(String revision) {
