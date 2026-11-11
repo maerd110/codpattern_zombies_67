@@ -21,6 +21,41 @@ import static com.cdp.codpattern.app.zombies.npc.ZombiesNpcGraph.*;
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGraphGameTests {
     @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
+    public static void retryBranchNeverFallsBackToLegacyDialogue(GameTestHelper h) {
+        var f=new Fixture(h);
+        var c=new Condition(Match.ALL,List.of(new Test(TestKind.WAVE,14,"",1,"",false)));
+        var graph=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"check"),condition("check",Type.BRANCH,c,"yes","no"),
+                action("yes",say("success"),"done"),node("done",Type.END,""),action("no",say("try again"),"retry"),
+                new Node("retry",Type.END,0,0,null,null,0,"","",false)));
+        var r=new ZombiesNpcConfig.Rule("flow",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(),0,"",1,graph);
+        var npc=new ZombiesNpcConfig.Npc("guide",new ZombiesNpcConfig.Appearance("guide",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin)),"legacy fallback",List.of(r),0);
+        f.map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(npc)),false);f.interact();
+        h.assertTrue(f.map.lines.equals(List.of("[guide] try again")),"false branch uses its own dialogue");
+        h.runAtTickTime(20,()->{f.map.wave=14;f.interact();h.assertTrue(f.map.lines.equals(List.of("[guide] try again","[guide] success")),"retry end permits later re-evaluation");});
+        h.runAtTickTime(40,()->{try{f.interact();h.assertTrue(f.map.lines.size()==2,"completed graph never falls back to hidden basic dialogue");}finally{f.close();}h.succeed();});
+    }
+    @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
+    public static void actorMissingItemChecksOnlyInteractorAndCombinedSlots(GameTestHelper h) {
+        for(int count=0;count<=2;count++){
+            var f=new Fixture(h);try{
+                var other=f.player();other.getInventory().setItem(15,new ItemStack(Items.EMERALD,64));
+                if(count>0)f.actor.getInventory().setItem(15,new ItemStack(Items.EMERALD));
+                if(count>1)f.actor.setItemInHand(net.minecraft.world.InteractionHand.OFF_HAND,new ItemStack(Items.EMERALD));
+                var c=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:emerald",2,"",true)));
+                f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"check"),condition("check",Type.BRANCH,c,"yes","no"),action("yes",say("missing"),"end"),action("no",say("held"),"end"),node("end",Type.END,""))));
+                f.interact();h.assertTrue(f.map.lines.equals(List.of(count<2?"[guide] missing":"[guide] held")),"missing means fewer than required count, other player's inventory is ignored");
+                h.assertTrue(f.actor.getInventory().countItem(Items.EMERALD)==count,"condition does not consume items");
+            }finally{f.close();}
+        }h.succeed();
+    }
+    @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
+    public static void legacyDialogueImportsAsVisibleRetryGraph(GameTestHelper h) {
+        var draft=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var npc=draft.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));npc.addProperty("dialogue","old one\nold two");draft.importDialogue(npc);
+        var created=draft.validated().npcs().get(0);h.assertTrue(created.dialogue().isEmpty()&&created.rules().get(0).graph().actions().get(0).text().equals("old one\nold two"),"import preserves legacy text in a visible node");
+        h.assertTrue(created.rules().get(0).graph().nodes().stream().anyMatch(n->n.type()==Type.END&&!n.complete()),"imported default dialogue can repeat on interaction");
+        var bad=created.rules().get(0);rejects(()->new ZombiesNpcConfig.Rule("bad",ZombiesNpcConfig.Trigger.AUTO,0,List.of(),false,List.of(),List.of(),0,"",1,bad.graph()));h.succeed();
+    }
+    @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
     public static void sharedCanvasLayoutDependenciesAndSnapshots(GameTestHelper h) {
         var draft=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());
         var a=draft.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));var a1=draft.addRule(a);var a2=draft.addRule(a);

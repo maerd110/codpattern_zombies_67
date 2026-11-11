@@ -196,7 +196,11 @@ public final class ZombiesNpcGraphScreen extends Screen {
             }
             case "WAIT" -> field(tr("graph.seconds"), n, "seconds", "1");
             case "BRANCH", "AWAIT" -> conditionInspector(n.getAsJsonObject("condition"));
-            case "END" -> line(tr("graph.end_hint"));
+            case "END" -> rowButton(tr(Boolean.parseBoolean(value(n,"complete","true"))?"end.complete":"end.retry"), () -> mutate(() -> {
+                boolean next=!Boolean.parseBoolean(value(n,"complete","true"));
+                if(!next && value(rule(),"trigger","INTERACT").equals("AUTO"))throw new IllegalArgumentException(tr("end.auto"));
+                n.addProperty("complete",next);
+            }),editable());
         }
         if(value(n,"type","").equals("ENTRY"))line(tr("shared.link_hint"));
         for (String p : ZombiesNpcGraphDraft.ports(n)) {
@@ -206,12 +210,19 @@ public final class ZombiesNpcGraphScreen extends Screen {
     }
     private void conditionInspector(JsonObject c) {
         select(tr("graph.match"), List.of("ALL", "ANY"), value(c, "match", "ALL"), v -> tr("graph.match." + v), v -> mutate(() -> c.addProperty("match", v)));
-        var tests = c.getAsJsonArray("tests"); testIndex = Math.max(0, Math.min(testIndex, tests.size() - 1));
-        List<String> indexes = new ArrayList<>(); for (int i = 0; i < tests.size(); i++) indexes.add(Integer.toString(i));
-        select(tr("graph.test"), indexes, Integer.toString(testIndex), v -> (Integer.parseInt(v) + 1) + ". " + tr("graph.test." + value(tests.get(Integer.parseInt(v)).getAsJsonObject(), "kind", "WAVE")), v -> { testIndex = Integer.parseInt(v); refresh(); });
-        var t = tests.get(testIndex).getAsJsonObject();
-        select(tr("graph.test_kind"), Arrays.stream(ZombiesNpcGraph.TestKind.values()).map(Enum::name).filter(k -> !k.equals("ITEM_ACTOR") || value(rule(), "trigger", "INTERACT").equals("INTERACT")).toList(), value(t, "kind", "WAVE"), v -> tr("graph.test." + v), v -> mutate(() -> t.addProperty("kind", v)));
-        rowButton(tr("graph.negate") + ": " + tr("bool." + value(t, "negated", "false")), () -> mutate(() -> t.addProperty("negated", !Boolean.parseBoolean(value(t, "negated", "false")))), editable());
+        var tests = c.getAsJsonArray("tests");
+        for(int i=0;i<tests.size();i++) line((i+1)+". "+testSummary(tests.get(i).getAsJsonObject()));
+        for(int i=0;i<tests.size();i++) {
+        final int index=i; line(tr("list.condition",i+1));
+        var t = tests.get(i).getAsJsonObject();
+        List<String> types=new ArrayList<>(Arrays.stream(ZombiesNpcGraph.TestKind.values()).map(Enum::name).filter(k -> !k.equals("ITEM_ACTOR") || value(rule(),"trigger","INTERACT").equals("INTERACT")).toList());
+        if(value(rule(),"trigger","INTERACT").equals("INTERACT"))types.add("ITEM_ACTOR_MISSING");
+        String selectedType=value(t,"kind","WAVE");
+        if(selectedType.equals("ITEM_ACTOR") && Boolean.parseBoolean(value(t,"negated","false")))selectedType="ITEM_ACTOR_MISSING";
+        select(tr("graph.test_kind"),types,selectedType,v -> tr("graph.test."+v),v -> mutate(() -> {
+            t.addProperty("kind",v.equals("ITEM_ACTOR_MISSING")?"ITEM_ACTOR":v); t.addProperty("negated",v.equals("ITEM_ACTOR_MISSING"));
+        }));
+        if(!value(t,"kind","").equals("ITEM_ACTOR"))rowButton(tr("graph.negate")+": "+tr("bool."+value(t,"negated","false")),()->mutate(()->t.addProperty("negated",!Boolean.parseBoolean(value(t,"negated","false")))),editable());
         switch (value(t, "kind", "WAVE")) {
             case "WAVE" -> field(tr("min_wave"), t, "value", "1");
             case "BARRIER" -> select(tr("barrier_group"), owner.graphBarriers().stream().map(String::valueOf).toList(), value(t, "value", "1"), Function.identity(), v -> mutate(() -> t.addProperty("value", Integer.parseInt(v))));
@@ -221,8 +232,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
                     if (minecraft.player == null) return;
                     List<ZombiesNpcStackPickerScreen.Entry> entries = new ArrayList<>();
                     var inventory = minecraft.player.getInventory();
-                    for (int i = 0; i < inventory.getContainerSize(); i++) {
-                        var stack = inventory.getItem(i);
+                    for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                        var stack = inventory.getItem(slot);
                         if (!stack.isEmpty()) entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(), stack.save(new net.minecraft.nbt.CompoundTag()).toString(), stack.getHoverName().getString(), stack.getCount()));
                     }
                     minecraft.setScreen(new ZombiesNpcStackPickerScreen(this, tr("inventory_picker"), entries, e -> mutate(() -> { t.addProperty("item", e.value()); t.addProperty("count", e.count()); })));
@@ -238,8 +249,15 @@ public final class ZombiesNpcGraphScreen extends Screen {
                 select(tr("target"), references, value(t, "reference", ""), Function.identity(), v -> mutate(() -> t.addProperty("reference", v)));
             }
         }
-        rowButton(tr("graph.add_test"), () -> mutate(() -> { tests.add(ZombiesNpcGraphDraft.test()); testIndex = tests.size() - 1; }), editable() && tests.size() < 16);
-        rowButton(tr("graph.remove_test"), () -> mutate(() -> tests.remove(testIndex)), editable() && tests.size() > 1);
+        rowButton(tr("list.remove_condition",i+1), () -> mutate(() -> tests.remove(index)), editable() && tests.size()>1);
+        }
+        rowButton(tr("graph.add_test"), () -> mutate(() -> tests.add(ZombiesNpcGraphDraft.test())), editable() && tests.size()<16);
+    }
+    private String testSummary(JsonObject t) {
+        String kind=value(t,"kind","WAVE");boolean negated=Boolean.parseBoolean(value(t,"negated","false"));
+        String name=tr("graph.test."+(kind.equals("ITEM_ACTOR")&&negated?"ITEM_ACTOR_MISSING":kind));
+        if(negated&&!kind.equals("ITEM_ACTOR"))name=tr("list.not")+name;
+        return name+switch(kind){case "ITEM_ROOM","ITEM_ACTOR" -> " · "+value(t,"item","")+" × "+value(t,"count","1");case "WAVE","BARRIER" -> " · "+value(t,"value","1");default -> " · "+value(t,"reference","");};
     }
     private void actionInspector(JsonObject a) {
         var kinds = Arrays.stream(ZombiesNpcConfig.Kind.values()).map(Enum::name)
@@ -494,7 +512,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
                     default -> value(a, "target", tr("self"));
                 };
             }
-            default -> tr("graph.end_hint");
+            default -> tr(Boolean.parseBoolean(value(n,"complete","true"))?"end.complete":"end.retry");
         };
     }
     private void curve(GuiGraphics g, double x0, double y0, double x1, double y1, int color) {

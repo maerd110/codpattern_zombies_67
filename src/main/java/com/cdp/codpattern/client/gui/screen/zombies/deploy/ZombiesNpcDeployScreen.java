@@ -186,7 +186,9 @@ public final class ZombiesNpcDeployScreen extends Screen {
         bool("invulnerable", appearance, "invulnerable", true);
         text("dialogue_interval", npc, "dialogueIntervalSeconds", "1");
         position(appearance, "position");
-        multiline("dialogue", npc, "dialogue");
+        if (!value(npc,"dialogue","").isBlank()) rowButton("dialogue.import", () -> {
+            draft.importDialogue(npc); rebuildWidgets();
+        });
         rowButton("duplicate_npc", () -> {
             JsonObject clone = npc.deepCopy();
             String newId = draft.addNpc(currentPosition()).get("id").getAsString();
@@ -349,13 +351,6 @@ public final class ZombiesNpcDeployScreen extends Screen {
 
     private void blockPlacements(JsonObject action) {
         JsonArray placements = action.has("placements") ? action.getAsJsonArray("placements") : new JsonArray();
-        int count = placements.isEmpty() ? 1 : placements.size();
-        placementIndex = Math.max(0, Math.min(placementIndex, count - 1));
-        List<String> options = java.util.stream.IntStream.rangeClosed(1, count).mapToObj(String::valueOf).toList();
-        selection("selected_placement", Integer.toString(placementIndex + 1), options, "", selected -> {
-            placementIndex = Integer.parseInt(selected) - 1; rebuildWidgets();
-        });
-        JsonObject placement = placements.isEmpty() ? action : placements.get(placementIndex).getAsJsonObject();
         rowButton("add_placement", () -> {
             if (placements.size() >= 256) return;
             if (placements.isEmpty()) {
@@ -364,9 +359,15 @@ public final class ZombiesNpcDeployScreen extends Screen {
                 action.add("placements", placements);
             }
             JsonObject next = new JsonObject(); next.add("position", ZombiesNpcEditorDraft.position(currentPosition()));
-            next.addProperty("block", value(placement, "block", "minecraft:stone")); placements.add(next);
+            next.addProperty("block", value(placements.isEmpty()?action:placements.get(placements.size()-1).getAsJsonObject(), "block", "minecraft:stone")); placements.add(next);
             placementIndex = placements.size() - 1; rebuildWidgets();
         });
+        int count = placements.isEmpty()?1:placements.size();
+        for(int i=0;i<count;i++) {
+        final int index=i;
+        JsonObject placement=placements.isEmpty()?action:placements.get(i).getAsJsonObject();
+        final int label=i+1;
+        rows.add((x,y,w)->labels.add(new Label(tr("list.placement",label),x,y+6,w)));
         position(placement, "position"); text("block", placement, "block", "minecraft:stone");
         rowButton("block_picker", () -> {
             List<ZombiesNpcStackPickerScreen.Entry> entries = new ArrayList<>();
@@ -386,8 +387,9 @@ public final class ZombiesNpcDeployScreen extends Screen {
                     } else message = tr("error.no_block");
                 });
         rows.add((x, y, w) -> button(tr("delete_placement"), x, y, w, () -> {
-            placements.remove(placementIndex); placementIndex = Math.max(0, placementIndex - 1); rebuildWidgets();
+            placements.remove(index); rebuildWidgets();
         }, canEdit() && placements.size() > 1));
+        }
     }
 
     private void appearancePatch(JsonObject action) {
@@ -411,8 +413,6 @@ public final class ZombiesNpcDeployScreen extends Screen {
         if (patch.has("invulnerable")) bool("invulnerable", patch, "invulnerable", true);
         optional(patch, "position", "position", ZombiesNpcEditorDraft.position(currentPosition()));
         if (patch.has("position")) position(patch, "position");
-        optional(action, "dialogue", "dialogue", new JsonPrimitive(""));
-        if (action.has("dialogue")) multiline("dialogue", action, "dialogue");
     }
 
     private void optional(JsonObject object, String key, String label, JsonElement defaultValue) {

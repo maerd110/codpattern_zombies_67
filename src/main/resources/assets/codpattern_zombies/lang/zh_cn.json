@@ -570,5 +570,14 @@
     "gui.codpattern.zombies.npc.shared.completed": "完成后",
     "gui.codpattern.zombies.npc.shared.dependency_in": "前置",
     "gui.codpattern.zombies.npc.shared.entry_required": "完成依赖必须连接到另一条规则的事件入口。",
-    "gui.codpattern.zombies.npc.shared.local_only": "不同规则之间请用事件入口的“完成后”连接目标入口；修改其他 NPC 可在动作中选择目标。"
+    "gui.codpattern.zombies.npc.shared.local_only": "不同规则之间请用事件入口的“完成后”连接目标入口；修改其他 NPC 可在动作中选择目标。",
+    "gui.codpattern.zombies.npc.end.complete": "结束并标记本规则完成",
+    "gui.codpattern.zombies.npc.end.retry": "只结束本次，下次交互重新判断",
+    "gui.codpattern.zombies.npc.end.auto": "自动规则必须标记完成，不能设为反复交互。",
+    "gui.codpattern.zombies.npc.list.condition": "—— 条件 %s ——",
+    "gui.codpattern.zombies.npc.list.remove_condition": "删除条件 %s",
+    "gui.codpattern.zombies.npc.list.not": "不满足：",
+    "gui.codpattern.zombies.npc.list.placement": "—— 方块位置 %s ——",
+    "gui.codpattern.zombies.npc.dialogue.import": "将旧默认对话导入为节点规则",
+    "gui.codpattern.zombies.npc.graph.test.ITEM_ACTOR_MISSING": "交互玩家未持有物品"
 }

@@ -48,6 +48,13 @@ public final class ZombiesNpcEditorDraft {
         rules.add(rule);
         return rule;
     }
+    public void importDialogue(JsonObject npc) {
+        String text=npc.has("dialogue")?npc.get("dialogue").getAsString():""; if(text.isBlank())return;
+        var rule=addRule(npc);rule.getAsJsonArray("actions").get(0).getAsJsonObject().addProperty("text",text);
+        ZombiesNpcGraphDraft.ensure(rule);
+        for(var n:ZombiesNpcGraphDraft.nodes(rule))if(n.getAsJsonObject().get("type").getAsString().equals("END"))n.getAsJsonObject().addProperty("complete",false);
+        npc.addProperty("dialogue","");
+    }
     public JsonObject addAction(JsonObject rule, ZombiesNpcConfig.Kind kind, ZombiesNpcConfig.Position position) {
         JsonObject action = new JsonObject();
         setKind(action, kind, position);

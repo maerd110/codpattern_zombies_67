@@ -112,6 +112,8 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
             if (openedBarriers.stream().anyMatch(group -> group < 1) || (graph == null && actions.isEmpty()) || actions.size() > 64) {
                 throw new IllegalArgumentException("Invalid barriers or actions");
             }
+            if (graph != null && trigger == Trigger.AUTO && graph.nodes().stream().anyMatch(n -> n.type() == ZombiesNpcGraph.Type.END && !n.complete()))
+                throw new IllegalArgumentException("自动规则的结束节点必须标记完成，避免每刻重复触发");
             if (graph != null && !actions.isEmpty()) throw new IllegalArgumentException("节点流程与旧动作列表不能同时存在");
             if (trigger == Trigger.AUTO && (graph == null ? actions : graph.actions()).stream().anyMatch(action -> action.kind() == Kind.TAKE_ITEM || action.kind() == Kind.GIVE_ITEM)) {
                 throw new IllegalArgumentException("Item transfers require INTERACT");

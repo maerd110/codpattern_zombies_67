@@ -32,8 +32,12 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
         }
     }
     public record Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action,
-                       Condition condition, double seconds, String next, String onFalse) {
+                       Condition condition, double seconds, String next, String onFalse, Boolean complete) {
+        public Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action, Condition condition, double seconds, String next, String onFalse) {
+            this(id,type,x,y,action,condition,seconds,next,onFalse,true);
+        }
         public Node {
+            complete = complete == null ? true : complete;
             if (id == null || !id.matches("[a-zA-Z0-9_-]{1,64}") || type == null) throw new IllegalArgumentException("节点编号或类型无效");
             if (!Double.isFinite(x) || !Double.isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) throw new IllegalArgumentException("节点位置无效");
             ZombiesNpcConfig.intervalTicks(seconds);

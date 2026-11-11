@@ -229,6 +229,7 @@ public final class ZombiesNpcRuntime {
                 return;
             }
         }
+        if (npc.rules().stream().anyMatch(rule -> rule.graph() != null)) return;
         String dialogue = dialogues.getOrDefault(id, "");
         if (!dialogue.isBlank()) startSequence(npc, null, player);
     }
@@ -325,7 +326,7 @@ public final class ZombiesNpcRuntime {
             String next = node.next();
             switch (node.type()) {
                 case END -> {
-                    completed.add(sequence.npc.id() + "." + sequence.rule.id());
+                    if (node.complete()) completed.add(sequence.npc.id() + "." + sequence.rule.id());
                     sequences.remove(sequence.npc.id()); releaseUnusedChunks(); return;
                 }
                 case ENTRY -> { }

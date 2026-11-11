@@ -134,9 +134,12 @@ public final class ZombiesNpcClientPreview {
             press(screen, "新增方块放置位置");
             if (working.validated().npcs().get(2).rules().get(0).actions().get(0).blockPlacements().size() != 2) throw new AssertionError("Multiple block GUI placements");
             render(screen, 640, 480, output.resolve("multi-blocks-640.png"));
+            render(screen,1280,1300,output.resolve("all-placements-1280.png"));
+            if(screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox b && b.getMessage().getString().equals("方块及状态")).count()!=2)
+                throw new AssertionError("All block placements must expose their own fields");
             graphChecks(screen, working, client, output);
             sharedGraphChecks(screen,client,output);
-            Files.writeString(output.resolve("result.txt"), "PASS 26 client renders, legacy controls, local graph execution wiring, shared NPC/rule visibility, cross-rule dependency wiring/cycles/unlink, global undo/redo, group dragging, focus and cross-NPC property editing\n");
+            Files.writeString(output.resolve("result.txt"), "PASS 28 client renders, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -244,6 +247,25 @@ public final class ZombiesNpcClientPreview {
         press(graph,"定位当前规则");if(((java.util.Map<?,?>)get(graph,"index")).size()!=9)throw new AssertionError("Focus moves the viewport without hiding other NPCs");
         render(graph,960,540,output.resolve("shared-focused-960.png"));render(graph,320,240,output.resolve("shared-small-320.png"));
         draft.validated();
+        graph.init(client,1280,1000);press(graph,"+ 条件分支");
+        var r=owner.graphRule();var branch=ZombiesNpcGraphDraft.find(r,"node_4");
+        var tests=branch.getAsJsonObject("condition").getAsJsonArray("tests");
+        tests.get(0).getAsJsonObject().addProperty("kind","ITEM_ACTOR");tests.get(0).getAsJsonObject().addProperty("negated",true);
+        tests.add(ZombiesNpcGraphDraft.test());
+        graph.init(client,1280,1000);
+        button(graph,"交互玩家未持有物品 ▾");button(graph,"波次达到 ▾");
+        press(graph,"新增条件");if(tests.size()!=3)throw new AssertionError("Add condition keeps all existing cards");
+        press(graph,"删除条件 2");if(tests.size()!=2)throw new AssertionError("Condition cards delete their own indexed entry");
+        press(graph,"交互玩家未持有物品 ▾");var choice=client.screen;
+        choice.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("ITEM_ACTOR");
+        button(choice,"交互玩家持有物品").onPress();
+        if(tests.get(0).getAsJsonObject().get("negated").getAsBoolean())throw new AssertionError("Explicit has-item choice clears missing-item predicate");
+        graph.init(client,1280,1000);render(graph,1280,1000,output.resolve("all-conditions-1280.png"));
+        ZombiesNpcGraphDraft.connect(r,"node_1","next","node_4");ZombiesNpcGraphDraft.connect(r,"node_4","next","node_2");ZombiesNpcGraphDraft.connect(r,"node_4","onFalse","node_3");draft.validated();
+        set(graph,"selected",owner.graphNpc().get("id").getAsString()+"."+r.get("id").getAsString()+"/node_3");graph.init(client,1280,1000);
+        press(graph,"结束并标记本规则完成");
+        if(ZombiesNpcGraphDraft.find(r,"node_3").get("complete").getAsBoolean())throw new AssertionError("Retry end can be enabled in node inspector");
+        press(graph,"只结束本次，下次交互重新判断");draft.validated();
     }
     private static Object get(Object target,String name)throws Exception{var f=target.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(target);}
     private static void connect(ZombiesNpcGraphScreen graph,com.google.gson.JsonObject rule,String from,String port,String to)throws Exception{
