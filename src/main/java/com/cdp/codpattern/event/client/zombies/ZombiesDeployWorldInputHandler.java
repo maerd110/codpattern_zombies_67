@@ -24,6 +24,7 @@ public final class ZombiesDeployWorldInputHandler {
 
     @SubscribeEvent
     public static void onKey(InputEvent.Key event) {
+        if (com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesScenarioScreen.selecting()) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (event.getAction() != GLFW.GLFW_PRESS
                 || event.getKey() != GLFW.GLFW_KEY_R

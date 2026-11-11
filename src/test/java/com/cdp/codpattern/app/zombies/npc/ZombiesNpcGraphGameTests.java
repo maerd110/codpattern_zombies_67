@@ -463,6 +463,34 @@ public final class ZombiesNpcGraphGameTests {
         var legacy=ZombiesNpcRepository.GSON.fromJson("{\"from\":{\"x\":0,\"y\":0,\"z\":0},\"to\":{\"x\":1,\"y\":0,\"z\":0},\"block\":\"minecraft:stone\"}",com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region.class);
         h.assertTrue(legacy.mode()==com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.RegionMode.FILL&&legacy.placements().size()==2,"old single-block fill regions retain their original behavior");h.succeed();
     }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void coordinateCodecIsStableAcrossProductionFieldNames(GameTestHelper h){
+        var expected=new BlockPos(3,-52,-39);
+        var typed=ZombiesNpcRepository.GSON.fromJson("{\"x\":\"3\",\"y\":\"-52\",\"z\":\"-39\"}",BlockPos.class);
+        var legacy=ZombiesNpcRepository.GSON.fromJson("{\"f_123285_\":3,\"f_123286_\":-52,\"f_123289_\":-39}",BlockPos.class);
+        h.assertTrue(expected.equals(typed)&&expected.equals(legacy),"manual GUI coordinates and production legacy coordinates decode identically");
+        var json=ZombiesNpcRepository.GSON.toJsonTree(expected.mutable()).getAsJsonObject();
+        h.assertTrue(json.keySet().equals(Set.of("x","y","z"))&&json.get("y").getAsInt()==-52,"both mutable and immutable positions always write stable x/y/z keys");
+        for(String invalid:List.of("{}","{\"x\":3,\"y\":-52}","{\"x\":3.5,\"y\":-52,\"z\":-39}","{\"x\":2147483648,\"y\":0,\"z\":0}")){
+            boolean rejected=false;try{ZombiesNpcRepository.GSON.fromJson(invalid,BlockPos.class);}catch(com.google.gson.JsonParseException e){rejected=true;}h.assertTrue(rejected,"invalid positions fail explicitly instead of silently becoming zero");
+        }
+        h.succeed();
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void livingLyingNpcCanBePickedAndInteractedAtEveryYaw(GameTestHelper h){var f=new Fixture(h);try{
+        for(float yaw:new float[]{0,90,180,270}){
+            f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"say"),action("say",say("lying dialogue"),"end"),node("end",Type.END,""))));
+            var npc=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin).inflate(1)).stream().filter(n->n.getName().getString().equals("guide")).findFirst().orElseThrow();
+            npc.apply(new ZombiesNpcConfig.Appearance(null,null,ZombiesNpcConfig.Pose.LYING,true,new ZombiesNpcConfig.Position(npc.getX(),npc.getY(),npc.getZ(),yaw)));
+            var box=npc.getBoundingBox();double angle=Math.toRadians(yaw),dx=Math.cos(angle),dz=Math.sin(angle);
+            var foot=new net.minecraft.world.phys.Vec3(npc.getX()+dx*.9,npc.getY()+.5,npc.getZ()+dz*.9);var head=new net.minecraft.world.phys.Vec3(npc.getX()-dx*.9,npc.getY()+.5,npc.getZ()-dz*.9);
+            h.assertTrue(box.contains(foot)&&box.contains(head)&&box.clip(foot.add(0,2,0),foot.add(0,-1,0)).isPresent(),"ray reaches visible horizontal body at yaw "+yaw);
+            h.assertTrue(npc.isPickable()&&box.getYsize()<1.1,"lying NPC is pickable with a horizontal interaction shape");
+            npc.interact(f.actor,net.minecraft.world.InteractionHand.MAIN_HAND);h.assertTrue(f.map.lines.get(f.map.lines.size()-1).equals("[guide] lying dialogue"),"normal entity interaction dispatch reaches the NPC graph");
+            int count=f.map.lines.size();npc.apply(new ZombiesNpcConfig.Appearance(null,null,null,false,null));npc.interact(f.actor,net.minecraft.world.InteractionHand.MAIN_HAND);h.assertTrue(f.map.lines.size()==count,"dead story NPC remains non-interactive");
+            npc.apply(new ZombiesNpcConfig.Appearance(null,null,ZombiesNpcConfig.Pose.STANDING,true,null));h.assertTrue(npc.getBoundingBox().getYsize()>1.7&&npc.getBoundingBox().getXsize()<.7,"standing after revival restores upright dimensions");
+        }
+    }finally{f.close();}h.succeed();}
     private static Node choice(List<Option> options){return new Node("choose",Type.CHOICE,0,0,null,null,0,"","",true,"What will you do?","",options);}
     private static Node node(String id,Type type,String next){return new Node(id,type,0,0,null,null,0,next,"");}
     private static Node action(String id,ZombiesNpcConfig.Action a,String next){return new Node(id,Type.ACTION,0,0,a,null,0,next,"");}

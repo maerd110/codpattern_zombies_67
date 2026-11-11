@@ -32,7 +32,10 @@ public final class ZombiesScenarioSelection {
         var buffers=Minecraft.getInstance().renderBuffers().bufferSource();LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),bounds,0.35f,0.95f,0.8f,1f);buffers.endBatch(RenderType.lines());pose.popPose();
     }
     @SubscribeEvent public static void hud(RenderGuiEvent.Post event){
-        var mc=Minecraft.getInstance();if(mc.screen!=null||!ZombiesScenarioScreen.selecting())return;var g=event.getGuiGraphics();int w=mc.getWindow().getGuiScaledWidth(),y=mc.getWindow().getGuiScaledHeight()-77;
+        var mc=Minecraft.getInstance();if(mc.screen!=null||!ZombiesScenarioScreen.selecting())return;renderSelectionOverlay(event.getGuiGraphics(),mc.getWindow().getGuiScaledWidth(),mc.getWindow().getGuiScaledHeight());
+    }
+    public static void renderSelectionOverlay(net.minecraft.client.gui.GuiGraphics g,int w,int h){
+        if(!ZombiesScenarioScreen.selecting())return;var mc=Minecraft.getInstance();int y=h-77;
         g.fill(8,y-5,w-8,y+27,0xD010202B);g.drawString(mc.font,mc.font.plainSubstrByWidth(ZombiesScenarioScreen.selectionHint(),w-28),14,y,0xFF83D9BA,false);
         var box=ZombiesScenarioScreen.selectionBounds();if(box!=null){String text="范围 "+(int)box.minX+", "+(int)box.minY+", "+(int)box.minZ+" → "+(int)(box.maxX-1)+", "+(int)(box.maxY-1)+", "+(int)(box.maxZ-1);g.drawString(mc.font,mc.font.plainSubstrByWidth(text,w-28),14,y+14,0xFFCBDCE5,false);}
     }

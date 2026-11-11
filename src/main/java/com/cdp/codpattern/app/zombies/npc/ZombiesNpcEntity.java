@@ -23,6 +23,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     private String chatName = "";
     private String nameColor = "#FFFFFF";
     private String textColor = "#FFFFFF";
+    private boolean storyDataReady;
 
     public ZombiesNpcEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -30,6 +31,8 @@ public final class ZombiesNpcEntity extends PathfinderMob {
         setNoGravity(true);
         setInvulnerable(true);
         setPersistenceRequired();
+        storyDataReady = true;
+        refreshDimensions();
     }
 
     @Override protected void defineSynchedData() {
@@ -46,6 +49,28 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     public String chatName() { return chatName.isBlank() ? getName().getString() : chatName; }
     public String nameColor() { return nameColor; }
     public String textColor() { return textColor; }
+
+    public boolean lying() { return storyDataReady && (!storyAlive() || posture() == ZombiesNpcConfig.Pose.LYING.ordinal()); }
+    @Override public net.minecraft.world.entity.EntityDimensions getDimensions(net.minecraft.world.entity.Pose pose) {
+        return lying() ? net.minecraft.world.entity.EntityDimensions.scalable(2.1F, 1.0F) : super.getDimensions(pose);
+    }
+    @Override protected net.minecraft.world.phys.AABB makeBoundingBox() {
+        if (!lying()) return super.makeBoundingBox();
+        double yaw = Math.toRadians(getYRot()), c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+        double x = c * 1.05 + s * .35, z = s * 1.05 + c * .35;
+        return new net.minecraft.world.phys.AABB(getX()-x,getY(),getZ()-z,getX()+x,getY()+1,getZ()+z);
+    }
+    @Override protected float getStandingEyeHeight(net.minecraft.world.entity.Pose pose, net.minecraft.world.entity.EntityDimensions dimensions) {
+        return lying() ? .5F : super.getStandingEyeHeight(pose, dimensions);
+    }
+    @Override public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+        super.onSyncedDataUpdated(key);
+        if (storyDataReady && (POSTURE.equals(key) || STORY_ALIVE.equals(key))) refreshDimensions();
+    }
+    @Override public void tick() {
+        super.tick();
+        if (lying()) setBoundingBox(makeBoundingBox());
+    }
 
     void apply(ZombiesNpcConfig.Appearance appearance) {
         if (appearance.name() != null) {
@@ -71,6 +96,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
             setYHeadRot(p.yaw());
             setYBodyRot(p.yaw());
         }
+        refreshDimensions();
     }
 
     @Override protected InteractionResult mobInteract(Player player, InteractionHand hand) {

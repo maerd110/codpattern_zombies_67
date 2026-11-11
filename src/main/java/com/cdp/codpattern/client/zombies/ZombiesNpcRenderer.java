@@ -27,7 +27,8 @@ public final class ZombiesNpcRenderer extends MobRenderer<ZombiesNpcEntity, Play
     @Override protected void setupRotations(ZombiesNpcEntity npc, PoseStack stack, float age, float yaw, float partialTick) {
         super.setupRotations(npc, stack, age, yaw, partialTick);
         if (!npc.storyAlive() || npc.posture() == 2) {
-            stack.translate(0, 0.15, 0);
+            // Centre the sideways model above its position, inside the matching horizontal hit box.
+            stack.translate(1, 0.5, 0);
             stack.mulPose(Axis.ZP.rotationDegrees(90));
         } else if (npc.posture() == 1) {
             stack.translate(0, -0.55, 0);

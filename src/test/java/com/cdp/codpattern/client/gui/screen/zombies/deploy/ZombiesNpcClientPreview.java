@@ -382,16 +382,18 @@ public final class ZombiesNpcClientPreview {
         screen.init(client,1280,1400);render(screen,640,1000,output.resolve("scenario-scene-detail-640.png"));
         // Simulate the world corner-selection path, without a live client world.
         press(screen,"到地图框选源场景");
-        ZombiesScenarioScreen.selectionInput(true,false,false,new net.minecraft.core.BlockPos(4,5,6));ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(5,5,6));
-        var box=ZombiesScenarioScreen.selectionBounds();if(box==null||box.getXsize()!=2||box.getYsize()!=1||box.getZsize()!=1)throw new AssertionError("World selection highlights inclusive source bounds");
+        ZombiesScenarioScreen.selectionInput(true,false,false,new net.minecraft.core.BlockPos(4,-52,-40));ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(5,-51,-39));
+        var box=ZombiesScenarioScreen.selectionBounds();if(box==null||box.getXsize()!=2||box.getYsize()!=2||box.getZsize()!=2||box.minY!=-52||box.minZ!=-40)throw new AssertionError("World selection highlights inclusive source bounds");
+        var hudPreview=new Screen(net.minecraft.network.chat.Component.empty()){@Override public void render(GuiGraphics g,int x,int y,float partial){com.cdp.codpattern.event.client.zombies.ZombiesScenarioSelection.renderSelectionOverlay(g,width,height);}};
+        render(hudPreview,640,360,output.resolve("scene-selection-hud-640.png"));render(hudPreview,320,240,output.resolve("scene-selection-hud-320.png"));
         ZombiesScenarioScreen.selectionInput(false,true,true,null);screen.init(client,1280,1400);
-        var scene=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(2,1,1,List.of("minecraft:stone","minecraft:air"),List.of(0,1));
+        var scene=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(2,2,2,List.of("minecraft:stone","minecraft:air"),List.of(0,1,0,1,0,1,0,1));
         var token=java.util.UUID.randomUUID();set(screen,"pending",token);set(screen,"captureTarget",region);
         var reply=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.Snapshot("图形部署测试","",null,List.of(),List.of(),true,"",scene);
         ZombiesScenarioScreen.accept(new ZombiesNpcDialogueNetwork.EditorReply(token,ZombiesNpcRepository.GSON.toJson(reply)));
         if(get(screen,"data")!=data||!region.has("scene")||region.getAsJsonObject("to").get("x").getAsInt()!=1)throw new AssertionError("Capture reply attaches the scene while preserving unsaved changes and sizes destination");
-        screen.init(client,1280,1400);press(screen,"到地图选择放置位置");ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(10,20,30));
-        if(region.getAsJsonObject("to").get("x").getAsInt()!=11||ZombiesScenarioScreen.selecting())throw new AssertionError("Target placement preserves captured dimensions and exits selection mode");
+        screen.init(client,1280,1400);press(screen,"到地图选择放置位置");ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(3,-52,-39));
+        if(region.getAsJsonObject("to").get("x").getAsInt()!=4||region.getAsJsonObject("to").get("y").getAsInt()!=-51||region.getAsJsonObject("to").get("z").getAsInt()!=-38||ZombiesScenarioScreen.selecting())throw new AssertionError("Target placement preserves captured dimensions and exits selection mode");
         render(screen,640,1000,output.resolve("scenario-captured-scene-640.png"));
         screen.init(client,1280,1400);press(screen,"变化方式：场景快照 ▾");button(client.screen,"方块填充").onPress();screen.init(client,1280,1400);
         render(screen,640,1000,output.resolve("scenario-fill-detail-640.png"));screen.init(client,1280,1400);press(screen,"选择部署方块");render(client.screen,320,240,output.resolve("scenario-block-picker-320.png"));client.screen.onClose();screen.init(client,1280,1400);
@@ -399,7 +401,7 @@ public final class ZombiesNpcClientPreview {
         if(!region.has("scene")||!region.get("mode").getAsString().equals("SCENE"))throw new AssertionError("Fill/scene mode switching preserves the captured template");
         screen.onClose();render(screen,640,480,output.resolve("scenario-region-cards-640.png"));
         var valid=ZombiesNpcRepository.GSON.fromJson(data,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.class);
-        if(valid.events().get(0).regions().get(0).placements().size()!=2||valid.dialogues().get(0).lines().size()!=2)throw new AssertionError("Cards retain scene snapshots and all other pages in one working copy");
+        if(valid.events().get(0).regions().get(0).placements().size()!=8||valid.dialogues().get(0).lines().size()!=2)throw new AssertionError("Cards retain scene snapshots and all other pages in one working copy");
         for(int n=2;n<=6;n++){var copy=wave.deepCopy();copy.addProperty("wave",n);copy.addProperty("maxAlive",n*4);data.getAsJsonArray("waves").add(copy);}
         for(int n=2;n<=4;n++){
             var cast=data.getAsJsonArray("speakers").get(0).getAsJsonObject().deepCopy();cast.addProperty("id","speaker_"+n);cast.addProperty("name",n==2?"守卫":n==3?"电台广播":"旁白");data.getAsJsonArray("speakers").add(cast);

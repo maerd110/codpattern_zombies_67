@@ -15,6 +15,7 @@ public final class ZombiesDeploySessionOverlay {
 
     public static void render(GuiGraphics graphics, Font font, int screenWidth, int screenHeight) {
         Minecraft minecraft = Minecraft.getInstance();
+        if (com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesScenarioScreen.selecting()) return;
         LocalPlayer player = minecraft.player;
         if (minecraft.screen != null || player == null || !(player.getMainHandItem().getItem() instanceof ZombiesDeployTool)) { return; }
         var snapshot = ZombiesDeployClientState.snapshot();

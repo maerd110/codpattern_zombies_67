@@ -28,6 +28,19 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGuiGameTests {
     @GameTest(template="empty",timeoutTicks=200)
+    public static void sceneSavePreservesTypedNegativeCoordinates(GameTestHelper h)throws Exception{
+        String name="scene-negative-"+UUID.randomUUID().toString().substring(0,8);var map=new ZombiesMap(h.getLevel(),name,new AreaData(new BlockPos(-10,-60,-50),new BlockPos(10,-45,-20)));var core=FPSMCore.getInstance();core.registerMap(map.getGameType(),map);
+        var player=new FakePlayer(h.getLevel(),new GameProfile(UUID.randomUUID(),"negative-admin")){@Override public boolean hasPermissions(int level){return level<=2;}};player.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(ZombiesItemRegister.ZOMBIES_DEPLOY_TOOL.get()));
+        var path=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(h.getLevel().getServer(),name);
+        try{
+            var initial=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"load","");h.assertTrue(initial.error().isBlank(),"negative-coordinate room opens editor");var data=ZombiesNpcRepository.GSON.toJsonTree(initial.config()).getAsJsonObject();
+            var region=com.google.gson.JsonParser.parseString("{\"mode\":\"SCENE\",\"from\":{\"x\":\"3\",\"y\":\"-52\",\"z\":\"-39\"},\"to\":{\"x\":3,\"y\":-52,\"z\":-39},\"scene\":{\"sizeX\":1,\"sizeY\":1,\"sizeZ\":1,\"palette\":[\"minecraft:stone\"],\"blocks\":[0]}}").getAsJsonObject();
+            var event=new JsonObject();event.addProperty("id","negative");event.addProperty("name","坐标回归");event.addProperty("automatic",false);event.addProperty("minWave",0);event.addProperty("rule","");var regions=new com.google.gson.JsonArray();regions.add(region);event.add("regions",regions);data.getAsJsonArray("events").add(event);
+            var request=new JsonObject();request.addProperty("revision",initial.revision());request.add("config",data);var saved=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"save",request.toString());h.assertTrue(saved.error().isBlank(),"scene saves at the GUI's typed 3,-52,-39 rather than zero: "+saved.error());
+            var disk=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(path);h.assertTrue(disk.events().get(0).regions().get(0).from().equals(new BlockPos(3,-52,-39)),"disk position is stable");var json=com.google.gson.JsonParser.parseString(Files.readString(path)).getAsJsonObject().getAsJsonArray("events").get(0).getAsJsonObject().getAsJsonArray("regions").get(0).getAsJsonObject().getAsJsonObject("from");h.assertTrue(json.keySet().equals(java.util.Set.of("x","y","z")),"saved file never depends on Minecraft field names");
+        }finally{core.unregisterMap(map);Files.deleteIfExists(path);}h.succeed();
+    }
+    @GameTest(template="empty",timeoutTicks=200)
     public static void capturedSceneCopiesMixedStatesAirAndRestoresRound(GameTestHelper h)throws Exception{
         var origin=h.absolutePos(new BlockPos(1,2,1));String name="scene-copy-"+UUID.randomUUID().toString().substring(0,8);
         var map=new ZombiesMap(h.getLevel(),name,new AreaData(origin.offset(-1,-1,-1),origin.offset(8,5,8))){boolean running;@Override public com.cdp.codpattern.app.zombies.model.ZombiesGamePhase currentPhase(){return running?com.cdp.codpattern.app.zombies.model.ZombiesGamePhase.WAVE_ACTIVE:super.currentPhase();}};
