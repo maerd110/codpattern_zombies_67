@@ -566,7 +566,7 @@
     "gui.codpattern.zombies.npc.shared.focus": "定位当前规则",
     "gui.codpattern.zombies.npc.shared.dependencies": "需要先完成的规则（全部）",
     "gui.codpattern.zombies.npc.shared.remove_dependency": "解除前置：%s",
-    "gui.codpattern.zombies.npc.shared.link_hint": "将“完成后”连到其他入口的“前置”",
+    "gui.codpattern.zombies.npc.shared.link_hint": "将结束的“完成后”连到入口或条件",
     "gui.codpattern.zombies.npc.shared.completed": "完成后",
     "gui.codpattern.zombies.npc.shared.dependency_in": "前置",
     "gui.codpattern.zombies.npc.shared.entry_required": "完成依赖必须连接到另一条规则的事件入口。",
@@ -579,5 +579,7 @@
     "gui.codpattern.zombies.npc.list.not": "不满足：",
     "gui.codpattern.zombies.npc.list.placement": "—— 方块位置 %s ——",
     "gui.codpattern.zombies.npc.dialogue.import": "将旧默认对话导入为节点规则",
-    "gui.codpattern.zombies.npc.graph.test.ITEM_ACTOR_MISSING": "交互玩家未持有物品"
+    "gui.codpattern.zombies.npc.graph.test.ITEM_ACTOR_MISSING": "交互玩家未持有物品",
+    "gui.codpattern.zombies.npc.loose.label": "未归属：连入流程后确定",
+    "gui.codpattern.zombies.npc.loose.attach_first": "请先将结束节点接入一条规则。"
 }

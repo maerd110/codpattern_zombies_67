@@ -17,6 +17,7 @@ public final class ZombiesNpcEditorDraft {
     public boolean dirty() { return !saved.equals(data.toString()); }
     public String snapshot() { return data.toString(); }
     public void restoreWorking(String snapshot) { data = com.google.gson.JsonParser.parseString(snapshot).getAsJsonObject(); }
+    public JsonArray looseNodes() { if(!data.has("looseNodes"))data.add("looseNodes",new JsonArray()); return data.getAsJsonArray("looseNodes"); }
     public JsonArray npcs() { return data.getAsJsonArray("npcs"); }
     public ZombiesNpcConfig validated() { return ZombiesNpcRepository.GSON.fromJson(data, ZombiesNpcConfig.class); }
     public String request(String revision) {
@@ -98,6 +99,7 @@ public final class ZombiesNpcEditorDraft {
             ZombiesNpcGraphDraft.references(object, value -> value.equals(old) ? name : value,
                     value -> value.startsWith(old + ".") ? name + value.substring(old.length()) : value);
         }
+        ZombiesNpcGraphDraft.references(ZombiesNpcSharedCanvas.looseRule(this),v->v.equals(old)?name:v,v->v.startsWith(old+".")?name+v.substring(old.length()):v);
     }
     public void renameRule(JsonObject npc, JsonObject rule, String name) {
         String prefix = npc.get("id").getAsString() + ".";
@@ -110,5 +112,6 @@ public final class ZombiesNpcEditorDraft {
             }
             ZombiesNpcGraphDraft.references(candidate.getAsJsonObject(), value -> value, value -> value.equals(previous) ? prefix + name : value);
         }
+        ZombiesNpcGraphDraft.references(ZombiesNpcSharedCanvas.looseRule(this),v->v,v->v.equals(previous)?prefix+name:v);
     }
 }

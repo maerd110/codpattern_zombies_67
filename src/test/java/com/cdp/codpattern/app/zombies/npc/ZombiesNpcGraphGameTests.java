@@ -21,6 +21,33 @@ import static com.cdp.codpattern.app.zombies.npc.ZombiesNpcGraph.*;
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGraphGameTests {
     @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
+    public static void looseChainsAdoptTheConnectedFlow(GameTestHelper h){
+        var d=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var npc=d.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));d.addRule(npc);d.addRule(npc);ZombiesNpcSharedCanvas.ensure(d);
+        var pool=ZombiesNpcSharedCanvas.looseRule(d);var a=ZombiesNpcGraphDraft.add(pool,Type.WAIT,900,300,null);var b=ZombiesNpcGraphDraft.add(pool,Type.WAIT,1100,300,null);
+        ZombiesNpcGraphDraft.connect(pool,a.get("id").getAsString(),"next",b.get("id").getAsString());
+        h.assertTrue(d.validated().looseNodes().size()==2,"unassigned nodes can be saved without executing or acquiring a rule");
+        var flow=ZombiesNpcSharedCanvas.find(d,"npc_1.rule_2");var source=ZombiesNpcGraphDraft.find(flow.rule(),"node_2");
+        ZombiesNpcSharedCanvas.connectExecution(d,new ZombiesNpcSharedCanvas.Ref(flow,source),"next",new ZombiesNpcSharedCanvas.Ref(null,a));
+        h.assertTrue(d.looseNodes().isEmpty()&&flow.nodes().size()==5&&ZombiesNpcSharedCanvas.find(d,"npc_1.rule_1").nodes().size()==3,"whole loose chain inherits the connected rule rather than the selected/default rule");
+        ZombiesNpcSharedCanvas.connectExecution(d,new ZombiesNpcSharedCanvas.Ref(flow,b),"next",new ZombiesNpcSharedCanvas.Ref(flow,ZombiesNpcGraphDraft.find(flow.rule(),"node_3")));
+        h.assertTrue(a.get("x").getAsDouble()==900&&d.validated().npcs().get(0).rules().get(1).graph().nodes().size()==5,"adoption preserves layout and remaps colliding node IDs");h.succeed();
+    }
+    @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
+    public static void ruleCompletionIsCheckedAfterEarlierActions(GameTestHelper h){
+        var draft=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var fake=ZombiesNpcSharedCanvas.looseRule(draft);
+        var check=ZombiesNpcGraphDraft.add(fake,Type.BRANCH,0,0,null);var checks=check.getAsJsonObject("condition").getAsJsonArray("tests");
+        checks.get(0).getAsJsonObject().addProperty("kind","RULE_DONE");
+        ZombiesNpcSharedCanvas.connectCondition("guide.first",check);
+        h.assertTrue(checks.size()==1&&checks.get(0).getAsJsonObject().get("reference").getAsString().equals("guide.first"),"wiring fills an unfinished rule-completed condition instead of leaving an invalid blank target");
+        for(boolean done:List.of(false,true)){var f=new Fixture(h);try{
+            var first=new ZombiesNpcConfig.Rule("first",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(),0,"",1,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"end"),node("end",Type.END,""))));
+            var c=new Condition(Match.ALL,List.of(new Test(TestKind.RULE_DONE,0,"",1,"guide.first",false)));
+            var second=new ZombiesNpcConfig.Rule("second",ZombiesNpcConfig.Trigger.AUTO,0,List.of(),false,List.of(),List.of(),0,"",1,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"intro"),action("intro",say("intro"),"check"),condition("check",Type.BRANCH,c,"yes","no"),action("yes",say("done"),"end"),action("no",say("pending"),"end"),node("end",Type.END,""))));
+            f.start(List.of(first,second),0);if(done)f.interact();f.map.npcRuntime().tick(1);
+            h.assertTrue(f.map.lines.equals(List.of("[guide] intro",done?"[guide] done":"[guide] pending")),"mid-flow completion check does not gate or skip earlier dialogue");
+        }finally{f.close();}}h.succeed();
+    }
+    @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
     public static void retryBranchNeverFallsBackToLegacyDialogue(GameTestHelper h) {
         var f=new Fixture(h);
         var c=new Condition(Match.ALL,List.of(new Test(TestKind.WAVE,14,"",1,"",false)));

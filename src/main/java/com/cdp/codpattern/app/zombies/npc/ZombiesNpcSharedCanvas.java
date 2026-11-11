@@ -12,7 +12,38 @@ public final class ZombiesNpcSharedCanvas {
         public JsonObject entry() { return nodes().stream().filter(n -> n.get("type").getAsString().equals("ENTRY")).findFirst().orElseThrow(); }
     }
     public record Ref(Flow flow, JsonObject node) {
-        public String key() { return flow.key() + "/" + node.get("id").getAsString(); }
+        public String key() { return (flow==null?"_loose":flow.key()) + "/" + node.get("id").getAsString(); }
+    }
+    public static JsonObject looseRule(ZombiesNpcEditorDraft draft){var r=new JsonObject();var g=new JsonObject();g.add("nodes",draft.looseNodes());r.add("graph",g);return r;}
+    public static JsonObject completion(Flow f){return f.nodes().stream().filter(n->n.get("type").getAsString().equals("END")&&(!n.has("complete")||n.get("complete").getAsBoolean())).findFirst().orElse(null);}
+    public static Ref adopt(ZombiesNpcEditorDraft draft,JsonObject seed,Flow target){
+        var pool=draft.looseNodes();Set<String> ids=new HashSet<>();ids.add(seed.get("id").getAsString());boolean changed;
+        do{changed=false;for(var e:pool){var n=e.getAsJsonObject();for(var port:ZombiesNpcGraphDraft.ports(n)){String next=n.get(port).getAsString();if(next.isBlank())continue;if(ids.contains(n.get("id").getAsString())||ids.contains(next)){changed|=ids.add(next);changed|=ids.add(n.get("id").getAsString());}}}}while(changed);
+        var moving=pool.asList().stream().map(JsonElement::getAsJsonObject).filter(n->ids.contains(n.get("id").getAsString())).toList();
+        if(target.nodes().size()+moving.size()>128)throw new IllegalArgumentException("规则节点数量超出限制");
+        if(target.rule().get("trigger").getAsString().equals("AUTO"))for(var n:moving){
+            if(n.has("action")&&Set.of("GIVE_ITEM","TAKE_ITEM").contains(n.getAsJsonObject("action").get("kind").getAsString()))throw new IllegalArgumentException("物品交收必须接入交互规则");
+            if(n.has("condition"))for(var t:n.getAsJsonObject("condition").getAsJsonArray("tests"))if(t.getAsJsonObject().get("kind").getAsString().equals("ITEM_ACTOR"))throw new IllegalArgumentException("交互玩家条件必须接入交互规则");
+            if(n.get("type").getAsString().equals("END")&&n.has("complete")&&!n.get("complete").getAsBoolean())throw new IllegalArgumentException("自动规则必须标记完成");
+        }
+        Set<String> used=new HashSet<>();target.nodes().forEach(n->used.add(n.get("id").getAsString()));Map<String,String> names=new HashMap<>();
+        for(var n:moving){int k=1;while(used.contains("node_"+k))k++;String id="node_"+k;used.add(id);names.put(n.get("id").getAsString(),id);}
+        for(var n:moving){pool.remove(n);n.addProperty("id",names.get(n.get("id").getAsString()));for(var port:ZombiesNpcGraphDraft.ports(n)){String next=n.get(port).getAsString();if(names.containsKey(next))n.addProperty(port,names.get(next));}ZombiesNpcGraphDraft.nodes(target.rule()).add(n);}
+        return new Ref(target,seed);
+    }
+    public static Ref connectExecution(ZombiesNpcEditorDraft draft,Ref from,String port,Ref to){
+        if(from.node()==to.node()||to.node().get("type").getAsString().equals("ENTRY"))throw new IllegalArgumentException("无法连接到此节点");
+        if(from.flow()!=null&&to.flow()!=null&&!from.flow().key().equals(to.flow().key()))throw new IllegalArgumentException("不同规则之间请使用完成状态连线");
+        if(from.flow()==null&&to.flow()!=null)from=adopt(draft,from.node(),to.flow());
+        if(to.flow()==null&&from.flow()!=null)to=adopt(draft,to.node(),from.flow());
+        ZombiesNpcGraphDraft.connect(from.flow()==null?looseRule(draft):from.flow().rule(),from.node().get("id").getAsString(),port,to.node().get("id").getAsString());return to;
+    }
+    public static void connectCondition(String source,JsonObject target){
+        String type=target.get("type").getAsString();if(!Set.of("BRANCH","AWAIT").contains(type))throw new IllegalArgumentException("请选择条件分支或等待条件节点");
+        var tests=target.getAsJsonObject("condition").getAsJsonArray("tests");
+        for(var e:tests){var t=e.getAsJsonObject();if(t.get("kind").getAsString().equals("RULE_DONE")&&t.get("reference").getAsString().equals(source))return;}
+        for(var e:tests){var t=e.getAsJsonObject();if(t.get("kind").getAsString().equals("RULE_DONE")&&t.get("reference").getAsString().isBlank()){t.addProperty("reference",source);return;}}
+        if(tests.size()>=16)throw new IllegalArgumentException("条件最多 16 项");var t=ZombiesNpcGraphDraft.test();t.addProperty("kind","RULE_DONE");t.addProperty("reference",source);tests.add(t);
     }
     public static List<Flow> flows(ZombiesNpcEditorDraft draft) {
         List<Flow> flows = new ArrayList<>();

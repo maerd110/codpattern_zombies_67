@@ -45,6 +45,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
     private int placementIndex;
     private ZombiesNpcGraphScreen graphScreen, graphReturn;
     private JsonObject graphAction;
+    private boolean looseActionEditing;
     private int top, bottom, leftWidth, formX, formWidth;
     private final List<FormRow> rows = new ArrayList<>();
     private final List<EditBox> textBoxes = new ArrayList<>();
@@ -144,7 +145,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
     private JsonObject rule() { return object(npc() == null ? null : npc().getAsJsonArray("rules"), ruleIndex); }
     private JsonObject action() { return object(rule() == null ? null : rule().getAsJsonArray("actions"), actionIndex); }
     private static JsonObject object(JsonArray array, int index) { return array != null && index >= 0 && index < array.size() ? array.get(index).getAsJsonObject() : null; }
-    private static String value(JsonObject object, String key, String fallback) { return object.has(key) && !object.get(key).isJsonNull() ? object.get(key).getAsString() : fallback; }
+    private static String value(JsonObject object, String key, String fallback) { return object != null && object.has(key) && !object.get(key).isJsonNull() ? object.get(key).getAsString() : fallback; }
     private void clampSelection() {
         if (npc() == null) { ruleIndex = -1; actionIndex = -1; return; }
         ruleIndex = Math.min(Math.max(0, ruleIndex), npc().getAsJsonArray("rules").size() - 1);
@@ -289,7 +290,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
 
     private void actionProperties(JsonObject action) {
         List<String> kinds = Arrays.stream(ZombiesNpcConfig.Kind.values()).map(Enum::name)
-                .filter(kind -> !value(rule(), "trigger", "INTERACT").equals("AUTO") || (!kind.equals("TAKE_ITEM") && !kind.equals("GIVE_ITEM"))).toList();
+                .filter(kind -> looseActionEditing || !value(rule(), "trigger", "INTERACT").equals("AUTO") || (!kind.equals("TAKE_ITEM") && !kind.equals("GIVE_ITEM"))).toList();
         selection("kind", value(action, "kind", "DIALOGUE"), kinds, "kind.", selected -> {
             ZombiesNpcEditorDraft.setKind(action, ZombiesNpcConfig.Kind.valueOf(selected), currentPosition()); rebuildWidgets();
         });
@@ -597,11 +598,12 @@ public final class ZombiesNpcDeployScreen extends Screen {
     void graphSelect(int npc, int rule) { npcIndex = npc; ruleIndex = rule; actionIndex = 0; clampSelection(); }
     void graphSave() { save(null); if (graphScreen != null) graphScreen.refresh(); }
     void graphEdit(ZombiesNpcGraphScreen graph, JsonObject action) {
+        looseActionEditing = action != null && draft.looseNodes().asList().stream().anyMatch(e -> e.getAsJsonObject().get("action") == action);
         graphReturn = graph; graphAction = action; page = action == null ? 1 : 2; scroll = 0;
         minecraft.setScreen(this);
     }
     private void returnToGraph() {
-        var graph = graphReturn; graphReturn = null; graphAction = null; page = 0; scroll = 0;
+        var graph = graphReturn; graphReturn = null; graphAction = null; looseActionEditing = false; page = 0; scroll = 0;
         minecraft.setScreen(graph);
     }
     void graphBack() { page = 0; scroll = 0; minecraft.setScreen(this); }

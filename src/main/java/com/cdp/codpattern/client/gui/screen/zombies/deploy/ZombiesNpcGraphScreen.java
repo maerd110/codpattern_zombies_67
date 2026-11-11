@@ -35,7 +35,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
 
     public ZombiesNpcGraphScreen(ZombiesNpcDeployScreen owner) { super(Component.translatable("gui.codpattern.zombies.npc.graph.title")); this.owner = owner; }
     private static String tr(String key, Object... args) { return Component.translatable("gui.codpattern.zombies.npc." + key, args).getString(); }
-    private static String value(JsonObject obj, String key, String fallback) { return obj.has(key) && !obj.get(key).isJsonNull() ? obj.get(key).getAsString() : fallback; }
+    private static String value(JsonObject obj, String key, String fallback) { return obj != null && obj.has(key) && !obj.get(key).isJsonNull() ? obj.get(key).getAsString() : fallback; }
     private static double number(JsonObject obj, String key) { return obj.get(key).getAsDouble(); }
     private JsonObject rule() { return owner.graphRule(); }
     private JsonArray nodes() { return ZombiesNpcGraphDraft.nodes(rule()); }
@@ -44,8 +44,9 @@ public final class ZombiesNpcGraphScreen extends Screen {
     private JsonObject node(String id) { var ref = index.get(qualify(id)); return ref == null ? null : ref.node(); }
     private String key(JsonObject n) { return contexts.get(n).key(); }
     private ZombiesNpcSharedCanvas.Flow flow(JsonObject n) { return contexts.get(n).flow(); }
-    private void activate(JsonObject n) { var f = flow(n); owner.graphSelect(f.npcIndex(), f.ruleIndex()); }
-    private List<String> ports(JsonObject n) { return value(n,"type","").equals("ENTRY") ? List.of("next","completed") : ZombiesNpcGraphDraft.ports(n); }
+    private void activate(JsonObject n) { var f = flow(n); if(f!=null)owner.graphSelect(f.npcIndex(), f.ruleIndex()); }
+    private List<String> ports(JsonObject n) { return value(n,"type","").equals("END") && Boolean.parseBoolean(value(n,"complete","true")) && flow(n)!=null ? List.of("completed") : ZombiesNpcGraphDraft.ports(n); }
+    private boolean editingAutomatic(){var n=node(selected);return n!=null&&flow(n)!=null&&value(flow(n).rule(),"trigger","INTERACT").equals("AUTO");}
     private boolean editable() { return owner.graphEditable(); }
     private List<JsonObject> nodeList() { return index.values().stream().map(ZombiesNpcSharedCanvas.Ref::node).toList(); }
     void refresh() { if (minecraft != null) rebuildWidgets(); }
@@ -54,6 +55,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         ZombiesNpcSharedCanvas.ensure(owner.graphDraft());
         flows = ZombiesNpcSharedCanvas.flows(owner.graphDraft()); index.clear(); contexts.clear();
         for (var f : flows) for (var n : f.nodes()) { var ref = new ZombiesNpcSharedCanvas.Ref(f,n); index.put(ref.key(),ref); contexts.put(n,ref); }
+        for(var e:owner.graphDraft().looseNodes()){var n=e.getAsJsonObject();var ref=new ZombiesNpcSharedCanvas.Ref(null,n);index.put(ref.key(),ref);contexts.put(n,ref);}
         canvasRight = width >= 620 && !overlay ? width - 208 : width - 8; canvasBottom = height - 36;
         inspectorX = overlay ? 8 : canvasRight + 8; inspectorWidth = overlay ? width - 16 : 192;
         int w = (width - 26) / 6;
@@ -75,7 +77,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         for (int i = 0; i < types.length; i++) {
             String type = types[i];
             toolbar(i, 44, w, tr(type.equals("ENTRY") ? "graph.entry_settings" : "graph.add." + type),
-                    () -> { if (type.equals("ENTRY")) { remember(); owner.graphEdit(this, null); } else add(type); }, editable() && rule() != null);
+                    () -> { if (type.equals("ENTRY")) { remember(); owner.graphEdit(this, null); } else add(type); }, editable() && (!type.equals("ENTRY") || rule() != null));
         }
         int tw = (width - 30) / 8;
         toolbar(0, 68, tw, tr("graph.fit"), this::fit, !index.isEmpty());
@@ -135,16 +137,16 @@ public final class ZombiesNpcGraphScreen extends Screen {
         for(int i=0;i<rules.size();i++)if(value(rules.get(i).getAsJsonObject(),"id","").equals(previous.rule()))ri=i;
         owner.graphSelect(ni,ri); selected=previous.selected(); source=dragging=draggingGroup=""; refresh();
     }
-    private void deleteSelected() { var n=node(selected); if(n!=null){ZombiesNpcGraphDraft.delete(flow(n).rule(),value(n,"id",""));selected="";} }
+    private void deleteSelected() { var n=node(selected); if(n!=null){ZombiesNpcGraphDraft.delete(flow(n)==null?ZombiesNpcSharedCanvas.looseRule(owner.graphDraft()):flow(n).rule(),value(n,"id",""));selected="";} }
     private void unlinkSelected() {
         var n=node(selected); if(n==null)return;
         for(String p:ZombiesNpcGraphDraft.ports(n))n.addProperty(p,"");
-        if(value(n,"type","").equals("ENTRY"))ZombiesNpcSharedCanvas.unlinkOutgoing(owner.graphDraft(),flow(n).key());
+        if(value(n,"type","").equals("END")&&flow(n)!=null)ZombiesNpcSharedCanvas.unlinkOutgoing(owner.graphDraft(),flow(n).key());
     }
     private void add(String type) {
         if (type.equals("ACTION")) {
             var kinds = Arrays.stream(ZombiesNpcConfig.Kind.values()).map(Enum::name)
-                    .filter(k -> !value(rule(), "trigger", "INTERACT").equals("AUTO") || !List.of("GIVE_ITEM", "TAKE_ITEM").contains(k)).toList();
+                    .toList();
             choose(tr("kind"), kinds, "DIALOGUE", k -> tr("kind." + k), kind -> {
                 JsonObject action = new JsonObject(); var player = minecraft.player;
                 var position = player == null ? new ZombiesNpcConfig.Position(0, 64, 0, 0) : new ZombiesNpcConfig.Position(player.getX(), player.getY(), player.getZ(), player.getYRot());
@@ -155,8 +157,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
     private void create(String type, JsonObject action) {
         mutate(() -> {
             double x = ((canvasRight - 8) / 2.0 - panX) / zoom, y = ((canvasBottom - 94) / 2.0 - panY) / zoom;
-            var n = ZombiesNpcGraphDraft.add(rule(), ZombiesNpcGraph.Type.valueOf(type), x, y, action);
-            selected = activeKey() + "/" + value(n, "id", ""); inspectorScroll = testIndex = 0;
+            var n = ZombiesNpcGraphDraft.add(ZombiesNpcSharedCanvas.looseRule(owner.graphDraft()), ZombiesNpcGraph.Type.valueOf(type), x, y, action);
+            selected = "_loose/" + value(n, "id", ""); inspectorScroll = testIndex = 0;
         });
     }
     private void properties() {
@@ -174,7 +176,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         if (overlay) rowButton(tr("graph.canvas"), () -> { overlay = false; refresh(); }, true);
         if (n == null) { line(tr("graph.select_hint")); line(tr("graph.connect_hint")); returnDrawRows(); return; }
         activate(n);
-        line(value(flow(n).npc(),"name",value(flow(n).npc().getAsJsonObject("appearance"),"name",value(flow(n).npc(),"id",""))) + " · " + value(flow(n).rule(),"id",""));
+        line(flow(n)==null?tr("loose.label"):value(flow(n).npc().getAsJsonObject("appearance"),"name",value(flow(n).npc(),"id",""))+" · "+value(flow(n).rule(),"id",""));
         line(tr("graph.type." + value(n, "type", "")) + " · " + value(n,"id",""));
         switch (value(n, "type", "")) {
             case "ENTRY" -> {
@@ -198,11 +200,11 @@ public final class ZombiesNpcGraphScreen extends Screen {
             case "BRANCH", "AWAIT" -> conditionInspector(n.getAsJsonObject("condition"));
             case "END" -> rowButton(tr(Boolean.parseBoolean(value(n,"complete","true"))?"end.complete":"end.retry"), () -> mutate(() -> {
                 boolean next=!Boolean.parseBoolean(value(n,"complete","true"));
-                if(!next && value(rule(),"trigger","INTERACT").equals("AUTO"))throw new IllegalArgumentException(tr("end.auto"));
+                if(!next && flow(n)!=null && value(rule(),"trigger","INTERACT").equals("AUTO"))throw new IllegalArgumentException(tr("end.auto"));
                 n.addProperty("complete",next);
             }),editable());
         }
-        if(value(n,"type","").equals("ENTRY"))line(tr("shared.link_hint"));
+        if(value(n,"type","").equals("END"))line(tr("shared.link_hint"));
         for (String p : ZombiesNpcGraphDraft.ports(n)) {
             line(tr(p.equals("onFalse") ? "graph.false" : value(n, "type", "").equals("BRANCH") ? "graph.true" : "graph.next") + " → " + value(n, p, ""));
         }
@@ -215,8 +217,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
         for(int i=0;i<tests.size();i++) {
         final int index=i; line(tr("list.condition",i+1));
         var t = tests.get(i).getAsJsonObject();
-        List<String> types=new ArrayList<>(Arrays.stream(ZombiesNpcGraph.TestKind.values()).map(Enum::name).filter(k -> !k.equals("ITEM_ACTOR") || value(rule(),"trigger","INTERACT").equals("INTERACT")).toList());
-        if(value(rule(),"trigger","INTERACT").equals("INTERACT"))types.add("ITEM_ACTOR_MISSING");
+        List<String> types=new ArrayList<>(Arrays.stream(ZombiesNpcGraph.TestKind.values()).map(Enum::name).filter(k -> !k.equals("ITEM_ACTOR") || !editingAutomatic()).toList());
+        if(!editingAutomatic())types.add("ITEM_ACTOR_MISSING");
         String selectedType=value(t,"kind","WAVE");
         if(selectedType.equals("ITEM_ACTOR") && Boolean.parseBoolean(value(t,"negated","false")))selectedType="ITEM_ACTOR_MISSING";
         select(tr("graph.test_kind"),types,selectedType,v -> tr("graph.test."+v),v -> mutate(() -> {
@@ -261,7 +263,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
     }
     private void actionInspector(JsonObject a) {
         var kinds = Arrays.stream(ZombiesNpcConfig.Kind.values()).map(Enum::name)
-                .filter(k -> !value(rule(), "trigger", "INTERACT").equals("AUTO") || !List.of("GIVE_ITEM", "TAKE_ITEM").contains(k)).toList();
+                .filter(k -> !editingAutomatic() || !List.of("GIVE_ITEM", "TAKE_ITEM").contains(k)).toList();
         select(tr("kind"), kinds, value(a, "kind", "DIALOGUE"), v -> tr("kind." + v), v -> mutate(() -> {
             var p = minecraft.player;
             var pos = p == null ? new ZombiesNpcConfig.Position(0,64,0,0) : new ZombiesNpcConfig.Position(p.getX(),p.getY(),p.getZ(),p.getYRot());
@@ -311,8 +313,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
 
     private double sx(JsonObject n) { return 8 + panX + number(n, "x") * zoom; }
     private double sy(JsonObject n) { return 94 + panY + number(n, "y") * zoom; }
-    private double outputY(JsonObject n, String p) { return sy(n) + (p.equals("onFalse") || p.equals("completed") ? 68 : 43) * zoom; }
-    private double inputY(JsonObject n) { return sy(n)+(value(n,"type","").equals("ENTRY")?68:43)*zoom; }
+    private double outputY(JsonObject n, String p) { return sy(n) + (p.equals("onFalse") ? 68 : 43) * zoom; }
+    private double inputY(JsonObject n) { return sy(n)+(value(n,"type","").equals("ENTRY")||port.equals("completed")&&Set.of("BRANCH","AWAIT").contains(value(n,"type",""))?68:43)*zoom; }
     private boolean inCanvas(double x, double y) { return !overlay && x >= 8 && x < canvasRight && y >= 94 && y < canvasBottom; }
     private boolean near(double x, double y, double a, double b) { return Math.abs(x - a) < 8 && Math.abs(y - b) < 8; }
     private JsonObject inputAt(double x,double y) {
@@ -333,11 +335,12 @@ public final class ZombiesNpcGraphScreen extends Screen {
         var from=node(source);if(target==null||from==null)return;
         try{mutate(()->{
             if(port.equals("completed")){
-                if(!value(target,"type","").equals("ENTRY"))throw new IllegalArgumentException(tr("shared.entry_required"));
-                ZombiesNpcSharedCanvas.connect(owner.graphDraft(),flow(from).key(),flow(target).key());
+                if(flow(from)==null)throw new IllegalArgumentException(tr("loose.attach_first"));
+                if(value(target,"type","").equals("ENTRY"))ZombiesNpcSharedCanvas.connect(owner.graphDraft(),flow(from).key(),flow(target).key());
+                else ZombiesNpcSharedCanvas.connectCondition(flow(from).key(),target);
             }else{
-                if(!flow(from).key().equals(flow(target).key()))throw new IllegalArgumentException(tr("shared.local_only"));
-                ZombiesNpcGraphDraft.connect(flow(from).rule(),value(from,"id",""),port,value(target,"id",""));
+                var result=ZombiesNpcSharedCanvas.connectExecution(owner.graphDraft(),contexts.get(from),port,contexts.get(target));
+                selected=result.key();if(result.flow()!=null)owner.graphSelect(result.flow().npcIndex(),result.flow().ruleIndex());
             }
         });}catch(RuntimeException e){message=detail(e);}source="";
     }
@@ -440,11 +443,16 @@ public final class ZombiesNpcGraphScreen extends Screen {
             for(var f:flows)drawGroup(g,f);
             for(var f:flows)for(var requirement:f.rule().getAsJsonArray("requires")) {
                 var predecessor=flows.stream().filter(v->v.key().equals(requirement.getAsString())).findFirst().orElse(null);
-                if(predecessor!=null){var from=predecessor.entry();var to=f.entry();curve(g,sx(from)+NW*zoom,outputY(from,"completed"),sx(to),inputY(to),0xFFB895F5);}
+                if(predecessor!=null){var from=ZombiesNpcSharedCanvas.completion(predecessor);var to=f.entry();if(from!=null)curve(g,sx(from)+NW*zoom,outputY(from,"completed"),sx(to),sy(to)+68*zoom,0xFFB895F5);}
             }
             for (var n : nodeList()) for (String p : ZombiesNpcGraphDraft.ports(n)) {
-                var target = index.containsKey(flow(n).key()+"/"+value(n,p,""))?index.get(flow(n).key()+"/"+value(n,p,"")).node():null;
+                String prefix=flow(n)==null?"_loose":flow(n).key(); var target = index.containsKey(prefix+"/"+value(n,p,""))?index.get(prefix+"/"+value(n,p,"")).node():null;
                 if (target != null) curve(g, sx(n) + NW * zoom, outputY(n, p), sx(target), sy(target) + 43 * zoom, p.equals("completed") ? 0xFFB895F5 : p.equals("onFalse") ? 0xFFED927A : 0xFF83D9BA);
+            }
+            for(var target:nodeList())if(target.has("condition"))for(var e:target.getAsJsonObject("condition").getAsJsonArray("tests")){
+                var t=e.getAsJsonObject();if(!value(t,"kind","").equals("RULE_DONE"))continue;
+                var f=ZombiesNpcSharedCanvas.find(owner.graphDraft(),value(t,"reference",""));if(f==null)continue;var from=ZombiesNpcSharedCanvas.completion(f);
+                if(from!=null)curve(g,sx(from)+NW*zoom,outputY(from,"completed"),sx(target),sy(target)+68*zoom,0xFFB895F5);
             }
             if (!source.isBlank() && node(source) != null) curve(g, sx(node(source)) + NW * zoom, outputY(node(source), port), mx, my, 0xFFFFDB80);
             for (var n : nodeList()) drawNode(g, n);
@@ -483,19 +491,19 @@ public final class ZombiesNpcGraphScreen extends Screen {
         g.drawString(font, font.plainSubstrByWidth(title, NW - 12), 6, 6, 0xFFFFFFFF, false);
         g.drawString(font, font.plainSubstrByWidth(summary(n).replace('\n', ' '), NW - 24), 10, 29, 0xFFCDDCE5, false);
         if (!value(n, "type", "").equals("ENTRY")) { g.fill(-4, 39, 4, 47, 0xFF8CD6F0); g.drawString(font, tr("graph.in"), 8, 42, 0xFF93ACBD, false); }
-        if(value(n,"type","").equals("ENTRY")){g.fill(-4,64,4,72,0xFFB895F5);g.drawString(font,tr("shared.dependency_in"),8,65,0xFFD2B9FA,false);}
+        if(Set.of("ENTRY","BRANCH","AWAIT").contains(value(n,"type",""))){g.fill(-4,64,4,72,0xFFB895F5);g.drawString(font,tr("shared.dependency_in"),8,65,0xFFD2B9FA,false);}
         for (String p : ports(n)) {
-            int py = p.equals("onFalse") || p.equals("completed") ? 68 : 43;
+            int py = p.equals("onFalse") ? 68 : 43;
             String label = tr(p.equals("completed")?"shared.completed":p.equals("onFalse") ? "graph.false" : value(n, "type", "").equals("BRANCH") ? "graph.true" : "graph.next");
             g.drawString(font, label, NW - font.width(label) - 10, py - 3, 0xFFCADCE5, false);
             g.fill(NW - 4, py - 4, NW + 4, py + 4, p.equals("completed") ? 0xFFB895F5 : p.equals("onFalse") ? 0xFFED927A : 0xFF83D9BA);
         }
-        g.drawString(font, font.plainSubstrByWidth(flow(n).key()+" / "+value(n,"id",""),NW-12), 8, NH - 12, 0xFF91B2C8, false);
+        g.drawString(font, font.plainSubstrByWidth((flow(n)==null?tr("loose.label"):flow(n).key())+" / "+value(n,"id",""),NW-12), 8, NH - 12, 0xFF91B2C8, false);
         g.pose().popPose();
     }
     private String summary(JsonObject n) {
         return switch (value(n, "type", "")) {
-            case "ENTRY" -> tr("trigger." + value(flow(n).rule(), "trigger", "INTERACT"));
+            case "ENTRY" -> tr("trigger." + value(flow(n)==null?null:flow(n).rule(), "trigger", "INTERACT"));
             case "WAIT" -> value(n, "seconds", "1") + " s";
             case "BRANCH", "AWAIT" -> {
                 var c = n.getAsJsonObject("condition"); var tests = c.getAsJsonArray("tests");

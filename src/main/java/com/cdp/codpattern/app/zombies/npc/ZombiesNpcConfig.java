@@ -5,11 +5,17 @@ import java.util.Set;
 import java.util.function.IntPredicate;
 
 /** Immutable authoring data. Runtime progress is deliberately kept outside this file. */
-public record ZombiesNpcConfig(int version, List<Npc> npcs) {
+public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph.Node> looseNodes) {
+    public ZombiesNpcConfig(int version,List<Npc> npcs){this(version,npcs,List.of());}
     public static final double DEFAULT_INTERVAL_SECONDS = 1;
     public ZombiesNpcConfig {
         if (version != 1) throw new IllegalArgumentException("NPC version must be 1");
         npcs = List.copyOf(npcs);
+        looseNodes=looseNodes==null?List.of():List.copyOf(looseNodes);
+        if(looseNodes.size()>128 || looseNodes.stream().anyMatch(n->n.type()==ZombiesNpcGraph.Type.ENTRY))throw new IllegalArgumentException("未归属节点最多 128 个，不能包含事件入口");
+        Set<String> looseIds=new java.util.HashSet<>();
+        for(var node:looseNodes)if(!looseIds.add(node.id()))throw new IllegalArgumentException("未归属节点编号重复");
+        for(var node:looseNodes)for(var next:node.outputs())if(!next.isBlank()&&!looseIds.contains(next))throw new IllegalArgumentException("未归属连线目标不存在");
         if (npcs.size() > 128) throw new IllegalArgumentException("At most 128 NPCs per map");
         Set<String> keys = new java.util.HashSet<>();
         for (Npc npc : npcs) {
