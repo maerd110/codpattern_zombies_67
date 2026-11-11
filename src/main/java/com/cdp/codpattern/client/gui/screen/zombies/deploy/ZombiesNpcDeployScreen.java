@@ -169,11 +169,14 @@ public final class ZombiesNpcDeployScreen extends Screen {
         text("id", value(npc, "id", ""), next -> draft.renameNpc(npc, next));
         JsonObject appearance = npc.getAsJsonObject("appearance");
         text("name", appearance, "name", "");
+        text("chat_name", appearance, "chatName", "");
+        color("name_color", appearance, "nameColor");
+        color("text_color", appearance, "textColor");
         text("skin", appearance, "skin", "minecraft:textures/entity/player/wide/steve.png");
         choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
         bool("alive", appearance, "alive", true);
         bool("invulnerable", appearance, "invulnerable", true);
-        text("dialogue_interval", npc, "dialogueIntervalSeconds", "0");
+        text("dialogue_interval", npc, "dialogueIntervalSeconds", "1");
         position(appearance, "position");
         multiline("dialogue", npc, "dialogue");
         rowButton("duplicate_npc", () -> {
@@ -198,8 +201,8 @@ public final class ZombiesNpcDeployScreen extends Screen {
     }
 
     private void rules() {
-        ruleSelector();
         rowButton("add_rule", () -> { draft.addRule(npc()); ruleIndex = npc().getAsJsonArray("rules").size() - 1; actionIndex = 0; scroll = 0; rebuildWidgets(); });
+        ruleSelector();
         if (rule() == null) { heading("no_rules"); return; }
         JsonObject rule = rule();
         text("rule_id", value(rule, "id", ""), next -> draft.renameRule(npc(), rule, next));
@@ -211,7 +214,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
             rule.addProperty("trigger", selected); rebuildWidgets();
         });
         text("min_wave", rule, "minWave", "0");
-        text("action_interval", rule, "actionIntervalSeconds", "0");
+        text("action_interval", rule, "actionIntervalSeconds", "1");
         boolean hasItemCondition = !value(rule, "requiredItem", "").isBlank();
         rowButton(hasItemCondition ? "disable_item_condition" : "enable_item_condition", () -> {
             rule.addProperty("requiredItem", hasItemCondition ? "" : "minecraft:emerald");
@@ -256,6 +259,9 @@ public final class ZombiesNpcDeployScreen extends Screen {
         ruleSelector();
         if (rule() == null) { heading("no_rules"); return; }
         JsonArray actions = rule().getAsJsonArray("actions");
+        rowButton("add_action", () -> {
+            draft.addAction(rule(), ZombiesNpcConfig.Kind.DIALOGUE, currentPosition()); actionIndex = actions.size() - 1; rebuildWidgets();
+        });
         if (!actions.isEmpty()) {
             List<String> options = new ArrayList<>();
             for (int i = 0; i < actions.size(); i++) options.add((i + 1) + ". " + tr("kind." + value(actions.get(i).getAsJsonObject(), "kind", "DIALOGUE")));
@@ -263,9 +269,6 @@ public final class ZombiesNpcDeployScreen extends Screen {
                 actionIndex = options.indexOf(selected); rebuildWidgets();
             });
         }
-        rowButton("add_action", () -> {
-            draft.addAction(rule(), ZombiesNpcConfig.Kind.DIALOGUE, currentPosition()); actionIndex = actions.size() - 1; rebuildWidgets();
-        });
         if (action() == null) return;
         JsonObject action = action();
         List<String> kinds = Arrays.stream(ZombiesNpcConfig.Kind.values()).map(Enum::name)
@@ -274,8 +277,8 @@ public final class ZombiesNpcDeployScreen extends Screen {
             ZombiesNpcEditorDraft.setKind(action, ZombiesNpcConfig.Kind.valueOf(selected), currentPosition()); rebuildWidgets();
         });
         String kind = value(action, "kind", "DIALOGUE");
-        optional(action, "delaySeconds", "action_delay", new JsonPrimitive(0));
-        if (action.has("delaySeconds")) text("action_delay", action, "delaySeconds", "0");
+        optional(action, "delaySeconds", "action_delay", new JsonPrimitive(1));
+        if (action.has("delaySeconds")) text("action_delay", action, "delaySeconds", "1");
         if (kind.equals("NPC") || kind.equals("DIALOGUE")) {
             List<String> targets = new ArrayList<>(List.of(""));
             for (JsonElement npc : draft.npcs()) targets.add(value(npc.getAsJsonObject(), "id", ""));
@@ -287,8 +290,8 @@ public final class ZombiesNpcDeployScreen extends Screen {
         switch (kind) {
             case "NPC" -> appearancePatch(action);
             case "DIALOGUE" -> {
-                optional(action, "dialogueIntervalSeconds", "dialogue_interval", new JsonPrimitive(0));
-                if (action.has("dialogueIntervalSeconds")) text("dialogue_interval", action, "dialogueIntervalSeconds", "0");
+                optional(action, "dialogueIntervalSeconds", "dialogue_interval", new JsonPrimitive(1));
+                if (action.has("dialogueIntervalSeconds")) text("dialogue_interval", action, "dialogueIntervalSeconds", "1");
                 multiline("dialogue", action, "text");
             }
             case "TAKE_ITEM", "GIVE_ITEM" -> {
@@ -379,6 +382,12 @@ public final class ZombiesNpcDeployScreen extends Screen {
         if (patch == null) { patch = new JsonObject(); action.add("appearance", patch); }
         optional(patch, "name", "name", new JsonPrimitive(""));
         if (patch.has("name")) text("name", patch, "name", "");
+        optional(patch, "chatName", "chat_name", new JsonPrimitive(""));
+        if (patch.has("chatName")) text("chat_name", patch, "chatName", "");
+        optional(patch, "nameColor", "name_color", new JsonPrimitive("#FFFFFF"));
+        if (patch.has("nameColor")) color("name_color", patch, "nameColor");
+        optional(patch, "textColor", "text_color", new JsonPrimitive("#FFFFFF"));
+        if (patch.has("textColor")) color("text_color", patch, "textColor");
         optional(patch, "skin", "skin", new JsonPrimitive("minecraft:textures/entity/player/wide/steve.png"));
         if (patch.has("skin")) text("skin", patch, "skin", "");
         optional(patch, "pose", "pose", new JsonPrimitive("STANDING"));
@@ -425,6 +434,11 @@ public final class ZombiesNpcDeployScreen extends Screen {
     private void text(String label, JsonObject object, String key, String fallback) {
         text(label, value(object, key, fallback), next -> object.addProperty(key, next));
     }
+    private void color(String label, JsonObject object, String key) {
+        text(label, object, key, "#FFFFFF");
+        choice("color_preset", object, key, List.of("black", "dark_blue", "dark_green", "dark_aqua", "dark_red", "dark_purple",
+                "gold", "gray", "dark_gray", "blue", "green", "aqua", "red", "light_purple", "yellow", "white"), "white", "color.");
+    }
     private void text(String label, String value, Consumer<String> change) {
         rows.add((x, y, w) -> input(label, value, change, x, y, w));
     }
@@ -447,7 +461,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         rows.add((x, y, w) -> {
             int labelWidth = Math.min(100, w / 3);
             labels.add(new Label(tr(label), x, y + 6, labelWidth - 5));
-            String caption = selected.isEmpty() ? tr("self") : translation.isEmpty() ? selected : tr(translation + selected);
+            String caption = selected.isEmpty() ? tr("self") : translation.isEmpty() || selected.startsWith("#") ? selected : tr(translation + selected);
             button(caption + " ▾", x + labelWidth, y, w - labelWidth, () -> {
                 if (choices.size() > 2) {
                     minecraft.setScreen(new ZombiesNpcChoiceScreen(this, tr(label), choices, selected,

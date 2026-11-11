@@ -487,6 +487,26 @@
     "gui.codpattern.zombies.npc.block_picker": "選擇部署方塊",
     "gui.codpattern.zombies.npc.selected_placement": "目前放置位置",
     "gui.codpattern.zombies.npc.add_placement": "新增方塊放置位置",
-    "gui.codpattern.zombies.npc.delete_placement": "刪除目前放置位置"
+    "gui.codpattern.zombies.npc.delete_placement": "刪除目前放置位置",
+    "gui.codpattern.zombies.npc.chat_name": "聊天名字（留空用顯示名稱）",
+    "gui.codpattern.zombies.npc.name_color": "聊天名字顏色（#RRGGBB）",
+    "gui.codpattern.zombies.npc.text_color": "對話正文顏色（#RRGGBB）",
+    "gui.codpattern.zombies.npc.color_preset": "預設顏色",
+    "gui.codpattern.zombies.npc.color.black": "黑色",
+    "gui.codpattern.zombies.npc.color.dark_blue": "深藍",
+    "gui.codpattern.zombies.npc.color.dark_green": "深綠",
+    "gui.codpattern.zombies.npc.color.dark_aqua": "深青",
+    "gui.codpattern.zombies.npc.color.dark_red": "深紅",
+    "gui.codpattern.zombies.npc.color.dark_purple": "深紫",
+    "gui.codpattern.zombies.npc.color.gold": "金色",
+    "gui.codpattern.zombies.npc.color.gray": "灰色",
+    "gui.codpattern.zombies.npc.color.dark_gray": "深灰",
+    "gui.codpattern.zombies.npc.color.blue": "藍色",
+    "gui.codpattern.zombies.npc.color.green": "綠色",
+    "gui.codpattern.zombies.npc.color.aqua": "青色",
+    "gui.codpattern.zombies.npc.color.red": "紅色",
+    "gui.codpattern.zombies.npc.color.light_purple": "淺紫",
+    "gui.codpattern.zombies.npc.color.yellow": "黃色",
+    "gui.codpattern.zombies.npc.color.white": "白色"
 
 }

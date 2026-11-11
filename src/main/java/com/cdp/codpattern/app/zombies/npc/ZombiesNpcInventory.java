@@ -37,14 +37,14 @@ final class ZombiesNpcInventory {
         for (var action : actions) if (action.kind() == ZombiesNpcConfig.Kind.GIVE_ITEM) {
             ItemStack reward = parse(action.item());
             int remaining = action.count();
-            for (int i = 0; i < 36; i++) {
+            for (int i = 9; i < 36; i++) {
                 ItemStack slot = slots.get(i);
                 if (slot.isEmpty() || !ItemStack.isSameItemSameTags(slot, reward)) continue;
                 int inserted = Math.min(remaining, slot.getMaxStackSize() - slot.getCount());
                 slot.grow(inserted);
                 remaining -= inserted;
             }
-            for (int i = 0; i < 36 && remaining > 0; i++) if (slots.get(i).isEmpty()) {
+            for (int i = 9; i < 36 && remaining > 0; i++) if (slots.get(i).isEmpty()) {
                 ItemStack stack = reward.copy();
                 stack.setCount(Math.min(remaining, stack.getMaxStackSize()));
                 remaining -= stack.getCount();

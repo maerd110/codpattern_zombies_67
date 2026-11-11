@@ -20,6 +20,9 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     private static final EntityDataAccessor<Boolean> STORY_ALIVE = SynchedEntityData.defineId(ZombiesNpcEntity.class, EntityDataSerializers.BOOLEAN);
     private ZombiesNpcRuntime owner;
     private String npcId = "";
+    private String chatName = "";
+    private String nameColor = "#FFFFFF";
+    private String textColor = "#FFFFFF";
 
     public ZombiesNpcEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -40,6 +43,9 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     public String skin() { return entityData.get(SKIN); }
     public int posture() { return entityData.get(POSTURE); }
     public boolean storyAlive() { return entityData.get(STORY_ALIVE); }
+    public String chatName() { return chatName.isBlank() ? getName().getString() : chatName; }
+    public String nameColor() { return nameColor; }
+    public String textColor() { return textColor; }
 
     void apply(ZombiesNpcConfig.Appearance appearance) {
         if (appearance.name() != null) {
@@ -55,6 +61,9 @@ public final class ZombiesNpcEntity extends PathfinderMob {
             setHealth(appearance.alive() ? getMaxHealth() : 0);
         }
         if (appearance.invulnerable() != null) setInvulnerable(appearance.invulnerable());
+        if (appearance.chatName() != null) chatName = appearance.chatName();
+        if (appearance.nameColor() != null) nameColor = appearance.nameColor();
+        if (appearance.textColor() != null) textColor = appearance.textColor();
         if (appearance.position() != null) {
             var p = appearance.position();
             if (owner != null) owner.keepLoaded(net.minecraft.core.BlockPos.containing(p.x(), p.y(), p.z()));
@@ -74,7 +83,11 @@ public final class ZombiesNpcEntity extends PathfinderMob {
 
     @Override public boolean isPushable() { return false; }
     @Override public boolean isInvulnerableTo(net.minecraft.world.damagesource.DamageSource source) {
-        return !storyAlive() || super.isInvulnerableTo(source);
+        return isInvulnerable() || !storyAlive() || super.isInvulnerableTo(source);
+    }
+    @Override public boolean hurt(net.minecraft.world.damagesource.DamageSource source, float amount) {
+        if (isInvulnerable() || !storyAlive()) return false;
+        return super.hurt(source, amount);
     }
     @Override public void die(net.minecraft.world.damagesource.DamageSource source) {
         if (!storyAlive() || dead) return;

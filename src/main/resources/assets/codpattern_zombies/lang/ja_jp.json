@@ -487,6 +487,26 @@
     "gui.codpattern.zombies.npc.block_picker": "配置ブロックを選択",
     "gui.codpattern.zombies.npc.selected_placement": "選択中の配置位置",
     "gui.codpattern.zombies.npc.add_placement": "配置位置を追加",
-    "gui.codpattern.zombies.npc.delete_placement": "配置位置を削除"
+    "gui.codpattern.zombies.npc.delete_placement": "配置位置を削除",
+    "gui.codpattern.zombies.npc.chat_name": "チャット名（空欄で表示名を使用）",
+    "gui.codpattern.zombies.npc.name_color": "名前の色（#RRGGBB）",
+    "gui.codpattern.zombies.npc.text_color": "会話の色（#RRGGBB）",
+    "gui.codpattern.zombies.npc.color_preset": "プリセットカラー",
+    "gui.codpattern.zombies.npc.color.black": "黒",
+    "gui.codpattern.zombies.npc.color.dark_blue": "紺",
+    "gui.codpattern.zombies.npc.color.dark_green": "深緑",
+    "gui.codpattern.zombies.npc.color.dark_aqua": "青緑",
+    "gui.codpattern.zombies.npc.color.dark_red": "暗赤",
+    "gui.codpattern.zombies.npc.color.dark_purple": "紫",
+    "gui.codpattern.zombies.npc.color.gold": "金",
+    "gui.codpattern.zombies.npc.color.gray": "灰",
+    "gui.codpattern.zombies.npc.color.dark_gray": "濃灰",
+    "gui.codpattern.zombies.npc.color.blue": "青",
+    "gui.codpattern.zombies.npc.color.green": "緑",
+    "gui.codpattern.zombies.npc.color.aqua": "水色",
+    "gui.codpattern.zombies.npc.color.red": "赤",
+    "gui.codpattern.zombies.npc.color.light_purple": "薄紫",
+    "gui.codpattern.zombies.npc.color.yellow": "黄",
+    "gui.codpattern.zombies.npc.color.white": "白"
 
 }

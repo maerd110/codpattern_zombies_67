@@ -487,6 +487,26 @@
     "gui.codpattern.zombies.npc.block_picker": "Choose building block",
     "gui.codpattern.zombies.npc.selected_placement": "Selected placement",
     "gui.codpattern.zombies.npc.add_placement": "Add block placement",
-    "gui.codpattern.zombies.npc.delete_placement": "Delete placement"
+    "gui.codpattern.zombies.npc.delete_placement": "Delete placement",
+    "gui.codpattern.zombies.npc.chat_name": "Chat name (empty uses display name)",
+    "gui.codpattern.zombies.npc.name_color": "Chat name color (#RRGGBB)",
+    "gui.codpattern.zombies.npc.text_color": "Dialogue text color (#RRGGBB)",
+    "gui.codpattern.zombies.npc.color_preset": "Color preset",
+    "gui.codpattern.zombies.npc.color.black": "Black",
+    "gui.codpattern.zombies.npc.color.dark_blue": "Dark blue",
+    "gui.codpattern.zombies.npc.color.dark_green": "Dark green",
+    "gui.codpattern.zombies.npc.color.dark_aqua": "Dark aqua",
+    "gui.codpattern.zombies.npc.color.dark_red": "Dark red",
+    "gui.codpattern.zombies.npc.color.dark_purple": "Dark purple",
+    "gui.codpattern.zombies.npc.color.gold": "Gold",
+    "gui.codpattern.zombies.npc.color.gray": "Gray",
+    "gui.codpattern.zombies.npc.color.dark_gray": "Dark gray",
+    "gui.codpattern.zombies.npc.color.blue": "Blue",
+    "gui.codpattern.zombies.npc.color.green": "Green",
+    "gui.codpattern.zombies.npc.color.aqua": "Aqua",
+    "gui.codpattern.zombies.npc.color.red": "Red",
+    "gui.codpattern.zombies.npc.color.light_purple": "Light purple",
+    "gui.codpattern.zombies.npc.color.yellow": "Yellow",
+    "gui.codpattern.zombies.npc.color.white": "White"
 
 }

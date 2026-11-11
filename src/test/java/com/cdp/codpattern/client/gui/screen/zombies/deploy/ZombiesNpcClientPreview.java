@@ -73,6 +73,10 @@ public final class ZombiesNpcClientPreview {
             for (int page = 0; page < 3; page++) {
                 set(screen, "page", page); set(screen, "scroll", 0);
                 render(screen, 640, 360, output.resolve("page-" + page + "-640.png"));
+                if (page == 1 && button(screen, "新增触发规则").getY() >= button(screen, "delivery ▾").getY())
+                    throw new AssertionError("Add rule must precede rule selection");
+                if (page == 2 && button(screen, "新增执行动作").getY() >= button(screen, "1. 玩家交出物品 ▾").getY())
+                    throw new AssertionError("Add action must precede action selection");
                 render(screen, 320, 240, output.resolve("page-" + page + "-320.png"));
             }
             set(screen, "page", 0); set(screen, "scroll", 5);
@@ -99,9 +103,28 @@ public final class ZombiesNpcClientPreview {
                     .filter(box -> box.getMessage().getString().equals("显示名称")).findFirst().orElseThrow();
             name.setValue("新的向导");
             if (!working.validated().npcs().get(0).appearance().name().equals("新的向导")) throw new AssertionError("Text editor is detached from draft");
+            for (var edit : java.util.Map.of("聊天名字（留空用显示名称）", "电台向导", "聊天名字颜色（#RRGGBB）", "gold", "对话正文颜色（#RRGGBB）", "#00ffaa").entrySet()) {
+                screen.children().stream().filter(child -> child instanceof net.minecraft.client.gui.components.EditBox)
+                        .map(child -> (net.minecraft.client.gui.components.EditBox) child)
+                        .filter(box -> box.getMessage().getString().equals(edit.getKey())).findFirst().orElseThrow().setValue(edit.getValue());
+            }
+            screen.init(client, 640, 360);
+            button(screen, "金色 ▾").onPress();
+            var palette = client.screen;
+            if (!(palette instanceof ZombiesNpcChoiceScreen)) throw new AssertionError("Color presets open graphical choices");
+            render(palette, 320, 240, output.resolve("chat-colors-320.png"));
+            palette.children().stream().filter(child -> child instanceof net.minecraft.client.gui.components.EditBox)
+                    .map(child -> (net.minecraft.client.gui.components.EditBox) child).findFirst().orElseThrow().setValue("aqua");
+            button(palette, "青色").onPress();
+            var styled = working.validated().npcs().get(0).appearance();
+            if (!styled.chatName().equals("电台向导") || !styled.nameColor().equals("aqua") || !styled.textColor().equals("#00ffaa"))
+                throw new AssertionError("Chat name, hex color and preset selection persist in draft");
+            render(screen, 640, 360, output.resolve("chat-settings-640.png"));
             press(screen, "新增 NPC");
             if (working.npcs().size() != 3) throw new AssertionError("Add NPC button");
+            if (working.validated().npcs().get(2).dialogueIntervalSeconds() != 1) throw new AssertionError("New NPC defaults to one second");
             set(screen, "page", 1); screen.init(client, 640, 360); press(screen, "新增触发规则");
+            if (working.validated().npcs().get(2).rules().get(0).actionIntervalSeconds() != 1) throw new AssertionError("New rule defaults to one second");
             set(screen, "page", 2); screen.init(client, 640, 360); press(screen, "新增执行动作");
             if (working.validated().npcs().get(2).rules().get(0).actions().size() != 2) throw new AssertionError("Add rule/action buttons");
             var firstAction = working.npcs().get(2).getAsJsonObject().getAsJsonArray("rules").get(0).getAsJsonObject().getAsJsonArray("actions").get(0).getAsJsonObject();
@@ -110,7 +133,7 @@ public final class ZombiesNpcClientPreview {
             press(screen, "新增方块放置位置");
             if (working.validated().npcs().get(2).rules().get(0).actions().get(0).blockPlacements().size() != 2) throw new AssertionError("Multiple block GUI placements");
             render(screen, 640, 480, output.resolve("multi-blocks-640.png"));
-            Files.writeString(output.resolve("result.txt"), "PASS 13 client renders, widget bounds, inventory icons, NPC/rule/action controls and multi-block placement editor\n");
+            Files.writeString(output.resolve("result.txt"), "PASS 15 client renders, widget bounds, add button ordering, 1s defaults, chat name/colors/presets, inventory icons and multi-block placement editor\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -124,7 +147,7 @@ public final class ZombiesNpcClientPreview {
         var open = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.OPEN_BARRIER, null, null, null, null, 0, null, null, 3);
         var change = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.NPC, null,
                 new ZombiesNpcConfig.Appearance(null, null, ZombiesNpcConfig.Pose.SITTING, false, position), null, null, 0, null, null, 0, "通道已开启，去出口见我。");
-        var rule = new ZombiesNpcConfig.Rule("delivery", ZombiesNpcConfig.Trigger.INTERACT, 14, List.of(3), true, List.of(), List.of(take, give, open, change));
+        var rule = new ZombiesNpcConfig.Rule("delivery", ZombiesNpcConfig.Trigger.INTERACT, 14, List.of(3), true, List.of(), List.of(take, give, open, change), 0, "", 1);
         var guide = new ZombiesNpcConfig.Npc("guide", new ZombiesNpcConfig.Appearance("向导", "minecraft:textures/entity/player/wide/steve.png", ZombiesNpcConfig.Pose.SITTING, true, position), "请替我找来三颗绿宝石。\n找到后可以打开通道。", List.of(rule));
         var guard = new ZombiesNpcConfig.Npc("guard", new ZombiesNpcConfig.Appearance("守卫", null, ZombiesNpcConfig.Pose.STANDING, true, position), "保持警惕。", List.of());
         return new ZombiesNpcConfig(1, List.of(guide, guard));
@@ -133,10 +156,13 @@ public final class ZombiesNpcClientPreview {
         var field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value);
     }
     private static void press(Screen screen, String caption) {
-        screen.children().stream().filter(child -> child instanceof net.minecraft.client.gui.components.Button)
+        button(screen, caption).onPress();
+    }
+    private static net.minecraft.client.gui.components.Button button(Screen screen, String caption) {
+        return screen.children().stream().filter(child -> child instanceof net.minecraft.client.gui.components.Button)
                 .map(child -> (net.minecraft.client.gui.components.Button) child)
                 .filter(button -> button.getTooltip() != null && button.getMessage().getString().equals(caption))
-                .findFirst().orElseThrow(() -> new AssertionError("Missing button " + caption)).onPress();
+                .findFirst().orElseThrow(() -> new AssertionError("Missing button " + caption));
     }
     private static void render(Screen screen, int width, int height, Path file) throws Exception {
         Minecraft client = Minecraft.getInstance();

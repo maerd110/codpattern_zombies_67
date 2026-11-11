@@ -359,8 +359,11 @@ public final class ZombiesNpcRuntime {
 
     private void say(String id, String text) {
         var entity = entities.get(id);
-        String name = entity != null && entity.hasCustomName() ? entity.getName().getString() : id;
-        map.sendNpcDialogue(Component.literal("[" + name + "] " + text));
+        String name = entity == null ? id : entity.chatName();
+        var nameColor = net.minecraft.network.chat.TextColor.parseColor(entity == null ? "#FFFFFF" : entity.nameColor());
+        var textColor = net.minecraft.network.chat.TextColor.parseColor(entity == null ? "#FFFFFF" : entity.textColor());
+        map.sendNpcDialogue(Component.literal("[" + name + "] ").withStyle(style -> style.withColor(nameColor))
+                .append(Component.literal(text).withStyle(style -> style.withColor(textColor))));
     }
 
     public void reset() {

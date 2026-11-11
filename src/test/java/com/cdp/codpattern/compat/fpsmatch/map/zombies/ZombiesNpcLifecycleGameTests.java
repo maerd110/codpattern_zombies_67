@@ -33,7 +33,7 @@ public final class ZombiesNpcLifecycleGameTests {
         var blockPos = origin.offset(2, 0, 0);
         var block = new ZombiesNpcConfig.Position(blockPos.getX(), blockPos.getY(), blockPos.getZ(), 0);
         var place = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.SET_BLOCK, null, null, null, null, 0, block, "minecraft:stone", 0);
-        var rule = new ZombiesNpcConfig.Rule("place", ZombiesNpcConfig.Trigger.AUTO, 1, List.of(), false, List.of(), List.of(place));
+        var rule = new ZombiesNpcConfig.Rule("place", ZombiesNpcConfig.Trigger.AUTO, 1, List.of(), false, List.of(), List.of(place), 0, "", 1);
         var config = new ZombiesNpcConfig(1, List.of(new ZombiesNpcConfig.Npc("guide",
                 new ZombiesNpcConfig.Appearance("NPC", null, ZombiesNpcConfig.Pose.STANDING, true, pos), "", List.of(rule))));
         try {

@@ -6,6 +6,7 @@ import java.util.function.IntPredicate;
 
 /** Immutable authoring data. Runtime progress is deliberately kept outside this file. */
 public record ZombiesNpcConfig(int version, List<Npc> npcs) {
+    public static final double DEFAULT_INTERVAL_SECONDS = 1;
     public ZombiesNpcConfig {
         if (version != 1) throw new IllegalArgumentException("NPC version must be 1");
         npcs = List.copyOf(npcs);
@@ -57,14 +58,22 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
         }
     }
 
-    public record Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable) {
+    public record Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable,
+                             String chatName, String nameColor, String textColor) {
+        public Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable) {
+            this(name, skin, pose, alive, position, invulnerable, null, null, null);
+        }
         public Appearance(String name, String skin, Pose pose, Boolean alive, Position position) {
-            this(name, skin, pose, alive, position, null);
+            this(name, skin, pose, alive, position, null, null, null, null);
+        }
+        public Appearance {
+            nameColor = normalizeColor(nameColor);
+            textColor = normalizeColor(textColor);
         }
     }
 
     public record Npc(String id, Appearance appearance, String dialogue, List<Rule> rules, double dialogueIntervalSeconds) {
-        public Npc(String id, Appearance appearance, String dialogue, List<Rule> rules) { this(id, appearance, dialogue, rules, 0); }
+        public Npc(String id, Appearance appearance, String dialogue, List<Rule> rules) { this(id, appearance, dialogue, rules, DEFAULT_INTERVAL_SECONDS); }
         public Npc {
             intervalTicks(dialogueIntervalSeconds);
             if (appearance == null || appearance.position() == null) throw new IllegalArgumentException("NPC needs appearance.position");
@@ -79,7 +88,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
                        double actionIntervalSeconds, String requiredItem, Integer requiredCount) {
         public Rule(String id, Trigger trigger, int minWave, List<Integer> openedBarriers,
                     boolean anyCondition, List<String> requires, List<Action> actions) {
-            this(id, trigger, minWave, openedBarriers, anyCondition, requires, actions, 0, "", 1);
+            this(id, trigger, minWave, openedBarriers, anyCondition, requires, actions, DEFAULT_INTERVAL_SECONDS, "", 1);
         }
         public Rule {
             intervalTicks(actionIntervalSeconds);
@@ -152,5 +161,16 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
     public static int intervalTicks(double seconds) {
         if (!Double.isFinite(seconds) || seconds < 0 || seconds > 3600) throw new IllegalArgumentException("Interval must be between 0 and 3600 seconds");
         return (int) Math.ceil(seconds * 20);
+    }
+
+    public static String normalizeColor(String color) {
+        if (color == null) return null;
+        String normalized = color.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.isEmpty()) return "#ffffff";
+        if (!normalized.matches("#[0-9a-f]{6}") && !Set.of("black", "dark_blue", "dark_green", "dark_aqua",
+                "dark_red", "dark_purple", "gold", "gray", "dark_gray", "blue", "green", "aqua", "red", "light_purple", "yellow", "white").contains(normalized)) {
+            throw new IllegalArgumentException("Chat color must be a named color or #RRGGBB");
+        }
+        return normalized;
     }
 }

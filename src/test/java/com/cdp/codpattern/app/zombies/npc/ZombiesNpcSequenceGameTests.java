@@ -25,6 +25,76 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcSequenceGameTests {
     @GameTest(template="empty", batch="npc_sequences", timeoutTicks=100)
+    public static void invulnerableNpcBlocksCreativeAndBypassDamage(GameTestHelper helper) {
+        var fixture = new Fixture(helper);
+        try {
+            var actor = fixture.player();
+            actor.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+            fixture.start(List.of(), 0);
+            var npc = fixture.entity();
+            var creativeAttack = helper.getLevel().damageSources().playerAttack(actor);
+            var bypass = helper.getLevel().damageSources().fellOutOfWorld();
+            helper.assertTrue(creativeAttack.isCreativePlayer(), "fixture must exercise vanilla's creative bypass");
+            float health = npc.getHealth();
+            helper.assertTrue(npc.isInvulnerableTo(creativeAttack) && !npc.hurt(creativeAttack, 100), "creative attacks respect NPC invulnerability");
+            helper.assertTrue(npc.isInvulnerableTo(bypass) && !npc.hurt(bypass, 100), "damage tagged to bypass vanilla invulnerability is blocked");
+            helper.assertTrue(npc.getHealth() == health && npc.storyAlive(), "invulnerable NPC remains alive at full health");
+            npc.apply(new ZombiesNpcConfig.Appearance(null, null, null, null, null, false));
+            helper.assertTrue(npc.hurt(creativeAttack, 5) && npc.getHealth() < health, "disabling protection still allows damage");
+        } finally { fixture.close(); }
+        helper.succeed();
+    }
+
+    @GameTest(template="empty", batch="npc_sequences", timeoutTicks=100)
+    public static void rewardsUseBackpackAndDoNotFillHotbar(GameTestHelper helper) {
+        var fixture = new Fixture(helper);
+        try {
+            var actor = fixture.player();
+            actor.getInventory().setItem(0, new ItemStack(Items.DIAMOND, 63));
+            var reward = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.GIVE_ITEM, null, null, null, "minecraft:diamond", 2, null, null, 0);
+            ZombiesNpcInventory.commit(actor, ZombiesNpcInventory.plan(actor, List.of(reward)));
+            helper.assertTrue(actor.getInventory().getItem(0).getCount() == 63 && actor.getInventory().getItem(9).getCount() == 2, "rewards go to backpack without topping up a matching hotbar stack");
+            for (int slot = 9; slot < 36; slot++) actor.getInventory().setItem(slot, new ItemStack(Items.STONE, 64));
+            try {
+                ZombiesNpcInventory.plan(actor, List.of(reward));
+                throw new AssertionError("Full backpack must pause reward even with empty hotbar slots");
+            } catch (IllegalArgumentException expected) {
+                helper.assertTrue(actor.getInventory().getItem(0).getCount() == 63 && actor.getInventory().getItem(1).isEmpty(), "failed planning preserves hotbar");
+            }
+        } finally { fixture.close(); }
+        helper.succeed();
+    }
+
+    @GameTest(template="empty", batch="npc_sequences", timeoutTicks=100)
+    public static void defaultsAndChatColorsRoundTrip(GameTestHelper helper) {
+        var draft = new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());
+        var npcData = draft.addNpc(new ZombiesNpcConfig.Position(1, 64, 2, 0));
+        draft.addRule(npcData);
+        var created = draft.validated().npcs().get(0);
+        helper.assertTrue(created.dialogueIntervalSeconds() == 1 && created.rules().get(0).actionIntervalSeconds() == 1, "new graphical entries default to one second");
+        var json = ZombiesNpcRepository.GSON.toJsonTree(draft.validated()).getAsJsonObject();
+        var legacy = json.getAsJsonArray("npcs").get(0).getAsJsonObject();
+        legacy.remove("dialogueIntervalSeconds");
+        legacy.getAsJsonArray("rules").get(0).getAsJsonObject().remove("actionIntervalSeconds");
+        var missing = ZombiesNpcRepository.GSON.fromJson(json, ZombiesNpcConfig.class).npcs().get(0);
+        helper.assertTrue(missing.dialogueIntervalSeconds() == 1 && missing.rules().get(0).actionIntervalSeconds() == 1, "omitted interval fields use one second");
+        legacy.addProperty("dialogueIntervalSeconds", 0);
+        legacy.getAsJsonArray("rules").get(0).getAsJsonObject().addProperty("actionIntervalSeconds", 0);
+        var zero = ZombiesNpcRepository.GSON.fromJson(json, ZombiesNpcConfig.class).npcs().get(0);
+        helper.assertTrue(zero.dialogueIntervalSeconds() == 0 && zero.rules().get(0).actionIntervalSeconds() == 0, "explicitly saved zero intervals remain zero");
+        var fixture = new Fixture(helper);
+        try {
+            var appearance = new ZombiesNpcConfig.Appearance("Head name", null, ZombiesNpcConfig.Pose.STANDING, true, position(fixture.origin), true, "电台", "gold", "#00FFAA");
+            var rule = new ZombiesNpcConfig.Rule("chat", ZombiesNpcConfig.Trigger.AUTO, 0, List.of(), false, List.of(), List.of(dialogue("test")));
+            fixture.map.npcRuntime().start(new ZombiesNpcConfig(1, List.of(new ZombiesNpcConfig.Npc("guide", appearance, "", List.of(rule)))), false);
+            fixture.map.npcRuntime().tick(1);
+            var message = fixture.map.messages.get(0);
+            helper.assertTrue(message.getString().equals("[电台] test") && fixture.entity().getName().getString().equals("Head name"), "chat name is independently configurable");
+            helper.assertTrue(message.getStyle().getColor().getValue() == 0xFFAA00 && message.getSiblings().get(0).getStyle().getColor().getValue() == 0x00FFAA, "name and text have independent serialized chat styles");
+        } finally { fixture.close(); }
+        helper.succeed();
+    }
+    @GameTest(template="empty", batch="npc_sequences", timeoutTicks=100)
     public static void defaultDialogueUsesConfiguredInterval(GameTestHelper helper) {
         var fixture = new Fixture(helper);
         var actor = fixture.player();
@@ -47,7 +117,7 @@ public final class ZombiesNpcSequenceGameTests {
         var other = fixture.player();
         var first = new ZombiesNpcConfig.Rule("first", ZombiesNpcConfig.Trigger.INTERACT, 0, List.of(), false, List.of(),
                 List.of(dialogue("one\ntwo\nthree"), item(ZombiesNpcConfig.Kind.GIVE_ITEM, "minecraft:emerald"), item(ZombiesNpcConfig.Kind.TAKE_ITEM, "minecraft:emerald")), 0.15, "", 1);
-        var second = new ZombiesNpcConfig.Rule("second", ZombiesNpcConfig.Trigger.INTERACT, 0, List.of(), false, List.of("guide.first"), List.of(dialogue("next rule")));
+        var second = new ZombiesNpcConfig.Rule("second", ZombiesNpcConfig.Trigger.INTERACT, 0, List.of(), false, List.of("guide.first"), List.of(dialogue("next rule")), 0, "", 1);
         fixture.start(List.of(first, second), 0.1);
         fixture.interact(actor);
         helper.assertTrue(fixture.map.lines.size() == 1 && actor.getInventory().countItem(Items.EMERALD) == 0, "first line is immediate, later actions wait");
@@ -77,7 +147,7 @@ public final class ZombiesNpcSequenceGameTests {
         var fixture = new Fixture(helper);
         var actor = fixture.player();
         fixture.start(List.of(new ZombiesNpcConfig.Rule("trade", ZombiesNpcConfig.Trigger.INTERACT, 0, List.of(), false, List.of(),
-                List.of(dialogue("intro"), item(ZombiesNpcConfig.Kind.TAKE_ITEM, "minecraft:emerald"), item(ZombiesNpcConfig.Kind.GIVE_ITEM, "minecraft:diamond")))), 0);
+                List.of(dialogue("intro"), item(ZombiesNpcConfig.Kind.TAKE_ITEM, "minecraft:emerald"), item(ZombiesNpcConfig.Kind.GIVE_ITEM, "minecraft:diamond")), 0, "", 1)), 0);
         fixture.interact(actor);
         helper.assertTrue(fixture.map.lines.size() == 1, "dialogue before missing item executes");
         for (int tick = 1; tick <= 30; tick++) {
@@ -143,7 +213,7 @@ public final class ZombiesNpcSequenceGameTests {
             helper.getLevel().setBlock(b, Blocks.GOLD_BLOCK.defaultBlockState(), 18);
             var placements = List.of(new ZombiesNpcConfig.BlockPlacement(position(a), "minecraft:stone"), new ZombiesNpcConfig.BlockPlacement(position(b), "minecraft:oak_planks"));
             var action = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.SET_BLOCK, null, null, null, null, 0, null, null, 0, null, null, null, placements);
-            fixture.start(List.of(new ZombiesNpcConfig.Rule("blocks", ZombiesNpcConfig.Trigger.AUTO, 0, List.of(), false, List.of(), List.of(action))), 0);
+            fixture.start(List.of(new ZombiesNpcConfig.Rule("blocks", ZombiesNpcConfig.Trigger.AUTO, 0, List.of(), false, List.of(), List.of(action), 0, "", 1)), 0);
             var npc = fixture.entity();
             helper.assertTrue(!npc.hurt(helper.getLevel().damageSources().generic(), 100), "old NPCs default to invulnerable");
             npc.apply(new ZombiesNpcConfig.Appearance(null, null, null, null, null, false));
@@ -185,6 +255,7 @@ public final class ZombiesNpcSequenceGameTests {
     private static final class TestMap extends ZombiesMap {
         final List<ServerPlayer> actors = new ArrayList<>();
         final List<String> lines = new ArrayList<>();
+        final List<Component> messages = new ArrayList<>();
         final List<Long> times = new ArrayList<>();
         TestMap(net.minecraft.server.level.ServerLevel level, String name, AreaData area) { super(level, name, area); }
         @Override public ZombiesGamePhase currentPhase() { return ZombiesGamePhase.WAVE_ACTIVE; }
@@ -192,6 +263,6 @@ public final class ZombiesNpcSequenceGameTests {
         @Override public boolean isAliveSurvivor(UUID id) { return actors.stream().anyMatch(player -> player.getUUID().equals(id)); }
         @Override public List<ServerPlayer> npcPlayers() { return List.copyOf(actors); }
         @Override public void tick() { npcRuntime().tick(1); }
-        @Override public void sendNpcDialogue(Component message) { lines.add(message.getString()); times.add(getServerLevel().getGameTime()); }
+        @Override public void sendNpcDialogue(Component message) { lines.add(message.getString()); messages.add(message.copy()); times.add(getServerLevel().getGameTime()); }
     }
 }

@@ -113,11 +113,11 @@ public final class ZombiesNpcGameTests {
         var dialogue = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.DIALOGUE, null, null, "十四波，出发！", null, 0, null, null, 0);
         var place = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.SET_BLOCK, null, null, null, null, 0, position(blockPos), "minecraft:stone", 0);
         var open = new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.OPEN_BARRIER, null, null, null, null, 0, null, null, 1);
-        var trade = new ZombiesNpcConfig.Rule("trade", ZombiesNpcConfig.Trigger.INTERACT, 0, List.of(), false, List.of(), List.of(action(ZombiesNpcConfig.Kind.TAKE_ITEM, "minecraft:emerald", 3), action(ZombiesNpcConfig.Kind.GIVE_ITEM, "minecraft:diamond", 2), place, open));
-        var wave = new ZombiesNpcConfig.Rule("move", ZombiesNpcConfig.Trigger.AUTO, 14, List.of(1), true, List.of(), List.of(relocate, dialogue));
+        var trade = new ZombiesNpcConfig.Rule("trade", ZombiesNpcConfig.Trigger.INTERACT, 0, List.of(), false, List.of(), List.of(action(ZombiesNpcConfig.Kind.TAKE_ITEM, "minecraft:emerald", 3), action(ZombiesNpcConfig.Kind.GIVE_ITEM, "minecraft:diamond", 2), place, open), 0, "", 1);
+        var wave = new ZombiesNpcConfig.Rule("move", ZombiesNpcConfig.Trigger.AUTO, 14, List.of(1), true, List.of(), List.of(relocate, dialogue), 0, "", 1);
         var death = new ZombiesNpcConfig.Rule("death", ZombiesNpcConfig.Trigger.AUTO, 15, List.of(), false, List.of("guide.move"),
                 List.of(new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.NPC, null,
-                        new ZombiesNpcConfig.Appearance(null, null, ZombiesNpcConfig.Pose.LYING, false, null), null, null, 0, null, null, 0)));
+                        new ZombiesNpcConfig.Appearance(null, null, ZombiesNpcConfig.Pose.LYING, false, null), null, null, 0, null, null, 0)), 0, "", 1);
         var config = new ZombiesNpcConfig(1, List.of(new ZombiesNpcConfig.Npc("guide", initial, "", List.of(trade, wave, death))));
         try {
             map.npcRuntime().start(config, false);

@@ -37,6 +37,7 @@ public final class ZombiesNpcEditorDraft {
         rule.addProperty("id", unique(rules, "rule_"));
         rule.addProperty("trigger", "INTERACT");
         rule.addProperty("minWave", 0);
+        rule.addProperty("actionIntervalSeconds", ZombiesNpcConfig.DEFAULT_INTERVAL_SECONDS);
         rule.addProperty("anyCondition", false);
         rule.add("openedBarriers", new JsonArray());
         rule.add("requires", new JsonArray());
