@@ -146,7 +146,8 @@ public final class ZombiesNpcClientPreview {
                 throw new AssertionError("All block placements must expose their own fields");
             graphChecks(screen, working, client, output);
             sharedGraphChecks(screen,client,output);
-            Files.writeString(output.resolve("result.txt"), "PASS 31 client renders, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
+            dialogueChecks(screen,client,output);
+            Files.writeString(output.resolve("result.txt"), "PASS 37 client renders, dialogue answers/pagination/close, choice node editing/visibility/ports, fresh interaction gates, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -298,6 +299,45 @@ public final class ZombiesNpcClientPreview {
         set(graph,"selected",ref.key());graph.init(Minecraft.getInstance(),960,540);
     }
     private static Object get(Object target,String name)throws Exception{var f=target.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(target);}
+    private static void dialogueChecks(ZombiesNpcDeployScreen previous,Minecraft client,Path output)throws Exception{
+        var answers=new java.util.ArrayList<ZombiesNpcDialogueNetwork.Answer>();
+        for(int i=1;i<=9;i++)answers.add(new ZombiesNpcDialogueNetwork.Answer("a"+i,"选项 "+i+"：我带来你要的物品了。"));
+        var view=new ZombiesNpcDialogueNetwork.View(java.util.UUID.randomUUID(),true,-1,net.minecraft.network.chat.Component.literal("北门守卫").withStyle(net.minecraft.ChatFormatting.GOLD),net.minecraft.network.chat.Component.literal("你来得正好。北门封了三天，只有拿到旧路标和书记盖章的人才能出村。\n你愿意帮我找回钥匙吗？"),answers);
+        var answer=new java.util.concurrent.atomic.AtomicReference<String>();
+        var dialogue=new com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen(view,answer::set);
+        client.setScreen(dialogue);render(dialogue,640,360,output.resolve("conversation-640.png"));
+        render(dialogue,320,240,output.resolve("conversation-320.png"));
+        dialogue.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button b&&b.getMessage().getString().equals("›")).map(c->(net.minecraft.client.gui.components.Button)c).findFirst().orElseThrow().onPress();
+        var option=dialogue.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button b&&b.getTooltip()!=null).map(c->(net.minecraft.client.gui.components.Button)c).findFirst().orElseThrow();
+        option.onPress();if(!"a4".equals(answer.get()))throw new AssertionError("Small viewport pages answers and sends the selected ID");
+        option.onPress();if(!"a4".equals(answer.get()))throw new AssertionError("Double click cannot select again");
+        var empty=new com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen(new ZombiesNpcDialogueNetwork.View(java.util.UUID.randomUUID(),true,-1,view.name(),view.text(),List.of()),answer::set);
+        client.setScreen(empty);render(empty,320,240,output.resolve("conversation-empty-320.png"));empty.onClose();if(!"".equals(answer.get()))throw new AssertionError("Closing sends cancel without choosing an answer");
+        var owner=new ZombiesNpcDeployScreen((ZombiesDeployToolScreen)get(previous,"parent"),new ZombiesDeployDraft("选择剧情","INITIAL",-1,"MVP1_MINIMAL",java.util.Map.of()));
+        var draft=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var npc=draft.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));var r=draft.addRule(npc);
+        set(owner,"draft",draft);set(owner,"editable",true);owner.graphSelect(0,0);owner.init(client,1280,1000);press(owner,"逻辑画布");var graph=(ZombiesNpcGraphScreen)client.screen;
+        graph.init(client,1280,1000);press(graph,"+ 等待交互");var click=draft.looseNodes().get(0).getAsJsonObject();press(graph,"+ 玩家选择");var choice=draft.looseNodes().get(1).getAsJsonObject();
+        if(!choice.get("type").getAsString().equals("CHOICE")||!click.get("type").getAsString().equals("INTERACT"))throw new AssertionError("New node categories are available in palette");
+        choice.addProperty("text","你愿意帮我找到钥匙吗？");choice.addProperty("x",500);choice.addProperty("y",70);click.addProperty("x",280);click.addProperty("y",70);
+        set(graph,"selected","_loose/"+choice.get("id").getAsString());graph.init(client,1280,1000);
+        press(graph,"新增对话选项");if(choice.getAsJsonArray("options").size()!=2)throw new AssertionError("Option cards expand in place");
+        graph.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox b&&b.getMessage().getString().equals("选项 1：按钮文字")).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("我去找钥匙。");
+        press(graph,"显示条件：始终显示");var cond=choice.getAsJsonArray("options").get(0).getAsJsonObject().getAsJsonObject("condition");
+        cond.getAsJsonArray("tests").get(0).getAsJsonObject().addProperty("value",2);graph.init(client,1280,1000);
+        render(graph,1280,1000,output.resolve("choice-inspector-1280.png"));
+        graph.init(client,1280,1000);press(graph,"适应画布");var pool=ZombiesNpcSharedCanvas.looseRule(draft);
+        crossConnect(graph,pool,click.get("id").getAsString(),"next",pool,choice.get("id").getAsString());
+        crossConnect(graph,r,"node_2","next",pool,click.get("id").getAsString());
+        if(!draft.looseNodes().isEmpty())throw new AssertionError("Choice and interaction chain adopts rule by wiring");
+        graph.init(client,1280,1000);press(graph,"适应画布");
+        crossConnect(graph,r,choice.get("id").getAsString(),"option:choice_1",r,"node_3");crossConnect(graph,r,choice.get("id").getAsString(),"option:choice_2",r,"node_1");
+        draft.validated();
+        if(!ZombiesNpcGraphDraft.target(choice,"option:choice_1").equals("node_3")||!ZombiesNpcGraphDraft.target(choice,"option:choice_2").equals("node_1"))throw new AssertionError("Distinct answer ports wire to independent consequences and entry retry");
+        press(graph,"自动整理");set(graph,"selected",owner.graphNpc().get("id").getAsString()+"."+r.get("id").getAsString()+"/"+choice.get("id").getAsString());
+        render(graph,1280,720,output.resolve("choice-canvas-1280.png"));
+        graph.init(client,320,240);set(graph,"selected",owner.graphNpc().get("id").getAsString()+"."+r.get("id").getAsString()+"/"+choice.get("id").getAsString());press(graph,"节点属性");
+        render(graph,320,240,output.resolve("choice-inspector-320.png"));
+    }
     private static void connect(ZombiesNpcGraphScreen graph,com.google.gson.JsonObject rule,String from,String port,String to)throws Exception{
         crossConnect(graph,rule,from,port,rule,to);
     }
@@ -305,7 +345,7 @@ public final class ZombiesNpcClientPreview {
         var a=ZombiesNpcGraphDraft.find(fromRule,from);var b=ZombiesNpcGraphDraft.find(toRule,to);
         if(port.equals("completed"))a=ZombiesNpcGraphDraft.nodes(fromRule).asList().stream().map(com.google.gson.JsonElement::getAsJsonObject).filter(n->n.get("type").getAsString().equals("END")&&(!n.has("complete")||n.get("complete").getAsBoolean())).findFirst().orElseThrow();
         double z=(double)get(graph,"zoom"),px=(double)get(graph,"panX"),py=(double)get(graph,"panY");
-        double ax=8+px+(a.get("x").getAsDouble()+170)*z,ay=94+py+(a.get("y").getAsDouble()+(port.equals("onFalse")?68:43))*z;
+        double ax=8+px+(a.get("x").getAsDouble()+170)*z,ay=94+py+(a.get("y").getAsDouble()+(port.startsWith("option:")?43+ZombiesNpcGraphDraft.ports(a).indexOf(port)*22:port.equals("onFalse")?68:43))*z;
         double bx=8+px+b.get("x").getAsDouble()*z,by=94+py+(b.get("y").getAsDouble()+(port.equals("completed")&&java.util.Set.of("ENTRY","BRANCH","AWAIT").contains(b.get("type").getAsString())?68:43))*z;
         graph.mouseClicked(ax,ay,0);graph.mouseReleased(ax,ay,0);graph.mouseClicked(bx,by,0);graph.mouseReleased(bx,by,0);
     }

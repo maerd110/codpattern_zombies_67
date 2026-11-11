@@ -18,17 +18,18 @@ public final class ZombiesNpcSharedCanvas {
     public static JsonObject completion(Flow f){return f.nodes().stream().filter(n->n.get("type").getAsString().equals("END")&&(!n.has("complete")||n.get("complete").getAsBoolean())).findFirst().orElse(null);}
     public static Ref adopt(ZombiesNpcEditorDraft draft,JsonObject seed,Flow target){
         var pool=draft.looseNodes();Set<String> ids=new HashSet<>();ids.add(seed.get("id").getAsString());boolean changed;
-        do{changed=false;for(var e:pool){var n=e.getAsJsonObject();for(var port:ZombiesNpcGraphDraft.ports(n)){String next=n.get(port).getAsString();if(next.isBlank())continue;if(ids.contains(n.get("id").getAsString())||ids.contains(next)){changed|=ids.add(next);changed|=ids.add(n.get("id").getAsString());}}}}while(changed);
+        do{changed=false;for(var e:pool){var n=e.getAsJsonObject();for(var port:ZombiesNpcGraphDraft.ports(n)){String next=ZombiesNpcGraphDraft.target(n,port);if(next.isBlank())continue;if(ids.contains(n.get("id").getAsString())||ids.contains(next)){changed|=ids.add(next);changed|=ids.add(n.get("id").getAsString());}}}}while(changed);
         var moving=pool.asList().stream().map(JsonElement::getAsJsonObject).filter(n->ids.contains(n.get("id").getAsString())).toList();
         if(target.nodes().size()+moving.size()>128)throw new IllegalArgumentException("规则节点数量超出限制");
         if(target.rule().get("trigger").getAsString().equals("AUTO"))for(var n:moving){
+            if(Set.of("INTERACT","CHOICE").contains(n.get("type").getAsString()))throw new IllegalArgumentException("此节点必须接入玩家交互规则");
             if(n.has("action")&&Set.of("GIVE_ITEM","TAKE_ITEM").contains(n.getAsJsonObject("action").get("kind").getAsString()))throw new IllegalArgumentException("物品交收必须接入交互规则");
-            if(n.has("condition"))for(var t:n.getAsJsonObject("condition").getAsJsonArray("tests"))if(t.getAsJsonObject().get("kind").getAsString().equals("ITEM_ACTOR"))throw new IllegalArgumentException("交互玩家条件必须接入交互规则");
+            for(var c:ZombiesNpcGraphDraft.conditions(n))for(var t:c.getAsJsonArray("tests"))if(t.getAsJsonObject().get("kind").getAsString().equals("ITEM_ACTOR"))throw new IllegalArgumentException("交互玩家条件必须接入交互规则");
             if(n.get("type").getAsString().equals("END")&&n.has("complete")&&!n.get("complete").getAsBoolean())throw new IllegalArgumentException("自动规则必须标记完成");
         }
         Set<String> used=new HashSet<>();target.nodes().forEach(n->used.add(n.get("id").getAsString()));Map<String,String> names=new HashMap<>();
         for(var n:moving){int k=1;while(used.contains("node_"+k))k++;String id="node_"+k;used.add(id);names.put(n.get("id").getAsString(),id);}
-        for(var n:moving){pool.remove(n);n.addProperty("id",names.get(n.get("id").getAsString()));for(var port:ZombiesNpcGraphDraft.ports(n)){String next=n.get(port).getAsString();if(names.containsKey(next))n.addProperty(port,names.get(next));}ZombiesNpcGraphDraft.nodes(target.rule()).add(n);}
+        for(var n:moving){pool.remove(n);n.addProperty("id",names.get(n.get("id").getAsString()));for(var port:ZombiesNpcGraphDraft.ports(n)){String next=ZombiesNpcGraphDraft.target(n,port);if(names.containsKey(next))ZombiesNpcGraphDraft.target(n,port,names.get(next));}ZombiesNpcGraphDraft.nodes(target.rule()).add(n);}
         return new Ref(target,seed);
     }
     public static Ref connectExecution(ZombiesNpcEditorDraft draft,Ref from,String port,Ref to){
@@ -56,16 +57,17 @@ public final class ZombiesNpcSharedCanvas {
     public static void ensure(ZombiesNpcEditorDraft draft) {
         var flows = flows(draft);
         for (var flow : flows) ZombiesNpcGraphDraft.ensure(flow.rule());
-        double bottom = flows.stream().filter(f -> version(f) == 1).flatMap(f -> f.nodes().stream()).mapToDouble(n -> n.get("y").getAsDouble() + 88).max().orElse(0);
+        double bottom = flows.stream().filter(f -> version(f) == 1).flatMap(f -> f.nodes().stream()).mapToDouble(n -> n.get("y").getAsDouble() + height(n)).max().orElse(0);
         for (var flow : flows) if (version(flow) == 0) {
             var nodes = flow.nodes();
             double left = nodes.stream().mapToDouble(n -> n.get("x").getAsDouble()).min().orElse(0);
             double top = nodes.stream().mapToDouble(n -> n.get("y").getAsDouble()).min().orElse(0);
             translate(flow, 40 - left, bottom + 90 - top);
             flow.rule().getAsJsonObject("graph").addProperty("canvasVersion", 1);
-            bottom = nodes.stream().mapToDouble(n -> n.get("y").getAsDouble() + 88).max().orElse(bottom);
+            bottom = nodes.stream().mapToDouble(n -> n.get("y").getAsDouble() + height(n)).max().orElse(bottom);
         }
     }
+    private static int height(JsonObject n){return n.get("type").getAsString().equals("CHOICE")?Math.max(88,61+n.getAsJsonArray("options").size()*22):88;}
     private static int version(Flow f) { var g = f.rule().getAsJsonObject("graph"); return g.has("canvasVersion") ? g.get("canvasVersion").getAsInt() : 0; }
     public static void translate(Flow flow, double dx, double dy) {
         for (var n : flow.nodes()) {
@@ -80,7 +82,7 @@ public final class ZombiesNpcSharedCanvas {
             ZombiesNpcGraphDraft.layout(flow.rule());
             translate(flow, 20, bottom + 60);
             flow.rule().getAsJsonObject("graph").addProperty("canvasVersion", 1);
-            bottom = flow.nodes().stream().mapToDouble(n -> n.get("y").getAsDouble() + 88).max().orElse(bottom);
+            bottom = flow.nodes().stream().mapToDouble(n -> n.get("y").getAsDouble() + height(n)).max().orElse(bottom);
         }
     }
     public static Flow find(ZombiesNpcEditorDraft draft, String key) { return flows(draft).stream().filter(f -> f.key().equals(key)).findFirst().orElse(null); }

@@ -5,7 +5,7 @@ import java.util.*;
 /** Saved execution graph. The same edges drawn by the editor drive the server interpreter. */
 public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
     public ZombiesNpcGraph(List<Node> nodes) { this(nodes, 0); }
-    public enum Type { ENTRY, ACTION, BRANCH, WAIT, AWAIT, END }
+    public enum Type { ENTRY, ACTION, BRANCH, WAIT, AWAIT, INTERACT, CHOICE, END }
     public enum TestKind { WAVE, BARRIER, ITEM_ROOM, ITEM_ACTOR, RULE_DONE, NPC_ALIVE }
     public enum Match { ALL, ANY }
     public record Test(TestKind kind, int value, String item, Integer count, String reference, boolean negated) {
@@ -31,12 +31,31 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             return match == Match.ALL ? stream.allMatch(check) : stream.anyMatch(check);
         }
     }
+    public record Option(String id, String text, Condition condition, String next) {
+        public Option {
+            if (id == null || !id.matches("[a-zA-Z0-9_-]{1,64}") || text == null || text.isBlank() || text.length() > 256)
+                throw new IllegalArgumentException("对话选项需要编号和 1 至 256 字的按钮文字");
+            next = next == null ? "" : next;
+        }
+    }
     public record Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action,
-                       Condition condition, double seconds, String next, String onFalse, Boolean complete) {
+                       Condition condition, double seconds, String next, String onFalse, Boolean complete,
+                       String text, String speaker, List<Option> options) {
+        public Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action, Condition condition, double seconds, String next, String onFalse, Boolean complete) {
+            this(id,type,x,y,action,condition,seconds,next,onFalse,complete,"","",List.of());
+        }
         public Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action, Condition condition, double seconds, String next, String onFalse) {
             this(id,type,x,y,action,condition,seconds,next,onFalse,true);
         }
         public Node {
+            text = text == null ? "" : text;
+            speaker = speaker == null ? "" : speaker;
+            options = options == null ? List.of() : List.copyOf(options);
+            if (text.length() > 8192) throw new IllegalArgumentException("对话正文最多 8192 字");
+            if (type == Type.CHOICE) {
+                if (options.isEmpty() || options.size() > 12 || options.stream().map(Option::id).distinct().count() != options.size())
+                    throw new IllegalArgumentException("玩家选择节点需要 1 至 12 个编号不同的选项");
+            } else if (!options.isEmpty() || !text.isEmpty() || !speaker.isEmpty()) throw new IllegalArgumentException("此节点不支持对话选项");
             complete = complete == null ? true : complete;
             if (id == null || !id.matches("[a-zA-Z0-9_-]{1,64}") || type == null) throw new IllegalArgumentException("节点编号或类型无效");
             if (!Double.isFinite(x) || !Double.isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) throw new IllegalArgumentException("节点位置无效");
@@ -48,7 +67,13 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             if (type != Type.ACTION && action != null || type != Type.BRANCH && type != Type.AWAIT && condition != null) throw new IllegalArgumentException("节点参数与类型不符");
         }
         public List<String> outputs() {
-            return type == Type.END ? List.of() : type == Type.BRANCH ? List.of(next, onFalse) : List.of(next);
+            return type == Type.CHOICE ? options.stream().map(Option::next).toList() : type == Type.END ? List.of() : type == Type.BRANCH ? List.of(next, onFalse) : List.of(next);
+        }
+        public List<Condition> conditions() {
+            var result = new ArrayList<Condition>();
+            if (condition != null) result.add(condition);
+            for (var option : options) if (option.condition() != null) result.add(option.condition());
+            return List.copyOf(result);
         }
     }
     public ZombiesNpcGraph {
@@ -62,7 +87,7 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
         if (entries.size() != 1) throw new IllegalArgumentException("每条规则需要且只能有一个事件入口");
         if (nodes.stream().filter(n -> n.type() == Type.ACTION).count() > 64) throw new IllegalArgumentException("每条规则最多 64 个动作节点");
         for (var node : nodes) {
-            if (node.type() == Type.END && !node.next().isEmpty() || node.type() != Type.BRANCH && !node.onFalse().isEmpty()) throw new IllegalArgumentException("节点存在不支持的出口：" + node.id());
+            if ((node.type() == Type.END || node.type() == Type.CHOICE) && !node.next().isEmpty() || node.type() != Type.BRANCH && !node.onFalse().isEmpty()) throw new IllegalArgumentException("节点存在不支持的出口：" + node.id());
             for (String target : node.outputs()) {
                 if (!byId.containsKey(target)) throw new IllegalArgumentException("请连接节点的所有出口：" + node.id());
 

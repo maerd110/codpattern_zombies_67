@@ -25,6 +25,9 @@ public final class ZombiesClientBootstrap {
             return;
         }
         ModeClientActionHandlers.register(
+                com.cdp.codpattern.app.zombies.npc.ZombiesNpcDialogueNetwork.CLIENT_ACTION,
+                packet -> com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen.handle((com.cdp.codpattern.app.zombies.npc.ZombiesNpcDialogueNetwork.View)packet));
+        ModeClientActionHandlers.register(
                 OpenZombiesDeployToolScreenS2CPacket.CLIENT_ACTION_ID,
                 ZombiesDeployClientActionHandler::handle);
         ModeGuiOverlayContributors.register(new ModeGuiOverlayContributor() {

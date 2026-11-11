@@ -332,6 +332,88 @@ public final class ZombiesNpcGraphGameTests {
         h.assertTrue(new Condition(Match.ANY,List.of(wave,notWave)).evaluate(t->true) && !new Condition(Match.ALL,List.of(wave,notWave)).evaluate(t->true),"ALL/ANY and per-test negation");
         h.succeed();
     }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void newInteractionGateDoesNotConsumeOpeningClick(GameTestHelper h){var f=new Fixture(h);
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"intro"),action("intro",say("hello"),"click"),node("click",Type.INTERACT,"reward"),action("reward",item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:diamond"),"end"),node("end",Type.END,""))));
+        f.interact();h.assertTrue(f.map.lines.equals(List.of("[guide] hello"))&&f.actor.getInventory().countItem(Items.DIAMOND)==0,"opening click arms the gate but cannot satisfy it");
+        var stranger=f.player();
+        h.runAtTickTime(15,()->{f.interact(stranger);f.map.npcRuntime().tick(1);h.assertTrue(f.actor.getInventory().countItem(Items.DIAMOND)==0,"another player cannot advance the owner gate");});
+        h.runAtTickTime(30,()->{try{f.interact();h.assertTrue(f.actor.getInventory().countItem(Items.DIAMOND)==1&&stranger.getInventory().countItem(Items.DIAMOND)==0,"new owner interaction advances once");}finally{f.close();}h.succeed();});
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void crossNpcCompletionStillRequiresNewInteraction(GameTestHelper h){var f=new Fixture(h);
+        var done=new Condition(Match.ALL,List.of(new Test(TestKind.RULE_DONE,0,"",1,"guard.quest",false)));
+        var g=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"intro"),action("intro",say("hello"),"wait"),condition("wait",Type.AWAIT,done,"click",""),node("click",Type.INTERACT,"reward"),action("reward",item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:diamond"),"end"),node("end",Type.END,"")));
+        var quest=new ZombiesNpcConfig.Rule("quest",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:emerald")),0,"",1);
+        var guide=new ZombiesNpcConfig.Npc("guide",new ZombiesNpcConfig.Appearance("guide",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin)),"",List.of(new ZombiesNpcConfig.Rule("story",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(),0,"",1,g)),0);
+        var guard=new ZombiesNpcConfig.Npc("guard",new ZombiesNpcConfig.Appearance("guard",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin.offset(4,0,0))),"",List.of(quest),0);
+        f.map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(guide,guard)),false);f.interact();
+        h.assertTrue(f.map.lines.equals(List.of("[guide] hello")),"early conversation runs before the other quest completes");
+        h.runAtTickTime(15,()->{var entity=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin.offset(4,0,0)).inflate(1)).stream().filter(n->n.getName().getString().equals("guard")).findFirst().orElseThrow();f.map.npcRuntime().interact(f.actor,"guard",entity);});
+        h.runAtTickTime(40,()->{f.map.npcRuntime().tick(1);h.assertTrue(f.actor.getInventory().countItem(Items.EMERALD)==1&&f.actor.getInventory().countItem(Items.DIAMOND)==0,"other NPC reward and completion do not advance fresh interaction gate");});
+        h.runAtTickTime(55,()->{try{f.interact();h.assertTrue(f.actor.getInventory().countItem(Items.DIAMOND)==1,"right clicking original NPC after completion continues the story");}finally{f.close();}h.succeed();});
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void dialogueVisibilityOwnershipAndReplay(GameTestHelper h){var f=new Fixture(h);try{
+        var owns=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:emerald",1,"",false)));
+        var missing=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:emerald",1,"",true)));
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"choose"),choice(List.of(new Option("trade","Trade",owns,"give"),new Option("ask","Ask",missing,"say"))),action("give",item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:diamond"),"end"),action("say",say("come back"),"end"),node("end",Type.END,""))));
+        f.interact();var runtime=f.map.npcRuntime();var view=runtime.dialogue(f.actor);var other=f.player();
+        h.assertTrue(view.options().size()==1&&view.options().get(0).id().equals("ask")&&!view.text().getString().isEmpty(),"only eligible answers and configured speech are sent");
+        h.assertTrue(!ZombiesNpcRuntime.selectDialogue(other,view.token(),"ask"),"another player cannot answer this conversation");
+        h.assertTrue(!ZombiesNpcRuntime.selectDialogue(f.actor,UUID.randomUUID(),"ask"),"forged tokens are rejected");
+        h.assertTrue(!ZombiesNpcRuntime.selectDialogue(f.actor,view.token(),"trade"),"hidden answers cannot be selected");
+        view=runtime.dialogue(f.actor);
+        h.assertTrue(ZombiesNpcRuntime.selectDialogue(f.actor,view.token(),"ask")&&f.map.lines.equals(List.of("[guide] come back")),"selected branch runs exactly once");
+        h.assertTrue(!ZombiesNpcRuntime.selectDialogue(f.actor,view.token(),"ask")&&f.map.lines.size()==1&&f.actor.getInventory().countItem(Items.DIAMOND)==0,"duplicate packets cannot duplicate consequences");
+    }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void dialogueRechecksConditionsAndCanReopen(GameTestHelper h){var f=new Fixture(h);
+        var owns=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:emerald",1,"",false)));
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"choose"),choice(List.of(new Option("trade","Trade",owns,"take"))),action("take",item(ZombiesNpcConfig.Kind.TAKE_ITEM,"minecraft:emerald"),"give"),action("give",item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:diamond"),"end"),node("end",Type.END,""))));
+        f.actor.getInventory().setItem(15,new ItemStack(Items.EMERALD));f.interact();var runtime=f.map.npcRuntime();var first=runtime.dialogue(f.actor);
+        f.actor.getInventory().clearContent();h.assertTrue(!ZombiesNpcRuntime.selectDialogue(f.actor,first.token(),"trade")&&runtime.dialogue(f.actor).options().isEmpty(),"a displayed answer that becomes invalid is rechecked and hidden");
+        var refreshed=runtime.dialogue(f.actor);ZombiesNpcRuntime.selectDialogue(f.actor,refreshed.token(),"");
+        f.actor.getInventory().setItem(15,new ItemStack(Items.EMERALD));runtime.tick(1);h.assertTrue(runtime.dialogue(f.actor)==null&&f.actor.getInventory().countItem(Items.DIAMOND)==0,"closing does not choose or automatically reopen");
+        h.runAtTickTime(20,()->{try{f.interact();var reopened=runtime.dialogue(f.actor);h.assertTrue(reopened!=null&&!first.token().equals(reopened.token()),"new click reopens with new session");h.assertTrue(ZombiesNpcRuntime.selectDialogue(f.actor,reopened.token(),"trade")&&f.actor.getInventory().countItem(Items.DIAMOND)==1&&f.actor.getInventory().countItem(Items.EMERALD)==0,"trade follows answer output into inventory actions");}finally{f.close();}h.succeed();});
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void dialogueDistanceAndResetInvalidateAnswers(GameTestHelper h){var f=new Fixture(h);try{
+        var g=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"choose"),choice(List.of(new Option("yes","Yes",null,"give"))),action("give",item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:diamond"),"end"),node("end",Type.END,"")));
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,g);f.interact();var view=f.map.npcRuntime().dialogue(f.actor);
+        f.actor.moveTo(f.origin.getX()+30,f.origin.getY(),f.origin.getZ());
+        h.assertTrue(!ZombiesNpcRuntime.selectDialogue(f.actor,view.token(),"yes")&&f.actor.getInventory().countItem(Items.DIAMOND)==0,"distant players cannot execute choices");
+        f.actor.moveTo(f.origin.getX()+.5,f.origin.getY(),f.origin.getZ()+.5);f.start(ZombiesNpcConfig.Trigger.INTERACT,g);f.interact();view=f.map.npcRuntime().dialogue(f.actor);f.map.npcRuntime().reset();
+        h.assertTrue(!ZombiesNpcRuntime.selectDialogue(f.actor,view.token(),"yes")&&f.actor.getInventory().countItem(Items.DIAMOND)==0,"round reset invalidates outstanding answers");
+    }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void dialoguePortsDraftMigrationAndCodec(GameTestHelper h){
+        var d=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var npc=d.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));d.addRule(npc);ZombiesNpcSharedCanvas.ensure(d);var f=ZombiesNpcSharedCanvas.flows(d).get(0);
+        var c=ZombiesNpcGraphDraft.add(ZombiesNpcSharedCanvas.looseRule(d),Type.CHOICE,20,20,null);c.getAsJsonArray("options").add(ZombiesNpcGraphDraft.option(2));
+        var wait=ZombiesNpcGraphDraft.add(ZombiesNpcSharedCanvas.looseRule(d),Type.INTERACT,40,20,null);var end=ZombiesNpcGraphDraft.add(ZombiesNpcSharedCanvas.looseRule(d),Type.END,60,20,null);
+        ZombiesNpcGraphDraft.connect(ZombiesNpcSharedCanvas.looseRule(d),c.get("id").getAsString(),"option:choice_1",wait.get("id").getAsString());ZombiesNpcGraphDraft.connect(ZombiesNpcSharedCanvas.looseRule(d),c.get("id").getAsString(),"option:choice_2",end.get("id").getAsString());ZombiesNpcGraphDraft.connect(ZombiesNpcSharedCanvas.looseRule(d),wait.get("id").getAsString(),"next",end.get("id").getAsString());
+        ZombiesNpcSharedCanvas.connectExecution(d,new ZombiesNpcSharedCanvas.Ref(f,ZombiesNpcGraphDraft.find(f.rule(),"node_2")),"next",new ZombiesNpcSharedCanvas.Ref(null,c));
+        ZombiesNpcGraphDraft.delete(f.rule(),"node_3");
+        var cond=new com.google.gson.JsonObject();cond.addProperty("match","ALL");var tests=new com.google.gson.JsonArray();var test=ZombiesNpcGraphDraft.test();test.addProperty("kind","RULE_DONE");test.addProperty("reference","npc_1.rule_1");tests.add(test);cond.add("tests",tests);c.getAsJsonArray("options").get(0).getAsJsonObject().add("condition",cond);c.addProperty("speaker","npc_1");
+        d.renameNpc(npc,"doctor");d.renameRule(npc,f.rule(),"quest");var validated=d.validated();
+        var choice=validated.npcs().get(0).rules().get(0).graph().nodes().stream().filter(n->n.type()==Type.CHOICE).findFirst().orElseThrow();
+        h.assertTrue(d.looseNodes().isEmpty()&&choice.speaker().equals("doctor")&&choice.options().get(0).condition().tests().get(0).reference().equals("doctor.quest"),"choice edges adopt as a group, remap IDs and follow NPC/rule renames");
+        h.assertTrue(validated.equals(ZombiesNpcRepository.GSON.fromJson(ZombiesNpcRepository.GSON.toJson(validated),ZombiesNpcConfig.class)),"choice data survives JSON roundtrip");
+        rejects(()->new ZombiesNpcConfig.Rule("auto",ZombiesNpcConfig.Trigger.AUTO,0,List.of(),false,List.of(),List.of(),0,"",1,validated.npcs().get(0).rules().get(0).graph()));
+        var packet=new ZombiesNpcDialogueNetwork.View(UUID.randomUUID(),true,42,Component.literal("Guide"),Component.literal("Story"),List.of(new ZombiesNpcDialogueNetwork.Answer("yes","Yes")));
+        var buf=new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());try{packet.encode(buf);h.assertTrue(packet.equals(ZombiesNpcDialogueNetwork.View.decode(buf)),"dialogue packet roundtrip");}finally{buf.release();}
+        var response=new ZombiesNpcDialogueNetwork.Selection(packet.token(),"yes");buf=new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());try{response.encode(buf);h.assertTrue(response.equals(ZombiesNpcDialogueNetwork.Selection.decode(buf)),"selection packet roundtrip");}finally{buf.release();}
+        h.succeed();
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void openDialogueRefreshesVisibilityWithoutExecuting(GameTestHelper h){var f=new Fixture(h);
+        var owns=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:emerald",1,"",false)));
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"choose"),choice(List.of(new Option("yes","Yes",owns,"give"))),action("give",item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:diamond"),"end"),node("end",Type.END,""))));
+        f.interact();var first=f.map.npcRuntime().dialogue(f.actor);h.assertTrue(first.options().isEmpty(),"initially no visible options");
+        f.actor.getInventory().setItem(15,new ItemStack(Items.EMERALD));
+        h.runAtTickTime(30,()->{try{f.map.npcRuntime().tick(1);var refreshed=f.map.npcRuntime().dialogue(f.actor);h.assertTrue(refreshed!=null&&refreshed.options().size()==1&&!refreshed.token().equals(first.token()),"open dialogue refreshes newly unlocked choices");h.assertTrue(f.actor.getInventory().countItem(Items.DIAMOND)==0&&!ZombiesNpcRuntime.selectDialogue(f.actor,first.token(),"yes"),"unlocking updates buttons without executing a consequence or accepting old session");}finally{f.close();}h.succeed();});
+    }
+    private static Node choice(List<Option> options){return new Node("choose",Type.CHOICE,0,0,null,null,0,"","",true,"What will you do?","",options);}
     private static Node node(String id,Type type,String next){return new Node(id,type,0,0,null,null,0,next,"");}
     private static Node action(String id,ZombiesNpcConfig.Action a,String next){return new Node(id,Type.ACTION,0,0,a,null,0,next,"");}
     private static Node condition(String id,Type type,Condition c,String next,String no){return new Node(id,type,0,0,null,c,0,next,no);}

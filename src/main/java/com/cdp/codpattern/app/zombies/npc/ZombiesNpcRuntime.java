@@ -44,7 +44,7 @@ public final class ZombiesNpcRuntime {
             for (var rule : npc.rules()) {
                 if (!rule.requiredItem().isBlank()) ZombiesNpcInventory.parse(rule.requiredItem());
                 for (int group : rule.openedBarriers()) requireBarrier(group);
-                if (rule.graph() != null) for (var node : rule.graph().nodes()) if (node.condition() != null) for (var test : node.condition().tests()) {
+                if (rule.graph() != null) for (var node : rule.graph().nodes()) for (var condition : node.conditions()) for (var test : condition.tests()) {
                     switch (test.kind()) {
                         case BARRIER -> requireBarrier(test.value());
                         case ITEM_ROOM, ITEM_ACTOR -> ZombiesNpcInventory.parse(test.item());
@@ -221,7 +221,17 @@ public final class ZombiesNpcRuntime {
         long now = level().getGameTime();
         if (now - lastInteraction.getOrDefault(player.getUUID(), now - 10) < 10) return;
         lastInteraction.put(player.getUUID(), now);
-        if (sequences.containsKey(id)) { reportPending(player,sequences.get(id)); return; }
+        if (sequences.containsKey(id)) {
+            var sequence=sequences.get(id);
+            if(sequence.actor!=null && sequence.actor.getUUID().equals(player.getUUID()) && sequence.graphNodes!=null) {
+                var node=sequence.graphNodes.get(sequence.cursor);
+                if(node.type()==ZombiesNpcGraph.Type.INTERACT && sequence.nodeStarted && now>sequence.armedAt) {
+                    sequence.interactionReceived=true;sequence.due=now;advance(sequence);return;
+                }
+                if(node.type()==ZombiesNpcGraph.Type.CHOICE && sequence.nodeStarted) {openDialogue(sequence,node);return;}
+            }
+            reportPending(player,sequence); return;
+        }
         var npc = config.npcs().stream().filter(value -> value.id().equals(id)).findFirst().orElseThrow();
         for (var rule : npc.rules()) {
             if (rule.trigger() == ZombiesNpcConfig.Trigger.INTERACT && eligible(npc, rule, map.npcWave())) {
@@ -259,6 +269,7 @@ public final class ZombiesNpcRuntime {
 
     private void advance(Sequence sequence) {
         long now = level().getGameTime();
+        if(sequence.view!=null && !canConverse(sequence)) closeDialogue(sequence);
         if (now < sequence.due) return;
         ServerPlayer actor = sequence.actor;
         if (actor != null) {
@@ -344,6 +355,18 @@ public final class ZombiesNpcRuntime {
                     if (node.complete()) completed.add(sequence.npc.id() + "." + sequence.rule.id());
                     sequences.remove(sequence.npc.id()); releaseUnusedChunks(); return;
                 }
+                case INTERACT -> {
+                    if(!sequence.nodeStarted){sequence.nodeStarted=true;sequence.armedAt=now;sequence.interactionReceived=false;}
+                    if(!sequence.interactionReceived)return;
+                }
+                case CHOICE -> {
+                    if(!sequence.nodeStarted){sequence.nodeStarted=true;openDialogue(sequence,node);}
+                    else if(sequence.view!=null && now>=sequence.refreshAt){
+                        sequence.refreshAt=now+20;
+                        if(!visibleOptions(sequence,node).equals(sequence.view.options()))openDialogue(sequence,node);
+                    }
+                    return;
+                }
                 case ENTRY -> { }
                 case BRANCH -> next = condition(node.condition(), sequence.actor) ? node.next() : node.onFalse();
                 case AWAIT -> {
@@ -387,6 +410,58 @@ public final class ZombiesNpcRuntime {
             sequence.cursor = next; sequence.nodeStarted = false; sequence.line = 0; sequence.notice="";
         }
         throw new IllegalStateException("NPC graph execution budget exceeded");
+    }
+
+    private boolean canConverse(Sequence s) {
+        var entity=entities.get(s.npc.id());
+        return !preview && map.currentPhase().isRoundRunning() && s.actor!=null && !s.actor.isRemoved()
+                && s.actor.level()==level() && map.isAliveSurvivor(s.actor.getUUID())
+                && entity!=null && !entity.isRemoved() && entity.storyAlive() && s.actor.distanceToSqr(entity)<=36;
+    }
+    private void closeDialogue(Sequence s) {
+        if(s.view==null)return;
+        ZombiesNpcDialogueNetwork.send(s.actor,new ZombiesNpcDialogueNetwork.View(s.view.token(),false,0,Component.empty(),Component.empty(),List.of()));
+        s.view=null;
+    }
+    private void openDialogue(Sequence s,ZombiesNpcGraph.Node node) {
+        if(!canConverse(s))return;
+        for(var runtime:ACTIVE)for(var other:runtime.sequences.values())if(other!=s && other.actor!=null && other.actor.getUUID().equals(s.actor.getUUID()))runtime.closeDialogue(other);
+        String speaker=node.speaker().isBlank()?s.npc.id():node.speaker();var entity=entities.get(speaker);
+        var name=Component.literal(entity.chatName()).withStyle(style->style.withColor(net.minecraft.network.chat.TextColor.parseColor(entity.nameColor())));
+        var text=Component.literal(node.text()).withStyle(style->style.withColor(net.minecraft.network.chat.TextColor.parseColor(entity.textColor())));
+        var options=visibleOptions(s,node);
+        s.refreshAt=level().getGameTime()+20;
+        s.view=new ZombiesNpcDialogueNetwork.View(UUID.randomUUID(),true,entity.getId(),name,text,options);
+        ZombiesNpcDialogueNetwork.send(s.actor,s.view);
+    }
+    private List<ZombiesNpcDialogueNetwork.Answer> visibleOptions(Sequence s,ZombiesNpcGraph.Node node) {
+        return node.options().stream().filter(o->o.condition()==null||condition(o.condition(),s.actor))
+                .map(o->new ZombiesNpcDialogueNetwork.Answer(o.id(),o.text())).toList();
+    }
+    /** Snapshot for diagnostics and tests; no mutable sequence state is exposed. */
+    public ZombiesNpcDialogueNetwork.View dialogue(ServerPlayer player) {
+        return sequences.values().stream().filter(s->s.actor!=null&&s.actor.getUUID().equals(player.getUUID())&&s.view!=null).map(s->s.view).findFirst().orElse(null);
+    }
+    public static boolean selectDialogue(ServerPlayer player,UUID token,String option) {
+        for(var runtime:List.copyOf(ACTIVE))for(var s:List.copyOf(runtime.sequences.values())) {
+            if(s.view==null||!s.view.token().equals(token)||s.actor==null||!s.actor.getUUID().equals(player.getUUID()))continue;
+            if(!runtime.canConverse(s)){runtime.closeDialogue(s);return false;}
+            if(option.isEmpty()){runtime.closeDialogue(s);return true;}
+            var node=s.graphNodes.get(s.cursor);
+            var selected=node.options().stream().filter(o->o.id().equals(option)).findFirst().orElse(null);
+            // The option must have been offered AND still be eligible; old or forged packets cannot run a branch.
+            if(selected==null||s.view.options().stream().noneMatch(o->o.id().equals(option))
+                    || selected.condition()!=null&&!runtime.condition(selected.condition(),player)) {
+                runtime.openDialogue(s,node);return false;
+            }
+            runtime.closeDialogue(s);
+            if(selected.next().equals(s.rule.graph().entry().id())) {
+                runtime.sequences.remove(s.npc.id());runtime.releaseUnusedChunks();return true;
+            }
+            s.cursor=selected.next();s.nodeStarted=false;s.interactionReceived=false;s.line=0;s.notice="";s.due=runtime.level().getGameTime();
+            runtime.advance(s);return true;
+        }
+        return false;
     }
 
     private void executeAction(ZombiesNpcConfig.Action action, String target, ServerPlayer actor) {
@@ -446,7 +521,9 @@ public final class ZombiesNpcRuntime {
         String notice="";long lastNotice;
         Map<String, ZombiesNpcGraph.Node> graphNodes;
         String cursor;
-        boolean nodeStarted, executedAction;
+        boolean nodeStarted, executedAction, interactionReceived;
+        long armedAt, refreshAt;
+        ZombiesNpcDialogueNetwork.View view;
         Sequence(ZombiesNpcConfig.Npc npc, ZombiesNpcConfig.Rule rule, ServerPlayer actor, List<ZombiesNpcConfig.Action> actions) {
             this.npc = npc; this.rule = rule; this.actor = actor; this.actions = actions;
             if (rule != null && rule.graph() != null) {
@@ -467,6 +544,7 @@ public final class ZombiesNpcRuntime {
 
     public void reset() {
         ACTIVE.remove(this);
+        for(var sequence:sequences.values())closeDialogue(sequence);
         entities.values().forEach(net.minecraft.world.entity.Entity::discard);
         entities.clear();
         dialogues.clear();

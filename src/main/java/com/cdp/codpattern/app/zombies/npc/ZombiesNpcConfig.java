@@ -33,10 +33,11 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
         for (Npc npc : npcs) for (Rule rule : npc.rules()) ruleKeys.add(npc.id() + "." + rule.id());
         for (Npc npc : npcs) for (Rule rule : npc.rules()) {
             if (!ruleKeys.containsAll(rule.requires())) throw new IllegalArgumentException("Unknown prerequisite in " + rule.id());
+            if (rule.graph() != null) for (var node : rule.graph().nodes()) if (!node.speaker().isBlank() && !keys.contains(node.speaker())) throw new IllegalArgumentException("对话引用未知 NPC：" + node.speaker());
             for (Action action : rule.executableActions()) {
                 if (action.target() != null && !keys.contains(action.target())) throw new IllegalArgumentException("Unknown NPC target");
             }
-            if (rule.graph() != null) for (var node : rule.graph().nodes()) if (node.condition() != null) for (var test : node.condition().tests()) {
+            if (rule.graph() != null) for (var node : rule.graph().nodes()) for (var condition : node.conditions()) for (var test : condition.tests()) {
                 if (test.kind() == ZombiesNpcGraph.TestKind.RULE_DONE && !ruleKeys.contains(test.reference())) throw new IllegalArgumentException("条件引用未知规则：" + test.reference());
                 if (test.kind() == ZombiesNpcGraph.TestKind.NPC_ALIVE && !keys.contains(test.reference())) throw new IllegalArgumentException("条件引用未知 NPC：" + test.reference());
                 if (rule.trigger() == Trigger.AUTO && test.kind() == ZombiesNpcGraph.TestKind.ITEM_ACTOR) throw new IllegalArgumentException("交互玩家物品条件只能用于玩家交互入口");
@@ -122,6 +123,8 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
             }
             if (graph != null && trigger == Trigger.AUTO && graph.nodes().stream().anyMatch(n -> n.type() == ZombiesNpcGraph.Type.END && !n.complete()))
                 throw new IllegalArgumentException("自动规则的结束节点必须标记完成，避免每刻重复触发");
+            if (graph != null && trigger == Trigger.AUTO && graph.nodes().stream().anyMatch(n -> n.type() == ZombiesNpcGraph.Type.INTERACT || n.type() == ZombiesNpcGraph.Type.CHOICE))
+                throw new IllegalArgumentException("等待交互和玩家选择节点必须接入玩家交互规则");
             if (graph != null && !actions.isEmpty()) throw new IllegalArgumentException("节点流程与旧动作列表不能同时存在");
             if (trigger == Trigger.AUTO && (graph == null ? actions : graph.actions()).stream().anyMatch(action -> action.kind() == Kind.TAKE_ITEM || action.kind() == Kind.GIVE_ITEM)) {
                 throw new IllegalArgumentException("Item transfers require INTERACT");

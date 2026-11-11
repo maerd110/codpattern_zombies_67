@@ -73,10 +73,11 @@ public final class ZombiesNpcGraphScreen extends Screen {
         }, Component.literal(tr("delete_rule")), Component.literal(ruleName))), editable() && rule() != null);
         toolbar(4, 20, w, tr("save"), () -> { validate(); owner.graphSave(); }, editable());
         toolbar(5, 20, w, tr("graph.basic"), this::onClose, true);
-        String[] types = {"ACTION", "BRANCH", "WAIT", "AWAIT", "END", "ENTRY"};
+        String[] types = {"ACTION", "BRANCH", "WAIT", "AWAIT", "INTERACT", "CHOICE", "END", "ENTRY"};
+        int nodeWidth=(width-30)/8;
         for (int i = 0; i < types.length; i++) {
             String type = types[i];
-            toolbar(i, 44, w, tr(type.equals("ENTRY") ? "graph.entry_settings" : "graph.add." + type),
+            toolbar(i, 44, nodeWidth, tr(type.equals("ENTRY") ? "graph.entry_settings" : "graph.add." + type),
                     () -> { if (type.equals("ENTRY")) { remember(); owner.graphEdit(this, null); } else add(type); }, editable() && (!type.equals("ENTRY") || rule() != null));
         }
         int tw = (width - 30) / 8;
@@ -140,7 +141,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
     private void deleteSelected() { var n=node(selected); if(n!=null){ZombiesNpcGraphDraft.delete(flow(n)==null?ZombiesNpcSharedCanvas.looseRule(owner.graphDraft()):flow(n).rule(),value(n,"id",""));selected="";} }
     private void unlinkSelected() {
         var n=node(selected); if(n==null)return;
-        for(String p:ZombiesNpcGraphDraft.ports(n))n.addProperty(p,"");
+        for(String p:ZombiesNpcGraphDraft.ports(n))ZombiesNpcGraphDraft.target(n,p,"");
         if(value(n,"type","").equals("END")&&flow(n)!=null)ZombiesNpcSharedCanvas.unlinkOutgoing(owner.graphDraft(),flow(n).key());
     }
     private void add(String type) {
@@ -200,6 +201,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
                 actionInspector(n.getAsJsonObject("action"));
                 rowButton(tr("graph.edit_action"), this::properties, true);
             }
+            case "INTERACT" -> {line(tr("interaction.help"));line(tr("interaction.help2"));}
+            case "CHOICE" -> choiceInspector(n);
             case "WAIT" -> field(tr("graph.seconds"), n, "seconds", "1");
             case "BRANCH", "AWAIT" -> conditionInspector(n.getAsJsonObject("condition"));
             case "END" -> rowButton(tr(Boolean.parseBoolean(value(n,"complete","true"))?"end.complete":"end.retry"), () -> mutate(() -> {
@@ -210,10 +213,48 @@ public final class ZombiesNpcGraphScreen extends Screen {
         }
         if(value(n,"type","").equals("END"))line(tr("shared.link_hint"));
         for (String p : ZombiesNpcGraphDraft.ports(n)) {
-            line(tr(p.equals("onFalse") ? "graph.false" : value(n, "type", "").equals("BRANCH") ? "graph.true" : "graph.next") + " → " + value(n, p, ""));
+            line(portLabel(n,p) + " → " + ZombiesNpcGraphDraft.target(n,p));
         }
         returnDrawRows();
     }
+    private void choiceInspector(JsonObject n) {
+        List<String> speakers=new ArrayList<>(List.of(""));
+        for(var npc:owner.graphDraft().npcs())speakers.add(value(npc.getAsJsonObject(),"id",""));
+        select(tr("conversation.speaker"),speakers,value(n,"speaker",""),v->v.isBlank()?tr("self"):v,v->mutate(()->n.addProperty("speaker",v)));
+        var textLines=new ArrayList<>(Arrays.asList(value(n,"text","").split("\\n",-1)));
+        for(int i=0;i<textLines.size();i++){
+            int j=i;line(tr("dialogue")+" "+(i+1));
+            inspector.add(y->{var box=addRenderableWidget(new EditBox(font,inspectorX+6,y,inspectorWidth-12,20,Component.literal(tr("dialogue"))));
+                box.setMaxLength(8192);box.setValue(textLines.get(j));box.setEditable(editable());
+                box.setResponder(v->{remember();textLines.set(j,v);n.addProperty("text",String.join("\n",textLines));});});
+        }
+        rowButton(tr("add_line"),()->mutate(()->n.addProperty("text",value(n,"text","")+"\n")),editable());
+        rowButton(tr("conversation.preview"),()->{
+            var answers=n.getAsJsonArray("options").asList().stream().map(JsonElement::getAsJsonObject).map(o->new ZombiesNpcDialogueNetwork.Answer(value(o,"id",""),value(o,"text",""))).toList();
+            minecraft.setScreen(new com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen(
+                new ZombiesNpcDialogueNetwork.View(java.util.UUID.randomUUID(),true,-1,Component.literal(tr("conversation.preview_name")),Component.literal(value(n,"text","")),answers),ignored->minecraft.setScreen(this)));
+        },true);
+        var options=n.getAsJsonArray("options");
+        for(int i=0;i<options.size();i++)line((i+1)+". "+value(options.get(i).getAsJsonObject(),"text",""));
+        for(int i=0;i<options.size();i++){
+            final int j=i;var o=options.get(i).getAsJsonObject();
+            field(tr("conversation.option",i+1),o,"text","");
+            line(tr("conversation.route")+" → "+value(o,"next",""));
+            boolean gated=o.has("condition")&&!o.get("condition").isJsonNull();
+            rowButton(tr(gated?"conversation.conditional":"conversation.always"),()->mutate(()->{
+                if(gated)o.remove("condition");else {var c=new JsonObject();c.addProperty("match","ALL");var tests=new JsonArray();tests.add(ZombiesNpcGraphDraft.test());c.add("tests",tests);o.add("condition",c);}
+            }),editable());
+            if(gated)conditionInspector(o.getAsJsonObject("condition"));
+            rowButton(tr("conversation.remove",i+1),()->mutate(()->options.remove(j)),editable()&&options.size()>1);
+        }
+        rowButton(tr("conversation.add"),()->mutate(()->{
+            int i=1;while(true){String id="choice_"+i;if(options.asList().stream().noneMatch(e->value(e.getAsJsonObject(),"id","").equals(id)))break;i++;}
+            options.add(ZombiesNpcGraphDraft.option(i));
+        }),editable()&&options.size()<12);
+    }
+    private int nodeHeight(JsonObject n){return value(n,"type","").equals("CHOICE")?Math.max(NH,61+n.getAsJsonArray("options").size()*22):NH;}
+    private int portOffset(JsonObject n,String p){return p.startsWith("option:")?43+ZombiesNpcGraphDraft.ports(n).indexOf(p)*22:p.equals("onFalse")?68:43;}
+    private String portLabel(JsonObject n,String p){return p.startsWith("option:")?font.plainSubstrByWidth(value(ZombiesNpcGraphDraft.portObject(n,p),"text",""),NW-54):tr(p.equals("completed")?"shared.completed":p.equals("onFalse")?"graph.false":value(n,"type","").equals("BRANCH")?"graph.true":"graph.next");}
     private void conditionInspector(JsonObject c) {
         select(tr("graph.match"), List.of("ALL", "ANY"), value(c, "match", "ALL"), v -> tr("graph.match." + v), v -> mutate(() -> c.addProperty("match", v)));
         var tests = c.getAsJsonArray("tests");
@@ -317,7 +358,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
 
     private double sx(JsonObject n) { return 8 + panX + number(n, "x") * zoom; }
     private double sy(JsonObject n) { return 94 + panY + number(n, "y") * zoom; }
-    private double outputY(JsonObject n, String p) { return sy(n) + (p.equals("onFalse") ? 68 : 43) * zoom; }
+    private double outputY(JsonObject n, String p) { return sy(n) + portOffset(n,p) * zoom; }
     private double inputY(JsonObject n) { return sy(n)+(port.equals("completed")&&Set.of("ENTRY","BRANCH","AWAIT").contains(value(n,"type",""))?68:43)*zoom; }
     private boolean inCanvas(double x, double y) { return !overlay && x >= 8 && x < canvasRight && y >= 94 && y < canvasBottom; }
     private boolean near(double x, double y, double a, double b) { return Math.abs(x - a) < 8 && Math.abs(y - b) < 8; }
@@ -353,7 +394,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         lastX=x;lastY=y;
         if(button==1){
             source="";var output=outputAt(x,y);
-            if(output!=null){mutate(()->{if(output.port().equals("completed"))ZombiesNpcSharedCanvas.unlinkOutgoing(owner.graphDraft(),flow(output.node()).key());else output.node().addProperty(output.port(),"");});return true;}
+            if(output!=null){mutate(()->{if(output.port().equals("completed"))ZombiesNpcSharedCanvas.unlinkOutgoing(owner.graphDraft(),flow(output.node()).key());else ZombiesNpcGraphDraft.target(output.node(),output.port(),"");});return true;}
             var input=inputAt(x,y);if(input!=null&&value(input,"type","").equals("ENTRY"))mutate(()->flow(input).rule().add("requires",new JsonArray()));
             return true;
         }
@@ -361,7 +402,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         if(!source.isBlank()){var target=inputAt(x,y);if(target!=null){wire(target);return true;}}
         var output=outputAt(x,y);if(output!=null&&editable()){source=key(output.node());port=output.port();return true;}
         var all=nodeList();
-        for(int i=all.size()-1;i>=0;i--){var n=all.get(i);if(x>=sx(n)&&x<=sx(n)+NW*zoom&&y>=sy(n)&&y<=sy(n)+NH*zoom){
+        for(int i=all.size()-1;i>=0;i--){var n=all.get(i);if(x>=sx(n)&&x<=sx(n)+NW*zoom&&y>=sy(n)&&y<=sy(n)+nodeHeight(n)*zoom){
             String id=key(n);long now=System.currentTimeMillis();boolean twice=qualify(selected).equals(id)&&now-lastClick<300;lastClick=now;
             activate(n);selected=id;inspectorScroll=testIndex=0;
             if(twice){properties();return true;}if(editable()){remember();dragging=id;}refresh();return true;
@@ -404,14 +445,14 @@ public final class ZombiesNpcGraphScreen extends Screen {
         return false;
     }
     private double[] bounds(ZombiesNpcSharedCanvas.Flow flow){
-        var all=flow.nodes();return new double[]{all.stream().mapToDouble(n->number(n,"x")).min().orElse(0),all.stream().mapToDouble(n->number(n,"y")).min().orElse(0),all.stream().mapToDouble(n->number(n,"x")+NW).max().orElse(NW),all.stream().mapToDouble(n->number(n,"y")+NH).max().orElse(NH)};
+        var all=flow.nodes();return new double[]{all.stream().mapToDouble(n->number(n,"x")).min().orElse(0),all.stream().mapToDouble(n->number(n,"y")).min().orElse(0),all.stream().mapToDouble(n->number(n,"x")+NW).max().orElse(NW),all.stream().mapToDouble(n->number(n,"y")+nodeHeight(n)).max().orElse(NH)};
     }
     private void fit(){fitNodes(nodeList());}
     private void focus(){var f=ZombiesNpcSharedCanvas.find(owner.graphDraft(),activeKey());if(f!=null)fitNodes(f.nodes());}
     private void fitNodes(List<JsonObject> all){
         if(all.isEmpty())return;
         double minX=all.stream().mapToDouble(n->number(n,"x")-16).min().orElse(0),minY=all.stream().mapToDouble(n->number(n,"y")-34).min().orElse(0);
-        double maxX=all.stream().mapToDouble(n->number(n,"x")+NW+16).max().orElse(NW),maxY=all.stream().mapToDouble(n->number(n,"y")+NH+16).max().orElse(NH);
+        double maxX=all.stream().mapToDouble(n->number(n,"x")+NW+16).max().orElse(NW),maxY=all.stream().mapToDouble(n->number(n,"y")+nodeHeight(n)+16).max().orElse(NH);
         zoom=Math.max(.03,Math.min(1,Math.min((canvasRight-32)/(maxX-minX),(canvasBottom-118)/(maxY-minY))));
         panX=(canvasRight-8-(maxX-minX)*zoom)/2-minX*zoom;panY=(canvasBottom-94-(maxY-minY)*zoom)/2-minY*zoom;
     }
@@ -450,7 +491,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
                 if(predecessor!=null){var from=ZombiesNpcSharedCanvas.completion(predecessor);var to=f.entry();if(from!=null)curve(g,sx(from)+NW*zoom,outputY(from,"completed"),sx(to),sy(to)+68*zoom,0xFFB895F5);}
             }
             for (var n : nodeList()) for (String p : ZombiesNpcGraphDraft.ports(n)) {
-                String prefix=flow(n)==null?"_loose":flow(n).key(); var target = index.containsKey(prefix+"/"+value(n,p,""))?index.get(prefix+"/"+value(n,p,"")).node():null;
+                String prefix=flow(n)==null?"_loose":flow(n).key(); String to=ZombiesNpcGraphDraft.target(n,p);var target=index.containsKey(prefix+"/"+to)?index.get(prefix+"/"+to).node():null;
                 if (target != null) curve(g, sx(n) + NW * zoom, outputY(n, p), sx(target), sy(target) + 43 * zoom, p.equals("completed") ? 0xFFB895F5 : p.equals("onFalse") ? 0xFFED927A : 0xFF83D9BA);
             }
             for(var target:nodeList())if(target.has("condition"))for(var e:target.getAsJsonObject("condition").getAsJsonArray("tests")){
@@ -486,29 +527,31 @@ public final class ZombiesNpcGraphScreen extends Screen {
     }
     private void drawNode(GuiGraphics g, JsonObject n) {
         double x = sx(n), y = sy(n);
-        if (x > canvasRight || x + NW * zoom < 8 || y > canvasBottom || y + NH * zoom < 94) return;
+        if (x > canvasRight || x + NW * zoom < 8 || y > canvasBottom || y + nodeHeight(n) * zoom < 94) return;
         g.pose().pushPose(); g.pose().translate(x, y, 0); g.pose().scale((float) zoom, (float) zoom, 1);
-        int color = switch (value(n, "type", "")) { case "ENTRY" -> 0xFF367AA4; case "BRANCH" -> 0xFF7D9A48; case "WAIT", "AWAIT" -> 0xFF8A6AB0; case "END" -> 0xFF667582; default -> 0xFFAC6776; };
-        g.fill(-1, -1, NW + 1, NH + 1, key(n).equals(qualify(selected)) ? 0xFFFFD36F : 0xFF3D5264);
-        g.fill(0, 0, NW, NH, 0xFF1B2936); g.fill(0, 0, NW, 21, color);
+        int color = switch (value(n, "type", "")) { case "ENTRY" -> 0xFF367AA4; case "BRANCH" -> 0xFF7D9A48; case "WAIT", "AWAIT", "INTERACT" -> 0xFF8A6AB0; case "CHOICE" -> 0xFF328E90; case "END" -> 0xFF667582; default -> 0xFFAC6776; };
+        g.fill(-1, -1, NW + 1, nodeHeight(n) + 1, key(n).equals(qualify(selected)) ? 0xFFFFD36F : 0xFF3D5264);
+        g.fill(0, 0, NW, nodeHeight(n), 0xFF1B2936); g.fill(0, 0, NW, 21, color);
         String title = value(n, "type", "").equals("ACTION") ? tr("kind." + value(n.getAsJsonObject("action"), "kind", "DIALOGUE")) : tr("graph.type." + value(n, "type", ""));
         g.drawString(font, font.plainSubstrByWidth(title, NW - 12), 6, 6, 0xFFFFFFFF, false);
         g.drawString(font, font.plainSubstrByWidth(summary(n).replace('\n', ' '), NW - 24), 10, 29, 0xFFCDDCE5, false);
         { g.fill(-4, 39, 4, 47, 0xFF8CD6F0); g.drawString(font, tr("graph.in"), 8, 42, 0xFF93ACBD, false); }
         if(Set.of("ENTRY","BRANCH","AWAIT").contains(value(n,"type",""))){g.fill(-4,64,4,72,0xFFB895F5);g.drawString(font,tr(value(n,"type","").equals("ENTRY")?"shared.dependency_in":"condition.reference"),8,65,0xFFD2B9FA,false);}
         for (String p : ports(n)) {
-            int py = p.equals("onFalse") ? 68 : 43;
-            String label = tr(p.equals("completed")?"shared.completed":p.equals("onFalse") ? "graph.false" : value(n, "type", "").equals("BRANCH") ? "graph.true" : "graph.next");
+            int py = portOffset(n,p);
+            String label = portLabel(n,p);
             g.drawString(font, label, NW - font.width(label) - 10, py - 3, 0xFFCADCE5, false);
             g.fill(NW - 4, py - 4, NW + 4, py + 4, p.equals("completed") ? 0xFFB895F5 : p.equals("onFalse") ? 0xFFED927A : 0xFF83D9BA);
         }
-        g.drawString(font, font.plainSubstrByWidth((flow(n)==null?tr("loose.label"):flow(n).key())+" / "+value(n,"id",""),NW-12), 8, NH - 12, 0xFF91B2C8, false);
+        g.drawString(font, font.plainSubstrByWidth((flow(n)==null?tr("loose.label"):flow(n).key())+" / "+value(n,"id",""),NW-12), 8, nodeHeight(n) - 12, 0xFF91B2C8, false);
         g.pose().popPose();
     }
     private String summary(JsonObject n) {
         return switch (value(n, "type", "")) {
             case "ENTRY" -> tr("trigger." + value(flow(n)==null?null:flow(n).rule(), "trigger", "INTERACT"));
             case "WAIT" -> value(n, "seconds", "1") + " s";
+            case "INTERACT" -> tr("interaction.summary");
+            case "CHOICE" -> value(n,"text","");
             case "BRANCH", "AWAIT" -> {
                 var c = n.getAsJsonObject("condition"); var tests = c.getAsJsonArray("tests");
                 var t = tests.get(0).getAsJsonObject();

@@ -23,6 +23,7 @@ public final class ZombiesBootstrap {
         }
         ModeModules.contribute(ZombiesModeModule.INSTANCE);
         ZombiesNetworkPacketContributor.install();
+        com.cdp.codpattern.app.zombies.npc.ZombiesNpcDialogueNetwork.install();
         DistExecutor.safeRunWhenOn(Dist.CLIENT, () -> ZombiesClientBootstrap::install);
 
         modEventBus.addListener(CodPatternBlockRegister::onBuildCreativeModeTabContents);
