@@ -193,9 +193,9 @@ public final class ZombiesNpcRuntime {
     }
 
     public void tick(int wave) {
-        if (preview || !map.currentPhase().allowsPurchases()) return;
+        if (preview || !map.currentPhase().isRoundRunning()) return;
         for (var sequence : List.copyOf(sequences.values())) advance(sequence);
-        if (!map.currentPhase().allowsPurchases()) return;
+        if (!map.currentPhase().isRoundRunning()) return;
         for (var npc : config.npcs()) {
             if (sequences.containsKey(npc.id())) continue;
             for (var rule : npc.rules()) {
@@ -215,13 +215,13 @@ public final class ZombiesNpcRuntime {
     }
 
     public void interact(ServerPlayer player, String id, ZombiesNpcEntity entity) {
-        if (preview || !map.currentPhase().allowsPurchases() || !map.isAliveSurvivor(player.getUUID())
+        if (preview || !map.currentPhase().isRoundRunning() || !map.isAliveSurvivor(player.getUUID())
                 || player.level() != level() || entities.get(id) != entity || entity.isRemoved()
                 || !entity.storyAlive() || player.distanceToSqr(entity) > 36) return;
         long now = level().getGameTime();
         if (now - lastInteraction.getOrDefault(player.getUUID(), now - 10) < 10) return;
         lastInteraction.put(player.getUUID(), now);
-        if (sequences.containsKey(id)) return;
+        if (sequences.containsKey(id)) { reportPending(player,sequences.get(id)); return; }
         var npc = config.npcs().stream().filter(value -> value.id().equals(id)).findFirst().orElseThrow();
         for (var rule : npc.rules()) {
             if (rule.trigger() == ZombiesNpcConfig.Trigger.INTERACT && eligible(npc, rule, map.npcWave())) {
@@ -229,7 +229,12 @@ public final class ZombiesNpcRuntime {
                 return;
             }
         }
-        if (npc.rules().stream().anyMatch(rule -> rule.graph() != null)) return;
+        if (npc.rules().stream().anyMatch(rule -> rule.graph() != null)) {
+            for(var rule:npc.rules())if(rule.trigger()==ZombiesNpcConfig.Trigger.INTERACT&&!completed.contains(id+"."+rule.id())) {
+                player.sendSystemMessage(Component.literal("规则 "+rule.id()+" 的入口条件未满足：最低波次 "+rule.minWave()+"，屏障 "+rule.openedBarriers()+"，前置规则 "+rule.requires()+(rule.requiredItem().isBlank()?"":"，所需物品 "+rule.requiredItem()+" × "+rule.requiredCount())));return;
+            }
+            player.sendSystemMessage(Component.literal("该 NPC 的交互规则本局已完成。"));return;
+        }
         String dialogue = dialogues.getOrDefault(id, "");
         if (!dialogue.isBlank()) startSequence(npc, null, player);
     }
@@ -308,6 +313,15 @@ public final class ZombiesNpcRuntime {
         }
     }
 
+    private void reportPending(ServerPlayer actor,Sequence sequence){
+        if(actor==null)return;String text="剧情正在按设置的间隔执行，请稍候。";
+        if(sequence.graphNodes!=null){var node=sequence.graphNodes.get(sequence.cursor);if(node.type()==ZombiesNpcGraph.Type.AWAIT){
+            var details=new java.util.ArrayList<String>();for(var test:node.condition().tests())details.add((test.negated()?"不满足 ":"")+switch(test.kind()){
+                case WAVE->"波次达到 "+test.value();case BARRIER->"屏障已开启 "+test.value();case RULE_DONE->"规则已完成 "+test.reference();case NPC_ALIVE->"NPC 存活 "+test.reference();case ITEM_ROOM,ITEM_ACTOR->"持有 "+test.item()+" × "+test.count();});
+            text="等待条件（"+(node.condition().match()==ZombiesNpcGraph.Match.ALL?"全部满足":"任一满足")+"）："+String.join("；",details);
+        }}
+        long now=level().getGameTime();if(now-sequence.lastNotice>=40||!text.equals(sequence.notice)){actor.sendSystemMessage(Component.literal(text));sequence.lastNotice=now;sequence.notice=text;}
+    }
     private boolean condition(ZombiesNpcGraph.Condition condition, ServerPlayer actor) {
         return condition.evaluate(test -> switch (test.kind()) {
             case WAVE -> map.npcWave() >= test.value();
@@ -332,7 +346,7 @@ public final class ZombiesNpcRuntime {
                 case ENTRY -> { }
                 case BRANCH -> next = condition(node.condition(), sequence.actor) ? node.next() : node.onFalse();
                 case AWAIT -> {
-                    if (!condition(node.condition(), sequence.actor)) { sequence.due = now + 20; return; }
+                    if (!condition(node.condition(), sequence.actor)) { sequence.due = now + 20; if(sequence.notice.isEmpty())reportPending(sequence.actor,sequence); return; }
                 }
                 case WAIT -> {
                     if (!sequence.nodeStarted) {
@@ -363,7 +377,13 @@ public final class ZombiesNpcRuntime {
                     sequence.executedAction = true; sequence.blockedMessage = "";
                 }
             }
-            sequence.cursor = next; sequence.nodeStarted = false; sequence.line = 0;
+            if(next.equals(sequence.rule.graph().entry().id())) {
+                sequence.cursor=next;sequence.nodeStarted=false;sequence.line=0;sequence.executedAction=false;
+                if(sequence.rule.trigger()==ZombiesNpcConfig.Trigger.INTERACT){sequences.remove(sequence.npc.id());releaseUnusedChunks();}
+                else sequence.due=now+20;
+                return;
+            }
+            sequence.cursor = next; sequence.nodeStarted = false; sequence.line = 0; sequence.notice="";
         }
         throw new IllegalStateException("NPC graph execution budget exceeded");
     }
@@ -373,6 +393,7 @@ public final class ZombiesNpcRuntime {
             case TAKE_ITEM, GIVE_ITEM -> {
                 if (actor == null) throw new IllegalStateException("Item action has no interaction owner");
                 ZombiesNpcInventory.commit(actor, ZombiesNpcInventory.plan(actor, List.of(action)));
+                actor.sendSystemMessage(Component.translatable(action.kind()==ZombiesNpcConfig.Kind.GIVE_ITEM?"npc.item.received":"npc.item.delivered",ZombiesNpcInventory.parse(action.item()).getHoverName(),action.count()));
             }
             case NPC -> {
                 if (action.appearance() != null) entities.get(target).apply(action.appearance());
@@ -421,6 +442,7 @@ public final class ZombiesNpcRuntime {
         int line;
         long due;
         String blockedMessage = "";
+        String notice="";long lastNotice;
         Map<String, ZombiesNpcGraph.Node> graphNodes;
         String cursor;
         boolean nodeStarted, executedAction;

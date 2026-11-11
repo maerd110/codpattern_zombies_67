@@ -65,7 +65,7 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             if (node.type() == Type.END && !node.next().isEmpty() || node.type() != Type.BRANCH && !node.onFalse().isEmpty()) throw new IllegalArgumentException("节点存在不支持的出口：" + node.id());
             for (String target : node.outputs()) {
                 if (!byId.containsKey(target)) throw new IllegalArgumentException("请连接节点的所有出口：" + node.id());
-                if (byId.get(target).type() == Type.ENTRY) throw new IllegalArgumentException("事件入口不能接收连线");
+
             }
         }
         Map<String, Integer> colors = new HashMap<>();
@@ -77,7 +77,7 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
         if (color == 1) throw new IllegalArgumentException("连线形成循环，请使用等待条件节点等待事件");
         if (color == 2) return;
         colors.put(id, 1);
-        for (String next : nodes.get(id).outputs()) visit(next, nodes, colors);
+        for (String next : nodes.get(id).outputs()) if(nodes.get(next).type()!=Type.ENTRY) visit(next, nodes, colors);
         colors.put(id, 2);
     }
     public Node entry() { return nodes.stream().filter(n -> n.type() == Type.ENTRY).findFirst().orElseThrow(); }

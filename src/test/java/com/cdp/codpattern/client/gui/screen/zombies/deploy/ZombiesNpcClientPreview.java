@@ -139,7 +139,7 @@ public final class ZombiesNpcClientPreview {
                 throw new AssertionError("All block placements must expose their own fields");
             graphChecks(screen, working, client, output);
             sharedGraphChecks(screen,client,output);
-            Files.writeString(output.resolve("result.txt"), "PASS 29 client renders, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
+            Files.writeString(output.resolve("result.txt"), "PASS 30 client renders, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -281,6 +281,9 @@ public final class ZombiesNpcClientPreview {
         crossConnect(graph,welcome,"node_3","completed",r,"node_4");
         if(branch.getAsJsonObject("condition").getAsJsonArray("tests").size()!=testCount+1||!r.getAsJsonArray("requires").isEmpty())throw new AssertionError("End-to-branch wire must add a mid-flow rule check without creating entry prerequisites");
         render(graph,1280,1000,output.resolve("mid-rule-reference-1280.png"));draft.validated();
+        connect(graph,r,"node_5","next","node_1");ZombiesNpcGraphDraft.delete(r,"node_6");draft.validated();
+        if(!ZombiesNpcGraphDraft.find(r,"node_5").get("next").getAsString().equals("node_1"))throw new AssertionError("Execution wire returns directly to the entry input");
+        render(graph,1280,1000,output.resolve("return-wire-1280.png"));
     }
     private static void bindLatest(ZombiesNpcGraphScreen graph,ZombiesNpcDeployScreen owner)throws Exception{
         var pool=owner.graphDraft().looseNodes();if(pool.isEmpty())return;var ref=ZombiesNpcSharedCanvas.adopt(owner.graphDraft(),pool.get(pool.size()-1).getAsJsonObject(),ZombiesNpcSharedCanvas.find(owner.graphDraft(),owner.graphNpc().get("id").getAsString()+"."+owner.graphRule().get("id").getAsString()));
@@ -295,7 +298,7 @@ public final class ZombiesNpcClientPreview {
         if(port.equals("completed"))a=ZombiesNpcGraphDraft.nodes(fromRule).asList().stream().map(com.google.gson.JsonElement::getAsJsonObject).filter(n->n.get("type").getAsString().equals("END")&&(!n.has("complete")||n.get("complete").getAsBoolean())).findFirst().orElseThrow();
         double z=(double)get(graph,"zoom"),px=(double)get(graph,"panX"),py=(double)get(graph,"panY");
         double ax=8+px+(a.get("x").getAsDouble()+170)*z,ay=94+py+(a.get("y").getAsDouble()+(port.equals("onFalse")?68:43))*z;
-        double bx=8+px+b.get("x").getAsDouble()*z,by=94+py+(b.get("y").getAsDouble()+(b.get("type").getAsString().equals("ENTRY")||port.equals("completed")&&java.util.Set.of("BRANCH","AWAIT").contains(b.get("type").getAsString())?68:43))*z;
+        double bx=8+px+b.get("x").getAsDouble()*z,by=94+py+(b.get("y").getAsDouble()+(port.equals("completed")&&java.util.Set.of("ENTRY","BRANCH","AWAIT").contains(b.get("type").getAsString())?68:43))*z;
         graph.mouseClicked(ax,ay,0);graph.mouseReleased(ax,ay,0);graph.mouseClicked(bx,by,0);graph.mouseReleased(bx,by,0);
     }
 
@@ -349,7 +352,14 @@ public final class ZombiesNpcClientPreview {
                 @Override public void disableScissor() { flush(); RenderSystem.disableScissor(); }
             };
             screen.render(graphics, 0, 0, 0); graphics.flush();
-            try (var image = Screenshot.takeScreenshot(target)) { image.writeToFile(file); }
+            try (var image = Screenshot.takeScreenshot(target)) {
+                if(file.getFileName().toString().equals("shared-canvas-1280.png")){
+                    boolean visible=false;
+                    for(int x=432;x<=438;x++)for(int y=216;y<=222;y++){int pixel=image.getPixelRGBA(x,y);if(((pixel>>8)&255)>150&&(pixel&255)>50)visible=true;}
+                    if(!visible)throw new AssertionError("Execution curve must render visibly between entry and action ports");
+                }
+                image.writeToFile(file);
+            }
         } finally {
             modelView.popPose(); RenderSystem.applyModelViewMatrix(); RenderSystem.setProjectionMatrix(projection, sorting);
             target.destroyBuffers(); client.getMainRenderTarget().bindWrite(true);

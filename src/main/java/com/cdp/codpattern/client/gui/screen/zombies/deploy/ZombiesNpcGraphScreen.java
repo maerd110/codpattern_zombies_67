@@ -185,6 +185,10 @@ public final class ZombiesNpcGraphScreen extends Screen {
                     mutate(() -> rule().addProperty("trigger", v));
                 });
                 field(tr("action_interval"), rule(), "actionIntervalSeconds", "1");
+                field(tr("min_wave"),rule(),"minWave","0");
+                line("屏障入口门槛："+rule().getAsJsonArray("openedBarriers").toString());
+                line("物品入口门槛："+value(rule(),"requiredItem",""));
+                rowButton("清除波次／屏障／物品入口门槛",()->mutate(()->{rule().addProperty("minWave",0);rule().add("openedBarriers",new JsonArray());rule().addProperty("requiredItem","");}),editable());
                 rowButton(tr("graph.entry_settings"), () -> { remember(); owner.graphEdit(this, null); }, editable());
                 line(tr("shared.dependencies"));
                 for (var requirement : rule().getAsJsonArray("requires")) {
@@ -314,7 +318,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
     private double sx(JsonObject n) { return 8 + panX + number(n, "x") * zoom; }
     private double sy(JsonObject n) { return 94 + panY + number(n, "y") * zoom; }
     private double outputY(JsonObject n, String p) { return sy(n) + (p.equals("onFalse") ? 68 : 43) * zoom; }
-    private double inputY(JsonObject n) { return sy(n)+(value(n,"type","").equals("ENTRY")||port.equals("completed")&&Set.of("BRANCH","AWAIT").contains(value(n,"type",""))?68:43)*zoom; }
+    private double inputY(JsonObject n) { return sy(n)+(port.equals("completed")&&Set.of("ENTRY","BRANCH","AWAIT").contains(value(n,"type",""))?68:43)*zoom; }
     private boolean inCanvas(double x, double y) { return !overlay && x >= 8 && x < canvasRight && y >= 94 && y < canvasBottom; }
     private boolean near(double x, double y, double a, double b) { return Math.abs(x - a) < 8 && Math.abs(y - b) < 8; }
     private JsonObject inputAt(double x,double y) {
@@ -490,7 +494,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         String title = value(n, "type", "").equals("ACTION") ? tr("kind." + value(n.getAsJsonObject("action"), "kind", "DIALOGUE")) : tr("graph.type." + value(n, "type", ""));
         g.drawString(font, font.plainSubstrByWidth(title, NW - 12), 6, 6, 0xFFFFFFFF, false);
         g.drawString(font, font.plainSubstrByWidth(summary(n).replace('\n', ' '), NW - 24), 10, 29, 0xFFCDDCE5, false);
-        if (!value(n, "type", "").equals("ENTRY")) { g.fill(-4, 39, 4, 47, 0xFF8CD6F0); g.drawString(font, tr("graph.in"), 8, 42, 0xFF93ACBD, false); }
+        { g.fill(-4, 39, 4, 47, 0xFF8CD6F0); g.drawString(font, tr("graph.in"), 8, 42, 0xFF93ACBD, false); }
         if(Set.of("ENTRY","BRANCH","AWAIT").contains(value(n,"type",""))){g.fill(-4,64,4,72,0xFFB895F5);g.drawString(font,tr("shared.dependency_in"),8,65,0xFFD2B9FA,false);}
         for (String p : ports(n)) {
             int py = p.equals("onFalse") ? 68 : 43;
@@ -523,19 +527,34 @@ public final class ZombiesNpcGraphScreen extends Screen {
             default -> tr(Boolean.parseBoolean(value(n,"complete","true"))?"end.complete":"end.retry");
         };
     }
-    private void curve(GuiGraphics g, double x0, double y0, double x1, double y1, int color) {
-        double bend = Math.max(36, Math.abs(x1 - x0) * .5), px = x0, py = y0;
-        for (int i = 1; i <= 40; i++) {
-            double t = i / 40.0, u = 1 - t;
-            double x = u*u*u*x0 + 3*u*u*t*(x0+bend) + 3*u*t*t*(x1-bend) + t*t*t*x1;
-            double y = u*u*u*y0 + 3*u*u*t*y0 + 3*u*t*t*y1 + t*t*t*y1;
-            segment(g, px, py, x, y, color); px = x; py = y;
+    private void curve(GuiGraphics g,double x0,double y0,double x1,double y1,int color){
+        if(x1>=x0+20){double bend=Math.max(24,Math.min(150,(x1-x0)*.45));bezier(g,x0,y0,x0+bend,y0,x1-bend,y1,x1,y1,color);}
+        else{double route=Math.max(y0,y1)+Math.min(120,50+Math.abs(x1-x0)*.08);
+            bezier(g,x0,y0,x0+60,y0,x0+60,route,x0+35,route,color);
+            segment(g,x0+35,route,x1-35,route,color);
+            bezier(g,x1-35,route,x1-60,route,x1-60,y1,x1,y1,color);
         }
+        segment(g,x1-5,y1-3,x1,y1,color);segment(g,x1-5,y1+3,x1,y1,color);
     }
-    private void segment(GuiGraphics g, double ax, double ay, double bx, double by, int color) {
-        if (Math.max(ax,bx) < 8 || Math.min(ax,bx) > canvasRight || Math.max(ay,by) < 94 || Math.min(ay,by) > canvasBottom) return;
-        int steps = Math.min(2048, Math.max(1, (int) Math.ceil(Math.max(Math.abs(bx-ax), Math.abs(by-ay)))));
-        for (int i = 0; i <= steps; i++) { int x = (int) Math.round(ax + (bx-ax) * i/steps), y = (int) Math.round(ay + (by-ay) * i/steps); g.fill(x, y, x+2, y+2, color); }
+    private void bezier(GuiGraphics g,double ax,double ay,double bx,double by,double cx,double cy,double dx,double dy,int color){
+        double length=Math.hypot(bx-ax,by-ay)+Math.hypot(cx-bx,cy-by)+Math.hypot(dx-cx,dy-cy);
+        int count=Math.max(16,Math.min(512,(int)Math.ceil(length/2)));double px=ax,py=ay;
+        for(int i=1;i<=count;i++){double t=(double)i/count,u=1-t;double x=u*u*u*ax+3*u*u*t*bx+3*u*t*t*cx+t*t*t*dx,y=u*u*u*ay+3*u*u*t*by+3*u*t*t*cy+t*t*t*dy;segment(g,px,py,x,y,color);px=x;py=y;}
+    }
+    private void segment(GuiGraphics g,double ax,double ay,double bx,double by,int color){
+        if(Math.max(ax,bx)<8||Math.min(ax,bx)>canvasRight||Math.max(ay,by)<94||Math.min(ay,by)>canvasBottom)return;
+        double length=Math.hypot(bx-ax,by-ay);if(length<.001)return;
+        double nx=-(by-ay)/length,ny=(bx-ax)/length;
+        var buffer=g.bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.gui());var matrix=g.pose().last().pose();
+        int r=(color>>16)&255,green=(color>>8)&255,b=color&255;
+        for(int strip=0;strip<3;strip++){
+            double left=strip==0?-1.3:strip==1?-.65:.65,right=strip==0?-.65:strip==1?.65:1.3;
+            int a0=strip==0?0:255,a1=strip==2?0:255;
+            buffer.vertex(matrix,(float)(ax+nx*left),(float)(ay+ny*left),0).color(r,green,b,a0).endVertex();
+            buffer.vertex(matrix,(float)(ax+nx*right),(float)(ay+ny*right),0).color(r,green,b,a1).endVertex();
+            buffer.vertex(matrix,(float)(bx+nx*right),(float)(by+ny*right),0).color(r,green,b,a1).endVertex();
+            buffer.vertex(matrix,(float)(bx+nx*left),(float)(by+ny*left),0).color(r,green,b,a0).endVertex();
+        }
     }
     private void miniMap(GuiGraphics g) {
         var all = nodeList(); if (all.isEmpty() || canvasBottom - 94 < 180 || canvasRight < 400) return;

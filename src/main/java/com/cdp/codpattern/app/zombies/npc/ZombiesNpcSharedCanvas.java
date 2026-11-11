@@ -32,7 +32,7 @@ public final class ZombiesNpcSharedCanvas {
         return new Ref(target,seed);
     }
     public static Ref connectExecution(ZombiesNpcEditorDraft draft,Ref from,String port,Ref to){
-        if(from.node()==to.node()||to.node().get("type").getAsString().equals("ENTRY"))throw new IllegalArgumentException("无法连接到此节点");
+        if(from.node()==to.node())throw new IllegalArgumentException("无法连接到此节点");
         if(from.flow()!=null&&to.flow()!=null&&!from.flow().key().equals(to.flow().key()))throw new IllegalArgumentException("不同规则之间请使用完成状态连线");
         if(from.flow()==null&&to.flow()!=null)from=adopt(draft,from.node(),to.flow());
         if(to.flow()==null&&from.flow()!=null)to=adopt(draft,to.node(),from.flow());

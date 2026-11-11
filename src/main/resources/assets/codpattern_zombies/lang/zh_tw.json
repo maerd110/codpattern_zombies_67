@@ -581,5 +581,7 @@
     "gui.codpattern.zombies.npc.dialogue.import": "将旧默认对话导入为节点规则",
     "gui.codpattern.zombies.npc.graph.test.ITEM_ACTOR_MISSING": "交互玩家未持有物品",
     "gui.codpattern.zombies.npc.loose.label": "未归属：连入流程后确定",
-    "gui.codpattern.zombies.npc.loose.attach_first": "请先将结束节点接入一条规则。"
+    "gui.codpattern.zombies.npc.loose.attach_first": "请先将结束节点接入一条规则。",
+    "npc.item.received": "“%s”已放入背包 × %s",
+    "npc.item.delivered": "“%s”已交付 × %s"
 }

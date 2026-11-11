@@ -46,16 +46,16 @@ public final class ZombiesNpcGraphDraft {
     }
     public static void connect(JsonObject rule, String from, String port, String to) {
         var source = find(rule, from); var target = find(rule, to);
-        if (source == null || target == null || from.equals(to) || target.get("type").getAsString().equals("ENTRY")) throw new IllegalArgumentException("这两个节点不能相连");
+        if (source == null || target == null || from.equals(to)) throw new IllegalArgumentException("这两个节点不能相连");
         if (!ports(source).contains(port)) throw new IllegalArgumentException("请选择有效出口");
-        if (reaches(rule, to, from, new HashSet<>())) throw new IllegalArgumentException("不能形成循环；等待事件请使用等待条件节点");
+        if (!target.get("type").getAsString().equals("ENTRY") && reaches(rule, to, from, new HashSet<>())) throw new IllegalArgumentException("不能形成循环；等待事件请使用等待条件节点");
         source.addProperty(port, to);
     }
     private static boolean reaches(JsonObject rule, String start, String target, Set<String> visited) {
         if (start.equals(target)) return true;
         if (!visited.add(start)) return false;
         var node = find(rule, start); if (node == null) return false;
-        for (String port : ports(node)) if (reaches(rule, node.get(port).getAsString(), target, visited)) return true;
+        for (String port : ports(node)) {var next=find(rule,node.get(port).getAsString());if(next!=null && !next.get("type").getAsString().equals("ENTRY") && reaches(rule,node.get(port).getAsString(),target,visited))return true;}
         return false;
     }
     public static List<String> ports(JsonObject node) {
@@ -79,7 +79,7 @@ public final class ZombiesNpcGraphDraft {
                 var node = element.getAsJsonObject(); var d = depth.get(node.get("id").getAsString()); if (d == null) continue;
                 for (String port : ports(node)) {
                     String target = node.get(port).getAsString();
-                    if (!target.isBlank() && depth.getOrDefault(target, -1) < d + 1) { depth.put(target, d + 1); changed = true; }
+                    if (!target.isBlank() && find(rule,target)!=null && !find(rule,target).get("type").getAsString().equals("ENTRY") && depth.getOrDefault(target, -1) < d + 1) { depth.put(target, d + 1); changed = true; }
                 }
             }
             if (!changed) break;

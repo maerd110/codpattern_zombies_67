@@ -20,6 +20,38 @@ import static com.cdp.codpattern.app.zombies.npc.ZombiesNpcGraph.*;
 @GameTestHolder("codpattern_npc")
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGraphGameTests {
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void allFalseConditionsRouteDuringOpening(GameTestHelper h){
+        for(int wave:List.of(0,2))for(boolean open:List.of(false,true)){var f=new Fixture(h);try{
+            f.map.phase=wave==0?ZombiesGamePhase.OPENING_COUNTDOWN:ZombiesGamePhase.WAVE_ACTIVE;f.map.wave=wave;f.map.barrierOpen=open;
+            var pos=f.origin.offset(6,0,6);var barrier=new com.cdp.codpattern.app.zombies.map.object.ZombiesBarrierData("door","door",1,0,true,h.getLevel().dimension(),pos,pos,pos).withEntryId(1);
+            f.map.applyObjects(new com.cdp.codpattern.app.zombies.map.ZombiesMapObjects(List.of(),List.of(),List.of(barrier),List.of(),List.of(),List.of(),Optional.empty(),List.of(),List.of(),List.of(),List.of()));
+            var c=new Condition(Match.ALL,List.of(new Test(TestKind.WAVE,2,"",1,"",false),new Test(TestKind.BARRIER,1,"",1,"",false)));
+            f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"check"),condition("check",Type.BRANCH,c,"yes","no"),action("yes",say("yes"),"end"),action("no",say("no"),"end"),node("end",Type.END,""))));
+            f.interact();h.assertTrue(f.map.lines.equals(List.of(wave>=2&&open?"[guide] yes":"[guide] no")),"all-false and partly-false AND conditions execute false branch from opening onward");
+        }finally{f.close();}}h.succeed();
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void missingSingleItemRoutesDuringOpening(GameTestHelper h){var f=new Fixture(h);try{
+        f.map.phase=ZombiesGamePhase.OPENING_COUNTDOWN;f.map.wave=0;
+        var c=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:emerald",1,"",false)));
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"check"),condition("check",Type.BRANCH,c,"yes","no"),action("yes",say("has"),"end"),action("no",say("missing"),"end"),node("end",Type.END,""))));
+        f.interact();h.assertTrue(f.map.lines.equals(List.of("[guide] missing")),"empty inventory takes false branch before wave one");
+    }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void returnToEntryRearmsInteractionAndReportsTransfers(GameTestHelper h){var f=new Fixture(h);
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"give"),action("give",item(ZombiesNpcConfig.Kind.GIVE_ITEM,"minecraft:emerald"),"take"),action("take",item(ZombiesNpcConfig.Kind.TAKE_ITEM,"minecraft:emerald"),"say"),action("say",say("once"),"entry"))));
+        f.interact();h.assertTrue(f.map.lines.size()==1,"return-to-entry does not spin in same interaction");
+        h.runAtTickTime(20,()->{try{f.interact();h.assertTrue(f.map.lines.size()==2&&f.actor.getInventory().countItem(Items.EMERALD)==0,"next click reruns flow in order");
+            h.assertTrue(f.map.notices.stream().filter(c->c.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents t&&t.getKey().startsWith("npc.item.")).count()==4,"each successful give/take sends exactly one item-name notification");
+        }finally{f.close();}h.succeed();});
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void automaticReturnToEntryYieldsBetweenIterations(GameTestHelper h){var f=new Fixture(h);
+        f.start(ZombiesNpcConfig.Trigger.AUTO,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"say"),action("say",say("tick"),"entry"))));f.map.npcRuntime().tick(1);
+        h.assertTrue(f.map.lines.size()==1,"automatic loop yields instead of exhausting graph budget");
+        h.runAtTickTime(30,()->{try{f.map.npcRuntime().tick(1);h.assertTrue(f.map.lines.size()>=2&&f.map.lines.size()<=3,"automatic loops are paced at least one second apart");}finally{f.close();}h.succeed();});
+    }
     @GameTest(template="empty", batch="npc_graph", timeoutTicks=100)
     public static void looseChainsAdoptTheConnectedFlow(GameTestHelper h){
         var d=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var npc=d.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));d.addRule(npc);d.addRule(npc);ZombiesNpcSharedCanvas.ensure(d);
@@ -281,7 +313,7 @@ public final class ZombiesNpcGraphGameTests {
     private static final class Fixture{
         final TestMap map;final BlockPos origin;final ServerPlayer actor;
         Fixture(GameTestHelper h){origin=h.absolutePos(new BlockPos(1,2,1));map=new TestMap(h.getLevel(),"graph-"+UUID.randomUUID().toString().substring(0,8),new AreaData(origin.offset(-1,-1,-1),origin.offset(8,5,8)));FPSMCore.getInstance().registerMap(map.getGameType(),map);actor=player();}
-        ServerPlayer player(){var p=new FakePlayer(map.getServerLevel(),new GameProfile(UUID.randomUUID(),"graph-actor"));p.moveTo(origin.getX()+.5,origin.getY(),origin.getZ()+.5);map.actors.add(p);return p;}
+        ServerPlayer player(){var p=new FakePlayer(map.getServerLevel(),new GameProfile(UUID.randomUUID(),"graph-actor")){@Override public void sendSystemMessage(Component message){map.notices.add(message);}};p.moveTo(origin.getX()+.5,origin.getY(),origin.getZ()+.5);map.actors.add(p);return p;}
         void start(ZombiesNpcConfig.Trigger trigger,ZombiesNpcGraph graph){var r=new ZombiesNpcConfig.Rule("flow",trigger,0,List.of(),false,List.of(),List.of(),0,"",1,graph);start(List.of(r),0);}
         void start(List<ZombiesNpcConfig.Rule> rules,double interval){var npc=new ZombiesNpcConfig.Npc("guide",new ZombiesNpcConfig.Appearance("guide",null,ZombiesNpcConfig.Pose.STANDING,true,position(origin)),"",rules,interval);map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(npc)),false);}
         void interact(){interact(actor);}
@@ -289,9 +321,10 @@ public final class ZombiesNpcGraphGameTests {
         void close(){map.npcRuntime().reset();FPSMCore.getInstance().unregisterMap(map);}
     }
     private static final class TestMap extends ZombiesMap{
-        final List<ServerPlayer> actors=new ArrayList<>();final List<String> lines=new ArrayList<>();final List<Long> times=new ArrayList<>();int wave=1;
+        final List<ServerPlayer> actors=new ArrayList<>();final List<String> lines=new ArrayList<>();final List<Long> times=new ArrayList<>();final List<Component> notices=new ArrayList<>();int wave=1;boolean barrierOpen;ZombiesGamePhase phase=ZombiesGamePhase.WAVE_ACTIVE;
         TestMap(net.minecraft.server.level.ServerLevel l,String n,AreaData a){super(l,n,a);}
-        @Override public ZombiesGamePhase currentPhase(){return ZombiesGamePhase.WAVE_ACTIVE;}
+        @Override public ZombiesGamePhase currentPhase(){return phase;}
+        @Override public boolean npcBarrierOpen(int group){return barrierOpen;}
         @Override public int npcWave(){return wave;}
         @Override public boolean isAliveSurvivor(UUID id){return actors.stream().anyMatch(p->p.getUUID().equals(id));}
         @Override public List<ServerPlayer> npcPlayers(){return List.copyOf(actors);}

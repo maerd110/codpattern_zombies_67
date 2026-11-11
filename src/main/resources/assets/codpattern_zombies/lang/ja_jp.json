@@ -581,5 +581,7 @@
     "gui.codpattern.zombies.npc.dialogue.import": "Import legacy dialogue as a graph rule",
     "gui.codpattern.zombies.npc.graph.test.ITEM_ACTOR_MISSING": "Interacting player lacks item",
     "gui.codpattern.zombies.npc.loose.label": "Unassigned: connect to a flow",
-    "gui.codpattern.zombies.npc.loose.attach_first": "Attach this end to a rule first."
+    "gui.codpattern.zombies.npc.loose.attach_first": "Attach this end to a rule first.",
+    "npc.item.received": "“%s” placed in backpack × %s",
+    "npc.item.delivered": "“%s” delivered × %s"
 }
