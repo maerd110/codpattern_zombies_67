@@ -103,7 +103,7 @@ public final class ZombiesNpcCommands {
                         case "remove" -> npcs.remove(index);
                         case "move" -> {
                             var a = previous.appearance();
-                            npcs.set(index, new ZombiesNpcConfig.Npc(id, new ZombiesNpcConfig.Appearance(a.name(), a.skin(), a.pose(), a.alive(), playerPosition(context, room)), previous.dialogue(), previous.rules()));
+                            npcs.set(index, new ZombiesNpcConfig.Npc(id, new ZombiesNpcConfig.Appearance(a.name(), a.skin(), a.pose(), a.alive(), playerPosition(context, room), a.invulnerable()), previous.dialogue(), previous.rules(), previous.dialogueIntervalSeconds()));
                         }
                         case "set" -> {
                             JsonObject merged = ZombiesNpcRepository.GSON.toJsonTree(previous).getAsJsonObject();
@@ -116,7 +116,7 @@ public final class ZombiesNpcCommands {
                             List<ZombiesNpcConfig.Rule> rules = new ArrayList<>(previous.rules());
                             rules.removeIf(existing -> existing.id().equals(rule.id()));
                             rules.add(rule);
-                            npcs.set(index, new ZombiesNpcConfig.Npc(id, previous.appearance(), previous.dialogue(), rules));
+                            npcs.set(index, new ZombiesNpcConfig.Npc(id, previous.appearance(), previous.dialogue(), rules, previous.dialogueIntervalSeconds()));
                         }
                         default -> throw new IllegalArgumentException("Unknown NPC operation");
                     }

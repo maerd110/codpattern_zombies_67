@@ -475,6 +475,18 @@
     "gui.codpattern.zombies.npc.error.no_item": "クエストアイテムをオフハンドに持ってください。",
     "gui.codpattern.zombies.npc.error.no_block": "ブロックを見てから編集画面を開いてください。",
     "gui.codpattern.zombies.npc.error.timeout": "応答がタイムアウトしました。編集は保持されています。",
-    "gui.codpattern.zombies.npc.search": "選択肢を検索"
+    "gui.codpattern.zombies.npc.search": "選択肢を検索",
+    "gui.codpattern.zombies.npc.invulnerable": "無敵（無効にすると倒せます）",
+    "gui.codpattern.zombies.npc.dialogue_interval": "会話の行間隔（秒）",
+    "gui.codpattern.zombies.npc.action_interval": "アクションの標準間隔（秒）",
+    "gui.codpattern.zombies.npc.action_delay": "このアクション前の待機（秒）",
+    "gui.codpattern.zombies.npc.enable_item_condition": "プレイヤーの所持条件を有効化",
+    "gui.codpattern.zombies.npc.disable_item_condition": "所持条件が有効（クリックで無効化）",
+    "gui.codpattern.zombies.npc.required_item": "部屋の誰かが所持",
+    "gui.codpattern.zombies.npc.inventory_picker": "インベントリから選択",
+    "gui.codpattern.zombies.npc.block_picker": "配置ブロックを選択",
+    "gui.codpattern.zombies.npc.selected_placement": "選択中の配置位置",
+    "gui.codpattern.zombies.npc.add_placement": "配置位置を追加",
+    "gui.codpattern.zombies.npc.delete_placement": "配置位置を削除"
 
 }

@@ -29,6 +29,7 @@ public final class ZombiesNpcRuntime {
     private final Map<String, String> dialogues = new HashMap<>();
     private final Set<String> completed = new HashSet<>();
     private final Map<UUID, Long> lastInteraction = new HashMap<>();
+    private final Map<String, Sequence> sequences = new LinkedHashMap<>();
     private boolean preview;
     private final Set<net.minecraft.world.level.ChunkPos> chunks = new HashSet<>();
     private static final net.minecraft.server.level.TicketType<String> NPC_TICKET =
@@ -41,13 +42,15 @@ public final class ZombiesNpcRuntime {
         for (var npc : candidate.npcs()) {
             validateAppearance(npc.appearance());
             for (var rule : npc.rules()) {
+                if (!rule.requiredItem().isBlank()) ZombiesNpcInventory.parse(rule.requiredItem());
                 for (int group : rule.openedBarriers()) requireBarrier(group);
                 for (var action : rule.actions()) switch (action.kind()) {
                     case NPC -> { if (action.appearance() != null) validateAppearance(action.appearance()); }
                     case SET_BLOCK -> {
-                        validatePosition(action.position());
-                        parseBlock(action.block());
-                        BlockPos pos = blockPos(action.position());
+                      for (var placement : action.blockPlacements()) {
+                        validatePosition(placement.position());
+                        parseBlock(placement.block());
+                        BlockPos pos = blockPos(placement.position());
                         // Barrier blocks and configured interactive objects have their own reset owners.
                         for (var barrier : map.barriers()) {
                             if (inBox(pos, barrier.areaFrom(), barrier.areaTo())) throw new IllegalArgumentException("NPC block overlaps barrier " + barrier.objectId());
@@ -65,6 +68,7 @@ public final class ZombiesNpcRuntime {
                         if (occupied || objects.windows().stream().anyMatch(window -> inBox(pos, window.areaFrom(), window.areaTo()))) {
                             throw new IllegalArgumentException("NPC block overlaps a configured map object " + pos);
                         }
+                      }
                     }
                     case OPEN_BARRIER -> requireBarrier(action.barrierGroup());
                     case TAKE_ITEM, GIVE_ITEM -> ZombiesNpcInventory.parse(action.item());
@@ -110,6 +114,11 @@ public final class ZombiesNpcRuntime {
         }
     }
 
+    public static boolean supportsStoryBlock(BlockState state) {
+        try { requireStableBlock(state); return true; }
+        catch (IllegalArgumentException unsupported) { return false; }
+    }
+
     private static void requireStableBlock(BlockState state) {
         // These vanilla implementations have no on-place/on-remove world mutations. Shape and
         // neighbour updates are suppressed so a story cell has a complete, bounded undo record.
@@ -153,6 +162,7 @@ public final class ZombiesNpcRuntime {
                 if (entity == null) throw new IllegalStateException("Cannot create NPC");
                 entity.bind(this, npc.id());
                 entity.apply(npc.appearance());
+                if (isPreview) entity.setInvulnerable(true);
                 keepLoaded(entity.blockPosition());
                 if (!level().addFreshEntity(entity)) throw new IllegalStateException("Cannot spawn NPC " + npc.id());
                 entities.put(npc.id(), entity);
@@ -177,71 +187,151 @@ public final class ZombiesNpcRuntime {
 
     public void tick(int wave) {
         if (preview || !map.currentPhase().allowsPurchases()) return;
+        for (var sequence : List.copyOf(sequences.values())) advance(sequence);
+        if (!map.currentPhase().allowsPurchases()) return;
         for (var npc : config.npcs()) {
+            if (sequences.containsKey(npc.id())) continue;
             for (var rule : npc.rules()) {
                 if (rule.trigger() == ZombiesNpcConfig.Trigger.AUTO && eligible(npc, rule, wave)) {
-                    try { execute(npc, rule, null); }
-                    catch (RuntimeException failure) {
-                        com.mojang.logging.LogUtils.getLogger().error("NPC rule failed in map {}: {}.{}", map.getMapName(), npc.id(), rule.id(), failure);
-                        map.failNpcRound();
-                        return;
-                    }
+                    startSequence(npc, rule, null);
+                    break;
                 }
             }
         }
     }
 
     private boolean eligible(ZombiesNpcConfig.Npc npc, ZombiesNpcConfig.Rule rule, int wave) {
-        return !completed.contains(npc.id() + "." + rule.id()) && rule.eligible(wave, map::npcBarrierOpen, completed);
+        return !completed.contains(npc.id() + "." + rule.id())
+                && rule.eligible(wave, map::npcBarrierOpen, completed)
+                && (rule.requiredItem().isBlank() || map.npcPlayers().stream()
+                        .anyMatch(player -> ZombiesNpcInventory.contains(player, rule.requiredItem(), rule.requiredCount())));
     }
 
     public void interact(ServerPlayer player, String id, ZombiesNpcEntity entity) {
         if (preview || !map.currentPhase().allowsPurchases() || !map.isAliveSurvivor(player.getUUID())
                 || player.level() != level() || entities.get(id) != entity || entity.isRemoved()
                 || !entity.storyAlive() || player.distanceToSqr(entity) > 36) return;
-        long tick = level().getGameTime();
-        if (tick - lastInteraction.getOrDefault(player.getUUID(), tick - 10) < 10) return;
-        lastInteraction.put(player.getUUID(), tick);
+        long now = level().getGameTime();
+        if (now - lastInteraction.getOrDefault(player.getUUID(), now - 10) < 10) return;
+        lastInteraction.put(player.getUUID(), now);
+        if (sequences.containsKey(id)) return;
         var npc = config.npcs().stream().filter(value -> value.id().equals(id)).findFirst().orElseThrow();
         for (var rule : npc.rules()) {
             if (rule.trigger() == ZombiesNpcConfig.Trigger.INTERACT && eligible(npc, rule, map.npcWave())) {
-                try { execute(npc, rule, player); }
-                catch (IllegalArgumentException failure) { player.sendSystemMessage(Component.literal(failure.getMessage())); }
-                catch (RuntimeException failure) {
-                    com.mojang.logging.LogUtils.getLogger().error("NPC interaction failed in map {}", map.getMapName(), failure);
-                    map.failNpcRound();
-                }
+                startSequence(npc, rule, player);
                 return;
             }
         }
-        String dialogue = dialogues.getOrDefault(npc.id(), "");
-        if (!dialogue.isBlank()) say(npc.id(), dialogue);
+        String dialogue = dialogues.getOrDefault(id, "");
+        if (!dialogue.isBlank()) startSequence(npc, null, player);
     }
 
-    private void execute(ZombiesNpcConfig.Npc npc, ZombiesNpcConfig.Rule rule, ServerPlayer player) {
-        // Every expected failure is checked before changing blocks, inventory or progress.
-        List<ItemStack> inventory = player == null ? List.of() : ZombiesNpcInventory.plan(player, rule.actions());
-        Map<BlockPos, BlockState> changes = new LinkedHashMap<>();
-        for (var action : rule.actions()) {
-            if (action.kind() == ZombiesNpcConfig.Kind.SET_BLOCK) {
-                BlockPos pos = blockPos(action.position());
-                level().getChunk(pos);
-                // Reject block entities at mutation time as their contents may have changed since validation.
-                if (level().getBlockEntity(pos) != null) throw new IllegalArgumentException("NPC 不能替换存有数据的方块 " + pos);
-                requireStableBlock(level().getBlockState(pos));
-                changes.put(pos, parseBlock(action.block()));
+    private void startSequence(ZombiesNpcConfig.Npc npc, ZombiesNpcConfig.Rule rule, ServerPlayer player) {
+        List<ZombiesNpcConfig.Action> actions = rule == null
+                ? List.of(new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.DIALOGUE, null, null,
+                        dialogues.getOrDefault(npc.id(), ""), null, 0, null, null, 0)) : rule.actions();
+        var sequence = new Sequence(npc, rule, player, actions);
+        sequence.due = level().getGameTime() + delay(sequence, 0);
+        sequences.put(npc.id(), sequence);
+        advance(sequence);
+    }
+
+    private int delay(Sequence sequence, int index) {
+        var action = sequence.actions.get(index);
+        double seconds = action.delaySeconds() != null ? action.delaySeconds()
+                : index == 0 || sequence.rule == null ? 0 : sequence.rule.actionIntervalSeconds();
+        return ZombiesNpcConfig.intervalTicks(seconds);
+    }
+
+    private void advance(Sequence sequence) {
+        long now = level().getGameTime();
+        if (now < sequence.due) return;
+        ServerPlayer actor = sequence.actor;
+        if (actor != null) {
+            ServerPlayer online = level().getServer().getPlayerList().getPlayer(actor.getUUID());
+            if (online != null) sequence.actor = actor = online;
+            if (actor.isRemoved() || actor.level() != level() || !map.isAliveSurvivor(actor.getUUID())) {
+                sequence.due = now + 20;
+                return;
             }
         }
-        map.validateNpcBarrierOpens(rule.actions().stream()
-                .filter(action -> action.kind() == ZombiesNpcConfig.Kind.OPEN_BARRIER)
-                .map(ZombiesNpcConfig.Action::barrierGroup).toList());
+        try {
+            while (sequence.index < sequence.actions.size()) {
+                var action = sequence.actions.get(sequence.index);
+                String target = action.target() == null ? sequence.npc.id() : action.target();
+                if (action.kind() == ZombiesNpcConfig.Kind.DIALOGUE) {
+                    String[] lines = action.text().split("\\n", -1);
+                    int interval = ZombiesNpcConfig.intervalTicks(action.dialogueIntervalSeconds() == null
+                            ? sequence.npc.dialogueIntervalSeconds() : action.dialogueIntervalSeconds());
+                    while (sequence.line < lines.length) {
+                        say(target, lines[sequence.line++]);
+                        if (sequence.line < lines.length && interval > 0) {
+                            sequence.due = now + interval;
+                            return;
+                        }
+                    }
+                } else executeAction(action, target, actor);
+                sequence.blockedMessage = "";
+                sequence.line = 0;
+                sequence.index++;
+                if (sequence.index < sequence.actions.size()) {
+                    sequence.due = now + delay(sequence, sequence.index);
+                    if (sequence.due > now) return;
+                }
+            }
+            if (sequence.rule != null) completed.add(sequence.npc.id() + "." + sequence.rule.id());
+            sequences.remove(sequence.npc.id());
+            releaseUnusedChunks();
+        } catch (IllegalArgumentException blocked) {
+            if (actor == null) {
+                com.mojang.logging.LogUtils.getLogger().error("Automatic NPC sequence failed in {}", map.getMapName(), blocked);
+                map.failNpcRound();
+                return;
+            }
+            if (!blocked.getMessage().equals(sequence.blockedMessage)) {
+                actor.sendSystemMessage(Component.literal(blocked.getMessage()));
+                sequence.blockedMessage = blocked.getMessage();
+            }
+            sequence.due = now + 20;
+        } catch (RuntimeException failure) {
+            com.mojang.logging.LogUtils.getLogger().error("NPC sequence failed in {}", map.getMapName(), failure);
+            map.failNpcRound();
+        }
+    }
+
+    private void executeAction(ZombiesNpcConfig.Action action, String target, ServerPlayer actor) {
+        switch (action.kind()) {
+            case TAKE_ITEM, GIVE_ITEM -> {
+                if (actor == null) throw new IllegalStateException("Item action has no interaction owner");
+                ZombiesNpcInventory.commit(actor, ZombiesNpcInventory.plan(actor, List.of(action)));
+            }
+            case NPC -> {
+                if (action.appearance() != null) entities.get(target).apply(action.appearance());
+                if (action.dialogue() != null) dialogues.put(target, action.dialogue());
+            }
+            case OPEN_BARRIER -> {
+                map.validateNpcBarrierOpens(List.of(action.barrierGroup()));
+                map.openNpcBarrier(action.barrierGroup());
+            }
+            case SET_BLOCK -> placeBlocks(action.blockPlacements());
+            default -> throw new IllegalStateException("Unexpected NPC action");
+        }
+    }
+
+    private void placeBlocks(List<ZombiesNpcConfig.BlockPlacement> placements) {
+        Map<BlockPos, BlockState> changes = new LinkedHashMap<>();
+        for (var placement : placements) {
+            BlockPos pos = blockPos(placement.position());
+            level().getChunk(pos);
+            requireStableBlock(level().getBlockState(pos));
+            changes.put(pos, parseBlock(placement.block()));
+        }
         Map<BlockPos, BlockState> before = new LinkedHashMap<>();
         try {
             for (var change : changes.entrySet()) {
                 BlockPos pos = change.getKey();
                 before.put(pos, level().getBlockState(pos));
                 ZombiesNpcBlockJournal.get(level()).capture(level(), map.getMapName(), pos);
-                level().removeBlockEntity(pos);
                 if (!level().setBlock(pos, change.getValue(), 18) && !level().getBlockState(pos).equals(change.getValue())) {
                     throw new IllegalStateException("Cannot place NPC block " + pos);
                 }
@@ -251,18 +341,20 @@ public final class ZombiesNpcRuntime {
             before.forEach((pos, state) -> { level().removeBlockEntity(pos); level().setBlock(pos, state, 18); });
             throw failure;
         }
-        for (var action : rule.actions()) if (action.kind() == ZombiesNpcConfig.Kind.OPEN_BARRIER) map.openNpcBarrier(action.barrierGroup());
-        if (player != null) ZombiesNpcInventory.commit(player, inventory);
-        completed.add(npc.id() + "." + rule.id());
-        for (var action : rule.actions()) {
-            String target = action.target() == null ? npc.id() : action.target();
-            if (action.kind() == ZombiesNpcConfig.Kind.NPC) {
-                if (action.appearance() != null) entities.get(target).apply(action.appearance());
-                if (action.dialogue() != null) dialogues.put(target, action.dialogue());
-            }
-            if (action.kind() == ZombiesNpcConfig.Kind.DIALOGUE) say(target, action.text());
+    }
+
+    private static final class Sequence {
+        final ZombiesNpcConfig.Npc npc;
+        final ZombiesNpcConfig.Rule rule;
+        final List<ZombiesNpcConfig.Action> actions;
+        ServerPlayer actor;
+        int index;
+        int line;
+        long due;
+        String blockedMessage = "";
+        Sequence(ZombiesNpcConfig.Npc npc, ZombiesNpcConfig.Rule rule, ServerPlayer actor, List<ZombiesNpcConfig.Action> actions) {
+            this.npc = npc; this.rule = rule; this.actor = actor; this.actions = actions;
         }
-        releaseUnusedChunks();
     }
 
     private void say(String id, String text) {
@@ -276,6 +368,7 @@ public final class ZombiesNpcRuntime {
         entities.values().forEach(net.minecraft.world.entity.Entity::discard);
         entities.clear();
         dialogues.clear();
+        sequences.clear();
         if (level() != null) {
             ZombiesNpcBlockJournal.get(level()).restore(level(), map.getMapName());
             for (var chunk : chunks) level().getChunkSource().removeRegionTicket(NPC_TICKET, chunk, 2, map.getMapName());

@@ -48,7 +48,13 @@ public final class ZombiesNpcEntity extends PathfinderMob {
         }
         if (appearance.skin() != null) entityData.set(SKIN, appearance.skin());
         if (appearance.pose() != null) entityData.set(POSTURE, appearance.pose().ordinal());
-        if (appearance.alive() != null) entityData.set(STORY_ALIVE, appearance.alive());
+        if (appearance.alive() != null) {
+            entityData.set(STORY_ALIVE, appearance.alive());
+            dead = !appearance.alive();
+            deathTime = 0;
+            setHealth(appearance.alive() ? getMaxHealth() : 0);
+        }
+        if (appearance.invulnerable() != null) setInvulnerable(appearance.invulnerable());
         if (appearance.position() != null) {
             var p = appearance.position();
             if (owner != null) owner.keepLoaded(net.minecraft.core.BlockPos.containing(p.x(), p.y(), p.z()));
@@ -67,6 +73,21 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     }
 
     @Override public boolean isPushable() { return false; }
+    @Override public boolean isInvulnerableTo(net.minecraft.world.damagesource.DamageSource source) {
+        return !storyAlive() || super.isInvulnerableTo(source);
+    }
+    @Override public void die(net.minecraft.world.damagesource.DamageSource source) {
+        if (!storyAlive() || dead) return;
+        super.die(source);
+        if (!dead) {
+            if (getHealth() <= 0) setHealth(1);
+            return;
+        }
+        entityData.set(STORY_ALIVE, false);
+        entityData.set(POSTURE, ZombiesNpcConfig.Pose.LYING.ordinal());
+    }
+    // The normal death event runs, while the story corpse remains available for scripted revival.
+    @Override protected void tickDeath() { deathTime = 0; }
     @Override public void push(double x, double y, double z) { }
     @Override public boolean canBeLeashed(Player player) { return false; }
     @Override public Packet<ClientGamePacketListener> getAddEntityPacket() { return NetworkHooks.getEntitySpawningPacket(this); }

@@ -763,6 +763,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     public ZombiesNpcRuntime npcRuntime() { return npcRuntime; }
 
     public int npcWave() { return runtimeState.waveState().targetWave(); }
+    public List<ServerPlayer> npcPlayers() { return List.copyOf(survivorPlayers()); }
 
     public void failNpcRound() { lifecycleRuntime.fail(ZombiesErrorCode.of("npc.action_failed")); }
 

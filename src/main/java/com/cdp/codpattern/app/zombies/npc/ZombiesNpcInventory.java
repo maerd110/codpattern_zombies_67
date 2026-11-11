@@ -10,6 +10,15 @@ import java.util.List;
 /** Plans every transfer against copies before committing any inventory slot. */
 final class ZombiesNpcInventory {
     private ZombiesNpcInventory() { }
+    static boolean contains(ServerPlayer player, String specification, int count) {
+        ItemStack required = parse(specification);
+        int found = 0;
+        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+            ItemStack candidate = player.getInventory().getItem(slot);
+            if (ItemStack.isSameItemSameTags(required, candidate)) found += candidate.getCount();
+        }
+        return found >= count;
+    }
     static List<ItemStack> plan(ServerPlayer player, List<ZombiesNpcConfig.Action> actions) {
         List<ItemStack> slots = new ArrayList<>();
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) slots.add(player.getInventory().getItem(i).copy());

@@ -81,6 +81,18 @@ public final class ZombiesNpcClientPreview {
             render(screen, 640, 360, output.resolve("state-patch-640.png"));
             var choices = new ZombiesNpcChoiceScreen(screen, "动作类型", List.of("给予物品", "交出物品", "打开屏障", "改变 NPC 状态"), "打开屏障", value -> value, ignored -> { });
             render(choices, 320, 240, output.resolve("choices-320.png"));
+            var selected = new java.util.concurrent.atomic.AtomicReference<ZombiesNpcStackPickerScreen.Entry>();
+            var inventory = new ZombiesNpcStackPickerScreen(screen, "从背包中选择物品", List.of(
+                    new ZombiesNpcStackPickerScreen.Entry(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.EMERALD, 3), "minecraft:emerald", "绿宝石", 3),
+                    new ZombiesNpcStackPickerScreen.Entry(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND, 2), "minecraft:diamond", "钻石", 2)), selected::set);
+            render(inventory, 320, 240, output.resolve("inventory-320.png"));
+            inventory.children().stream().filter(child -> child instanceof net.minecraft.client.gui.components.Button)
+                    .map(child -> (net.minecraft.client.gui.components.Button) child).filter(button -> button.getMessage().getString().isEmpty()).findFirst().orElseThrow().onPress();
+            if (selected.get() == null || selected.get().count() != 3) throw new AssertionError("Inventory icon selection callback");
+            var blocks = new ZombiesNpcStackPickerScreen(screen, "选择部署方块", List.of(
+                    new ZombiesNpcStackPickerScreen.Entry(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE), "minecraft:stone", "石头", 1),
+                    new ZombiesNpcStackPickerScreen.Entry(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.OAK_PLANKS), "minecraft:oak_planks", "橡木木板", 1)), selected::set);
+            render(blocks, 320, 240, output.resolve("blocks-320.png"));
             set(screen, "page", 0); set(screen, "scroll", 0); screen.init(client, 640, 360);
             var name = screen.children().stream().filter(child -> child instanceof net.minecraft.client.gui.components.EditBox)
                     .map(child -> (net.minecraft.client.gui.components.EditBox) child)
@@ -92,7 +104,13 @@ public final class ZombiesNpcClientPreview {
             set(screen, "page", 1); screen.init(client, 640, 360); press(screen, "新增触发规则");
             set(screen, "page", 2); screen.init(client, 640, 360); press(screen, "新增执行动作");
             if (working.validated().npcs().get(2).rules().get(0).actions().size() != 2) throw new AssertionError("Add rule/action buttons");
-            Files.writeString(output.resolve("result.txt"), "PASS 10 client renders, widget bounds at 320x240 and 640x360, text input and add NPC/rule/action buttons\n");
+            var firstAction = working.npcs().get(2).getAsJsonObject().getAsJsonArray("rules").get(0).getAsJsonObject().getAsJsonArray("actions").get(0).getAsJsonObject();
+            ZombiesNpcEditorDraft.setKind(firstAction, ZombiesNpcConfig.Kind.SET_BLOCK, new ZombiesNpcConfig.Position(1, 64, 2, 0));
+            set(screen, "actionIndex", 0); set(screen, "scroll", 0); screen.init(client, 640, 480);
+            press(screen, "新增方块放置位置");
+            if (working.validated().npcs().get(2).rules().get(0).actions().get(0).blockPlacements().size() != 2) throw new AssertionError("Multiple block GUI placements");
+            render(screen, 640, 480, output.resolve("multi-blocks-640.png"));
+            Files.writeString(output.resolve("result.txt"), "PASS 13 client renders, widget bounds, inventory icons, NPC/rule/action controls and multi-block placement editor\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;

@@ -475,6 +475,18 @@
     "gui.codpattern.zombies.npc.error.no_item": "Place the quest item in your offhand, then read it.",
     "gui.codpattern.zombies.npc.error.no_block": "Aim at the target block before opening the editor.",
     "gui.codpattern.zombies.npc.error.timeout": "Server response timed out. Local edits are preserved.",
-    "gui.codpattern.zombies.npc.search": "Search options"
+    "gui.codpattern.zombies.npc.search": "Search options",
+    "gui.codpattern.zombies.npc.invulnerable": "Invulnerable (disable to allow killing)",
+    "gui.codpattern.zombies.npc.dialogue_interval": "Dialogue line interval (seconds)",
+    "gui.codpattern.zombies.npc.action_interval": "Default action interval (seconds)",
+    "gui.codpattern.zombies.npc.action_delay": "Wait before this action (seconds)",
+    "gui.codpattern.zombies.npc.enable_item_condition": "Enable room-player item condition",
+    "gui.codpattern.zombies.npc.disable_item_condition": "Item condition enabled (click to disable)",
+    "gui.codpattern.zombies.npc.required_item": "Any room player holds",
+    "gui.codpattern.zombies.npc.inventory_picker": "Choose from inventory",
+    "gui.codpattern.zombies.npc.block_picker": "Choose building block",
+    "gui.codpattern.zombies.npc.selected_placement": "Selected placement",
+    "gui.codpattern.zombies.npc.add_placement": "Add block placement",
+    "gui.codpattern.zombies.npc.delete_placement": "Delete placement"
 
 }

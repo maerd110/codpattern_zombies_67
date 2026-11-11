@@ -23,6 +23,9 @@ public final class ZombiesNpcConfigTest {
         rejects(() -> new ZombiesNpcConfig(2, List.of()));
         rejects(() -> new ZombiesNpcConfig(1, List.of(config.npcs().get(0), config.npcs().get(0))));
         rejects(() -> new ZombiesNpcConfig.Position(Double.NaN, 0, 0, 0));
+        rejects(() -> ZombiesNpcConfig.intervalTicks(Double.NaN));
+        rejects(() -> ZombiesNpcConfig.intervalTicks(-1));
+        rejects(() -> new ZombiesNpcConfig.Rule("zero_count", ZombiesNpcConfig.Trigger.AUTO, 0, List.of(), false, List.of(), List.of(dialogue), 0, "minecraft:emerald", 0));
         rejects(() -> new ZombiesNpcConfig(1, List.of(new ZombiesNpcConfig.Npc("guide", initial, "", List.of(both)))));
         var circular = new ZombiesNpcConfig.Rule("cycle", ZombiesNpcConfig.Trigger.AUTO, 0, List.of(), false, List.of("guide.cycle"), List.of(dialogue));
         rejects(() -> new ZombiesNpcConfig(1, List.of(new ZombiesNpcConfig.Npc("guide", initial, "", List.of(circular)))));

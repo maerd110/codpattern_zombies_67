@@ -475,6 +475,18 @@
     "gui.codpattern.zombies.npc.error.no_item": "请把任务物品放到副手，再点击读取。",
     "gui.codpattern.zombies.npc.error.no_block": "请先将准星对准目标方块，再打开编辑器。",
     "gui.codpattern.zombies.npc.error.timeout": "服务器响应超时，当前修改已保留。",
-    "gui.codpattern.zombies.npc.search": "搜索选项"
+    "gui.codpattern.zombies.npc.search": "搜索选项",
+    "gui.codpattern.zombies.npc.invulnerable": "无敌（关闭后可被杀死）",
+    "gui.codpattern.zombies.npc.dialogue_interval": "每句对话间隔（秒）",
+    "gui.codpattern.zombies.npc.action_interval": "动作默认间隔（秒）",
+    "gui.codpattern.zombies.npc.action_delay": "执行此动作前等待（秒）",
+    "gui.codpattern.zombies.npc.enable_item_condition": "启用房间玩家持有物品条件",
+    "gui.codpattern.zombies.npc.disable_item_condition": "已启用持有物品条件（点击关闭）",
+    "gui.codpattern.zombies.npc.required_item": "房间内任一玩家持有",
+    "gui.codpattern.zombies.npc.inventory_picker": "从背包中选择物品",
+    "gui.codpattern.zombies.npc.block_picker": "选择部署方块",
+    "gui.codpattern.zombies.npc.selected_placement": "当前放置位置",
+    "gui.codpattern.zombies.npc.add_placement": "新增方块放置位置",
+    "gui.codpattern.zombies.npc.delete_placement": "删除当前放置位置"
 
 }

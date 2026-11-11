@@ -42,6 +42,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
     private String message = "";
     private int npcIndex = -1, ruleIndex = -1, actionIndex = -1;
     private int page, scroll, npcScroll;
+    private int placementIndex;
     private int top, bottom, leftWidth, formX, formWidth;
     private final List<FormRow> rows = new ArrayList<>();
     private final List<EditBox> textBoxes = new ArrayList<>();
@@ -171,6 +172,8 @@ public final class ZombiesNpcDeployScreen extends Screen {
         text("skin", appearance, "skin", "minecraft:textures/entity/player/wide/steve.png");
         choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
         bool("alive", appearance, "alive", true);
+        bool("invulnerable", appearance, "invulnerable", true);
+        text("dialogue_interval", npc, "dialogueIntervalSeconds", "0");
         position(appearance, "position");
         multiline("dialogue", npc, "dialogue");
         rowButton("duplicate_npc", () -> {
@@ -208,6 +211,17 @@ public final class ZombiesNpcDeployScreen extends Screen {
             rule.addProperty("trigger", selected); rebuildWidgets();
         });
         text("min_wave", rule, "minWave", "0");
+        text("action_interval", rule, "actionIntervalSeconds", "0");
+        boolean hasItemCondition = !value(rule, "requiredItem", "").isBlank();
+        rowButton(hasItemCondition ? "disable_item_condition" : "enable_item_condition", () -> {
+            rule.addProperty("requiredItem", hasItemCondition ? "" : "minecraft:emerald");
+            rule.addProperty("requiredCount", 1); rebuildWidgets();
+        });
+        if (hasItemCondition) {
+            text("required_item", rule, "requiredItem", "minecraft:emerald");
+            text("count", rule, "requiredCount", "1");
+            inventoryPicker(rule, "requiredItem", "requiredCount");
+        }
         bool("any_condition", rule, "anyCondition", false);
         heading("barriers");
         var groups = new java.util.TreeSet<>(barriers);
@@ -260,6 +274,8 @@ public final class ZombiesNpcDeployScreen extends Screen {
             ZombiesNpcEditorDraft.setKind(action, ZombiesNpcConfig.Kind.valueOf(selected), currentPosition()); rebuildWidgets();
         });
         String kind = value(action, "kind", "DIALOGUE");
+        optional(action, "delaySeconds", "action_delay", new JsonPrimitive(0));
+        if (action.has("delaySeconds")) text("action_delay", action, "delaySeconds", "0");
         if (kind.equals("NPC") || kind.equals("DIALOGUE")) {
             List<String> targets = new ArrayList<>(List.of(""));
             for (JsonElement npc : draft.npcs()) targets.add(value(npc.getAsJsonObject(), "id", ""));
@@ -270,9 +286,14 @@ public final class ZombiesNpcDeployScreen extends Screen {
         }
         switch (kind) {
             case "NPC" -> appearancePatch(action);
-            case "DIALOGUE" -> multiline("dialogue", action, "text");
+            case "DIALOGUE" -> {
+                optional(action, "dialogueIntervalSeconds", "dialogue_interval", new JsonPrimitive(0));
+                if (action.has("dialogueIntervalSeconds")) text("dialogue_interval", action, "dialogueIntervalSeconds", "0");
+                multiline("dialogue", action, "text");
+            }
             case "TAKE_ITEM", "GIVE_ITEM" -> {
                 text("item", action, "item", "minecraft:emerald"); text("count", action, "count", "1");
+                inventoryPicker(action, "item", "count");
                 rowButton("held_item", () -> {
                     var stack = minecraft.player.getMainHandItem();
                     if (stack.isEmpty() || stack.getItem() instanceof com.phasetranscrystal.fpsmatch.common.item.zombies.ZombiesDeployTool) stack = minecraft.player.getOffhandItem();
@@ -281,13 +302,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
                 });
             }
             case "SET_BLOCK" -> {
-                position(action, "position"); text("block", action, "block", "minecraft:stone");
-                rowButton("looked_block", () -> {
-                    if (minecraft.hitResult instanceof BlockHitResult hit && hit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
-                        action.add("position", ZombiesNpcEditorDraft.position(new ZombiesNpcConfig.Position(hit.getBlockPos().getX(), hit.getBlockPos().getY(), hit.getBlockPos().getZ(), 0)));
-                        action.addProperty("block", BlockStateParser.serialize(minecraft.level.getBlockState(hit.getBlockPos()))); rebuildWidgets();
-                    } else message = tr("error.no_block");
-                });
+                blockPlacements(action);
             }
             case "OPEN_BARRIER" -> {
                 List<String> groups = barriers.stream().map(String::valueOf).toList();
@@ -301,6 +316,64 @@ public final class ZombiesNpcDeployScreen extends Screen {
         rowButton("delete_action", () -> { actions.remove(actionIndex); actionIndex--; clampSelection(); rebuildWidgets(); });
     }
 
+    private void inventoryPicker(JsonObject target, String itemKey, String countKey) {
+        rowButton("inventory_picker", () -> {
+            if (minecraft.player == null) return;
+            List<ZombiesNpcStackPickerScreen.Entry> entries = new ArrayList<>();
+            var inventory = minecraft.player.getInventory();
+            for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+                var stack = inventory.getItem(slot);
+                if (!stack.isEmpty()) entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(), stack.save(new CompoundTag()).toString(), stack.getHoverName().getString(), stack.getCount()));
+            }
+            minecraft.setScreen(new ZombiesNpcStackPickerScreen(this, tr("inventory_picker"), entries, selected -> {
+                target.addProperty(itemKey, selected.value()); target.addProperty(countKey, selected.count()); rebuildWidgets();
+            }));
+        });
+    }
+
+    private void blockPlacements(JsonObject action) {
+        JsonArray placements = action.has("placements") ? action.getAsJsonArray("placements") : new JsonArray();
+        int count = placements.isEmpty() ? 1 : placements.size();
+        placementIndex = Math.max(0, Math.min(placementIndex, count - 1));
+        List<String> options = java.util.stream.IntStream.rangeClosed(1, count).mapToObj(String::valueOf).toList();
+        selection("selected_placement", Integer.toString(placementIndex + 1), options, "", selected -> {
+            placementIndex = Integer.parseInt(selected) - 1; rebuildWidgets();
+        });
+        JsonObject placement = placements.isEmpty() ? action : placements.get(placementIndex).getAsJsonObject();
+        rowButton("add_placement", () -> {
+            if (placements.size() >= 256) return;
+            if (placements.isEmpty()) {
+                JsonObject original = new JsonObject(); original.add("position", action.get("position").deepCopy());
+                original.addProperty("block", value(action, "block", "minecraft:stone")); placements.add(original);
+                action.add("placements", placements);
+            }
+            JsonObject next = new JsonObject(); next.add("position", ZombiesNpcEditorDraft.position(currentPosition()));
+            next.addProperty("block", value(placement, "block", "minecraft:stone")); placements.add(next);
+            placementIndex = placements.size() - 1; rebuildWidgets();
+        });
+        position(placement, "position"); text("block", placement, "block", "minecraft:stone");
+        rowButton("block_picker", () -> {
+            List<ZombiesNpcStackPickerScreen.Entry> entries = new ArrayList<>();
+            for (var block : net.minecraft.core.registries.BuiltInRegistries.BLOCK) {
+                if (!ZombiesNpcRuntime.supportsStoryBlock(block.defaultBlockState())) continue;
+                entries.add(new ZombiesNpcStackPickerScreen.Entry(new net.minecraft.world.item.ItemStack(block.asItem()),
+                        BlockStateParser.serialize(block.defaultBlockState()), block.getName().getString(), 1));
+            }
+            minecraft.setScreen(new ZombiesNpcStackPickerScreen(this, tr("block_picker"), entries, selected -> {
+                placement.addProperty("block", selected.value()); rebuildWidgets();
+            }));
+        });
+                rowButton("looked_block", () -> {
+                    if (minecraft.hitResult instanceof BlockHitResult hit && hit.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
+                        placement.add("position", ZombiesNpcEditorDraft.position(new ZombiesNpcConfig.Position(hit.getBlockPos().getX(), hit.getBlockPos().getY(), hit.getBlockPos().getZ(), 0)));
+                        placement.addProperty("block", BlockStateParser.serialize(minecraft.level.getBlockState(hit.getBlockPos()))); rebuildWidgets();
+                    } else message = tr("error.no_block");
+                });
+        rows.add((x, y, w) -> button(tr("delete_placement"), x, y, w, () -> {
+            placements.remove(placementIndex); placementIndex = Math.max(0, placementIndex - 1); rebuildWidgets();
+        }, canEdit() && placements.size() > 1));
+    }
+
     private void appearancePatch(JsonObject action) {
         JsonObject patch = action.getAsJsonObject("appearance");
         if (patch == null) { patch = new JsonObject(); action.add("appearance", patch); }
@@ -312,6 +385,8 @@ public final class ZombiesNpcDeployScreen extends Screen {
         if (patch.has("pose")) choice("pose", patch, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
         optional(patch, "alive", "alive", new JsonPrimitive(true));
         if (patch.has("alive")) bool("alive", patch, "alive", true);
+        optional(patch, "invulnerable", "invulnerable", new JsonPrimitive(true));
+        if (patch.has("invulnerable")) bool("invulnerable", patch, "invulnerable", true);
         optional(patch, "position", "position", ZombiesNpcEditorDraft.position(currentPosition()));
         if (patch.has("position")) position(patch, "position");
         optional(action, "dialogue", "dialogue", new JsonPrimitive(""));

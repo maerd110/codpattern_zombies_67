@@ -57,10 +57,16 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
         }
     }
 
-    public record Appearance(String name, String skin, Pose pose, Boolean alive, Position position) { }
+    public record Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable) {
+        public Appearance(String name, String skin, Pose pose, Boolean alive, Position position) {
+            this(name, skin, pose, alive, position, null);
+        }
+    }
 
-    public record Npc(String id, Appearance appearance, String dialogue, List<Rule> rules) {
+    public record Npc(String id, Appearance appearance, String dialogue, List<Rule> rules, double dialogueIntervalSeconds) {
+        public Npc(String id, Appearance appearance, String dialogue, List<Rule> rules) { this(id, appearance, dialogue, rules, 0); }
         public Npc {
+            intervalTicks(dialogueIntervalSeconds);
             if (appearance == null || appearance.position() == null) throw new IllegalArgumentException("NPC needs appearance.position");
             dialogue = dialogue == null ? "" : dialogue;
             rules = rules == null ? List.of() : List.copyOf(rules);
@@ -69,8 +75,17 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
     }
 
     public record Rule(String id, Trigger trigger, int minWave, List<Integer> openedBarriers,
-                       boolean anyCondition, List<String> requires, List<Action> actions) {
+                       boolean anyCondition, List<String> requires, List<Action> actions,
+                       double actionIntervalSeconds, String requiredItem, Integer requiredCount) {
+        public Rule(String id, Trigger trigger, int minWave, List<Integer> openedBarriers,
+                    boolean anyCondition, List<String> requires, List<Action> actions) {
+            this(id, trigger, minWave, openedBarriers, anyCondition, requires, actions, 0, "", 1);
+        }
         public Rule {
+            intervalTicks(actionIntervalSeconds);
+            requiredItem = requiredItem == null ? "" : requiredItem;
+            if (requiredCount == null) requiredCount = 1;
+            if (requiredCount < 1 || requiredCount > 2304) throw new IllegalArgumentException("Invalid item condition count");
             if (trigger == null || minWave < 0) throw new IllegalArgumentException("Invalid NPC trigger");
             openedBarriers = openedBarriers == null ? List.of() : List.copyOf(openedBarriers);
             requires = requires == null ? List.of() : List.copyOf(requires);
@@ -96,12 +111,21 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
 
     /** Only the fields used by kind are required. NPC patches retain unspecified properties. */
     public record Action(Kind kind, String target, Appearance appearance, String text,
-                         String item, int count, Position position, String block, int barrierGroup, String dialogue) {
+                         String item, int count, Position position, String block, int barrierGroup, String dialogue,
+                         Double delaySeconds, Double dialogueIntervalSeconds, List<BlockPlacement> placements) {
+        public Action(Kind kind, String target, Appearance appearance, String text,
+                      String item, int count, Position position, String block, int barrierGroup, String dialogue) {
+            this(kind, target, appearance, text, item, count, position, block, barrierGroup, dialogue, null, null, List.of());
+        }
         public Action(Kind kind, String target, Appearance appearance, String text,
                       String item, int count, Position position, String block, int barrierGroup) {
-            this(kind, target, appearance, text, item, count, position, block, barrierGroup, null);
+            this(kind, target, appearance, text, item, count, position, block, barrierGroup, null, null, null, List.of());
         }
         public Action {
+            if (delaySeconds != null) intervalTicks(delaySeconds);
+            if (dialogueIntervalSeconds != null) intervalTicks(dialogueIntervalSeconds);
+            placements = placements == null ? List.of() : List.copyOf(placements);
+            if (placements.size() > 256) throw new IllegalArgumentException("At most 256 blocks per action");
             if (kind == null) throw new IllegalArgumentException("Action needs kind");
             switch (kind) {
                 case NPC -> { if (appearance == null && dialogue == null) throw new IllegalArgumentException("NPC action needs appearance or dialogue"); }
@@ -109,9 +133,24 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
                 case TAKE_ITEM, GIVE_ITEM -> {
                     if (item == null || item.isBlank() || count < 1 || count > 2304) throw new IllegalArgumentException("Item action needs item and count (1-2304)");
                 }
-                case SET_BLOCK -> { if (position == null || block == null) throw new IllegalArgumentException("SET_BLOCK needs position and block"); }
+                case SET_BLOCK -> { if (placements.isEmpty() && (position == null || block == null)) throw new IllegalArgumentException("SET_BLOCK needs block placements"); }
                 case OPEN_BARRIER -> { if (barrierGroup < 1) throw new IllegalArgumentException("OPEN_BARRIER needs barrierGroup"); }
             }
         }
+
+        public List<BlockPlacement> blockPlacements() {
+            return placements.isEmpty() ? List.of(new BlockPlacement(position, block)) : placements;
+        }
+    }
+
+    public record BlockPlacement(Position position, String block) {
+        public BlockPlacement {
+            if (position == null || block == null || block.isBlank()) throw new IllegalArgumentException("Invalid block placement");
+        }
+    }
+
+    public static int intervalTicks(double seconds) {
+        if (!Double.isFinite(seconds) || seconds < 0 || seconds > 3600) throw new IllegalArgumentException("Interval must be between 0 and 3600 seconds");
+        return (int) Math.ceil(seconds * 20);
     }
 }
