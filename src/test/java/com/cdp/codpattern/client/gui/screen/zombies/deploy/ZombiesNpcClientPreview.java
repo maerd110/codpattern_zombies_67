@@ -134,11 +134,82 @@ public final class ZombiesNpcClientPreview {
             press(screen, "新增方块放置位置");
             if (working.validated().npcs().get(2).rules().get(0).actions().get(0).blockPlacements().size() != 2) throw new AssertionError("Multiple block GUI placements");
             render(screen, 640, 480, output.resolve("multi-blocks-640.png"));
-            Files.writeString(output.resolve("result.txt"), "PASS 15 client renders, widget bounds, add button ordering, 1s defaults, chat name/colors/presets, inventory icons and multi-block placement editor\n");
+            graphChecks(screen, working, client, output);
+            Files.writeString(output.resolve("result.txt"), "PASS 23 client renders, legacy controls, graph entry/migration, palette, branch inspector, port wiring/unlink/cycle rejection, drag/pan/zoom, undo/redo, action properties, rule priority and small viewport\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
         } finally { client.stop(); }
+    }
+
+    private static void graphChecks(ZombiesNpcDeployScreen owner, ZombiesNpcEditorDraft working, Minecraft client, Path output) throws Exception {
+        owner.graphSelect(0, 0); owner.init(client, 960, 540); press(owner, "逻辑画布");
+        if (!(client.screen instanceof ZombiesNpcGraphScreen graph)) throw new AssertionError("NPC tool opens native graph canvas");
+        if (owner.graphRule().getAsJsonObject("graph").getAsJsonArray("nodes").size() != 6) throw new AssertionError("Legacy actions migrate into entry, actions and end");
+        render(graph, 960, 540, output.resolve("graph-migrated-960.png"));
+        press(graph, "新增触发规则");
+        render(graph, 960, 540, output.resolve("graph-new-rule-960.png"));
+        var rule = owner.graphRule();
+        press(graph, "+ 条件分支"); press(graph, "+ 等待时间");
+        graph.children().stream().filter(c -> c instanceof net.minecraft.client.gui.components.EditBox)
+                .map(c -> (net.minecraft.client.gui.components.EditBox)c).filter(b -> b.getMessage().getString().equals("等待时间（秒）")).findFirst().orElseThrow().setValue("0.5");
+        if (ZombiesNpcGraphDraft.find(rule,"node_5").get("seconds").getAsDouble()!=.5) throw new AssertionError("Wait inspector edits duration");
+        press(graph,"删除节点");press(graph,"撤销");
+        rule=owner.graphRule();
+        if(ZombiesNpcGraphDraft.nodes(rule).size()!=5) throw new AssertionError("Undo restores deleted node");
+        // History restores rule objects; read through the owner after undo/redo.
+        rule=owner.graphRule();press(graph,"重做");rule=owner.graphRule();
+        if(ZombiesNpcGraphDraft.nodes(rule).size()!=4) throw new AssertionError("Redo deletes restored node");
+        press(graph,"+ 动作");
+        var picker=client.screen;
+        picker.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("DIALOGUE");
+        button(picker,"● " + net.minecraft.network.chat.Component.translatable("gui.codpattern.zombies.npc.kind.DIALOGUE").getString()).onPress();
+        rule=owner.graphRule();
+        String[][] positions={{"node_1","20","160"},{"node_4","230","160"},{"node_2","440","60"},{"node_5","440","280"},{"node_3","650","160"}};
+        for(var p:positions){var n=ZombiesNpcGraphDraft.find(rule,p[0]);n.addProperty("x",Double.parseDouble(p[1]));n.addProperty("y",Double.parseDouble(p[2]));}
+        set(graph,"selected","node_2");graph.init(client,960,540);
+        graph.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox).map(c->(net.minecraft.client.gui.components.EditBox)c).filter(b->b.getMessage().getString().equals("对话内容")).findFirst().orElseThrow().setValue("准备好，通道即将开启。");
+        ZombiesNpcGraphDraft.find(rule,"node_5").getAsJsonObject("action").addProperty("text","请先找来绿宝石。");
+        set(graph,"selected","node_4");graph.init(client,960,540);press(graph,"波次达到 ▾");picker=client.screen;
+        picker.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("ITEM_ACTOR");
+        button(picker,"交互玩家持有物品").onPress();
+        render(graph,1280,720,output.resolve("graph-branch-before-wiring.png"));press(graph,"适应画布");
+        connect(graph,rule,"node_1","next","node_4");connect(graph,rule,"node_4","next","node_2");connect(graph,rule,"node_4","onFalse","node_5");
+        connect(graph,rule,"node_2","next","node_3");connect(graph,rule,"node_5","next","node_3");
+        working.validated();
+        connect(graph,rule,"node_2","next","node_4");
+        if(!ZombiesNpcGraphDraft.find(rule,"node_2").get("next").getAsString().equals("node_3"))throw new AssertionError("Canvas rejects cyclic wire without replacing existing output");
+        var entry=ZombiesNpcGraphDraft.find(rule,"node_1");double z=(double)get(graph,"zoom"),px=(double)get(graph,"panX"),py=(double)get(graph,"panY");
+        double ex=8+px+(entry.get("x").getAsDouble()+170)*z,ey=94+py+(entry.get("y").getAsDouble()+43)*z;
+        graph.mouseClicked(ex,ey,1);
+        if(!entry.get("next").getAsString().isEmpty())throw new AssertionError("Right-click disconnects output");
+        connect(graph,rule,"node_1","next","node_4");
+        var action=ZombiesNpcGraphDraft.find(rule,"node_2");double ax=8+px+(action.get("x").getAsDouble()+50)*z,ay=94+py+(action.get("y").getAsDouble()+10)*z;
+        double oldX=action.get("x").getAsDouble();graph.mouseClicked(ax,ay,0);graph.mouseDragged(ax+24,ay+12,0,24,12);graph.mouseReleased(ax+24,ay+12,0);
+        if(action.get("x").getAsDouble()<=oldX)throw new AssertionError("Node drag persists canvas coordinates");
+        double oldPan=(double)get(graph,"panX");graph.mouseClicked(180,620,2);graph.mouseDragged(200,620,2,20,0);graph.mouseReleased(200,620,2);
+        if((double)get(graph,"panX")<=oldPan)throw new AssertionError("Background pan");
+        double oldZoom=(double)get(graph,"zoom");graph.mouseScrolled(300,300,1);if((double)get(graph,"zoom")<=oldZoom)throw new AssertionError("Wheel zoom");
+        set(graph,"selected","node_2");graph.init(client,960,540);press(graph,"节点属性");
+        if(client.screen!=owner)throw new AssertionError("Action property editor opens from node");
+        render(owner,640,360,output.resolve("graph-action-properties-640.png"));press(owner,"返回逻辑画布");
+        if(client.screen!=graph || !ZombiesNpcGraphDraft.find(owner.graphRule(),"node_2").getAsJsonObject("action").get("text").getAsString().equals("准备好，通道即将开启。"))throw new AssertionError("Node editor returns to same graph and retains inline dialogue");
+        set(graph,"selected","node_4");graph.init(client,1280,720);press(graph,"适应画布");
+        render(graph,1280,720,output.resolve("graph-final-1280.png"));render(graph,320,240,output.resolve("graph-small-320.png"));
+        press(graph,"节点属性");render(graph,320,240,output.resolve("graph-inspector-320.png"));
+        set(graph,"overlay",false);set(graph,"selected","node_1");graph.init(client,960,540);press(graph,"节点属性");
+        set(owner,"scroll",100);render(owner,640,360,output.resolve("graph-rule-properties-640.png"));
+        String currentRule=owner.graphRule().get("id").getAsString();press(owner,"上移");press(owner,"返回逻辑画布");
+        if(owner.graphRuleIndex()!=0 || !owner.graphRule().get("id").getAsString().equals(currentRule))throw new AssertionError("Entry properties retain rule-priority ordering");
+        working.validated();
+    }
+    private static Object get(Object target,String name)throws Exception{var f=target.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(target);}
+    private static void connect(ZombiesNpcGraphScreen graph,com.google.gson.JsonObject rule,String from,String port,String to)throws Exception{
+        var a=ZombiesNpcGraphDraft.find(rule,from);var b=ZombiesNpcGraphDraft.find(rule,to);
+        double z=(double)get(graph,"zoom"),px=(double)get(graph,"panX"),py=(double)get(graph,"panY");
+        double ax=8+px+(a.get("x").getAsDouble()+170)*z,ay=94+py+(a.get("y").getAsDouble()+(port.equals("onFalse")?68:43))*z;
+        double bx=8+px+b.get("x").getAsDouble()*z,by=94+py+(b.get("y").getAsDouble()+43)*z;
+        graph.mouseClicked(ax,ay,0);graph.mouseReleased(ax,ay,0);graph.mouseClicked(bx,by,0);graph.mouseReleased(bx,by,0);
     }
 
     private static ZombiesNpcConfig fixture() {
@@ -162,7 +233,8 @@ public final class ZombiesNpcClientPreview {
     private static net.minecraft.client.gui.components.Button button(Screen screen, String caption) {
         return screen.children().stream().filter(child -> child instanceof net.minecraft.client.gui.components.Button)
                 .map(child -> (net.minecraft.client.gui.components.Button) child)
-                .filter(button -> button.getTooltip() != null && button.getMessage().getString().equals(caption))
+                .filter(button -> button.getTooltip() != null && (button.getMessage().getString().equals(caption)
+                        || button.getMessage().getString().equals(Minecraft.getInstance().font.plainSubstrByWidth(caption, Math.max(8, button.getWidth() - 8)))))
                 .findFirst().orElseThrow(() -> new AssertionError("Missing button " + caption));
     }
     private static void render(Screen screen, int width, int height, Path file) throws Exception {
@@ -182,7 +254,13 @@ public final class ZombiesNpcClientPreview {
             target.setClearColor(0, 0, 0, 1); target.clear(Minecraft.ON_OSX); target.bindWrite(true);
             RenderSystem.setProjectionMatrix(new Matrix4f().setOrtho(0, width, height, 0, 1000, 3000), VertexSorting.ORTHOGRAPHIC_Z);
             modelView.setIdentity(); modelView.translate(0, 0, -2000); RenderSystem.applyModelViewMatrix();
-            var graphics = new GuiGraphics(client, client.renderBuffers().bufferSource());
+            // Off-screen targets use logical pixels; the real window's GUI scale must not scale scissor rectangles.
+            var graphics = new GuiGraphics(client, client.renderBuffers().bufferSource()) {
+                @Override public void enableScissor(int left, int top, int right, int bottom) {
+                    flush(); RenderSystem.enableScissor(left, height - bottom, right - left, bottom - top);
+                }
+                @Override public void disableScissor() { flush(); RenderSystem.disableScissor(); }
+            };
             screen.render(graphics, 0, 0, 0); graphics.flush();
             try (var image = Screenshot.takeScreenshot(target)) { image.writeToFile(file); }
         } finally {

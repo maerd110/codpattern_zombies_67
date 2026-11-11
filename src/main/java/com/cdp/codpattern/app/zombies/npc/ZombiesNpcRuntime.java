@@ -44,7 +44,14 @@ public final class ZombiesNpcRuntime {
             for (var rule : npc.rules()) {
                 if (!rule.requiredItem().isBlank()) ZombiesNpcInventory.parse(rule.requiredItem());
                 for (int group : rule.openedBarriers()) requireBarrier(group);
-                for (var action : rule.actions()) switch (action.kind()) {
+                if (rule.graph() != null) for (var node : rule.graph().nodes()) if (node.condition() != null) for (var test : node.condition().tests()) {
+                    switch (test.kind()) {
+                        case BARRIER -> requireBarrier(test.value());
+                        case ITEM_ROOM, ITEM_ACTOR -> ZombiesNpcInventory.parse(test.item());
+                        default -> { }
+                    }
+                }
+                for (var action : rule.executableActions()) switch (action.kind()) {
                     case NPC -> { if (action.appearance() != null) validateAppearance(action.appearance()); }
                     case SET_BLOCK -> {
                       for (var placement : action.blockPlacements()) {
@@ -231,7 +238,7 @@ public final class ZombiesNpcRuntime {
                 ? List.of(new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.DIALOGUE, null, null,
                         dialogues.getOrDefault(npc.id(), ""), null, 0, null, null, 0)) : rule.actions();
         var sequence = new Sequence(npc, rule, player, actions);
-        sequence.due = level().getGameTime() + delay(sequence, 0);
+        sequence.due = level().getGameTime() + (sequence.graphNodes == null ? delay(sequence, 0) : 0);
         sequences.put(npc.id(), sequence);
         advance(sequence);
     }
@@ -256,6 +263,7 @@ public final class ZombiesNpcRuntime {
             }
         }
         try {
+            if (sequence.graphNodes != null) { advanceGraph(sequence, now); return; }
             while (sequence.index < sequence.actions.size()) {
                 var action = sequence.actions.get(sequence.index);
                 String target = action.target() == null ? sequence.npc.id() : action.target();
@@ -297,6 +305,66 @@ public final class ZombiesNpcRuntime {
             com.mojang.logging.LogUtils.getLogger().error("NPC sequence failed in {}", map.getMapName(), failure);
             map.failNpcRound();
         }
+    }
+
+    private boolean condition(ZombiesNpcGraph.Condition condition, ServerPlayer actor) {
+        return condition.evaluate(test -> switch (test.kind()) {
+            case WAVE -> map.npcWave() >= test.value();
+            case BARRIER -> map.npcBarrierOpen(test.value());
+            case ITEM_ROOM -> map.npcPlayers().stream().anyMatch(p -> ZombiesNpcInventory.contains(p, test.item(), test.count()));
+            case ITEM_ACTOR -> actor != null && ZombiesNpcInventory.contains(actor, test.item(), test.count());
+            case RULE_DONE -> completed.contains(test.reference());
+            case NPC_ALIVE -> entities.containsKey(test.reference()) && entities.get(test.reference()).storyAlive();
+        });
+    }
+
+    private void advanceGraph(Sequence sequence, long now) {
+        // Graphs are acyclic and bounded on load. This budget also guards future interpreter changes.
+        for (int steps = 0; steps < 256; steps++) {
+            var node = sequence.graphNodes.get(sequence.cursor);
+            String next = node.next();
+            switch (node.type()) {
+                case END -> {
+                    completed.add(sequence.npc.id() + "." + sequence.rule.id());
+                    sequences.remove(sequence.npc.id()); releaseUnusedChunks(); return;
+                }
+                case ENTRY -> { }
+                case BRANCH -> next = condition(node.condition(), sequence.actor) ? node.next() : node.onFalse();
+                case AWAIT -> {
+                    if (!condition(node.condition(), sequence.actor)) { sequence.due = now + 20; return; }
+                }
+                case WAIT -> {
+                    if (!sequence.nodeStarted) {
+                        sequence.nodeStarted = true;
+                        sequence.due = now + ZombiesNpcConfig.intervalTicks(node.seconds());
+                        if (sequence.due > now) return;
+                    }
+                }
+                case ACTION -> {
+                    var action = node.action();
+                    if (!sequence.nodeStarted) {
+                        sequence.nodeStarted = true;
+                        double seconds = action.delaySeconds() != null ? action.delaySeconds()
+                                : sequence.executedAction ? sequence.rule.actionIntervalSeconds() : 0;
+                        sequence.due = now + ZombiesNpcConfig.intervalTicks(seconds);
+                        if (sequence.due > now) return;
+                    }
+                    String target = action.target() == null ? sequence.npc.id() : action.target();
+                    if (action.kind() == ZombiesNpcConfig.Kind.DIALOGUE) {
+                        String[] lines = action.text().split("\\n", -1);
+                        int interval = ZombiesNpcConfig.intervalTicks(action.dialogueIntervalSeconds() == null
+                                ? sequence.npc.dialogueIntervalSeconds() : action.dialogueIntervalSeconds());
+                        while (sequence.line < lines.length) {
+                            say(target, lines[sequence.line++]);
+                            if (sequence.line < lines.length && interval > 0) { sequence.due = now + interval; return; }
+                        }
+                    } else executeAction(action, target, sequence.actor);
+                    sequence.executedAction = true; sequence.blockedMessage = "";
+                }
+            }
+            sequence.cursor = next; sequence.nodeStarted = false; sequence.line = 0;
+        }
+        throw new IllegalStateException("NPC graph execution budget exceeded");
     }
 
     private void executeAction(ZombiesNpcConfig.Action action, String target, ServerPlayer actor) {
@@ -352,8 +420,15 @@ public final class ZombiesNpcRuntime {
         int line;
         long due;
         String blockedMessage = "";
+        Map<String, ZombiesNpcGraph.Node> graphNodes;
+        String cursor;
+        boolean nodeStarted, executedAction;
         Sequence(ZombiesNpcConfig.Npc npc, ZombiesNpcConfig.Rule rule, ServerPlayer actor, List<ZombiesNpcConfig.Action> actions) {
             this.npc = npc; this.rule = rule; this.actor = actor; this.actions = actions;
+            if (rule != null && rule.graph() != null) {
+                graphNodes = new HashMap<>(); rule.graph().nodes().forEach(node -> graphNodes.put(node.id(), node));
+                cursor = rule.graph().entry().id();
+            }
         }
     }
 

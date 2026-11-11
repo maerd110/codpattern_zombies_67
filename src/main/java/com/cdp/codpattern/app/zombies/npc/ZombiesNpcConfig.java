@@ -25,8 +25,13 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
         for (Npc npc : npcs) for (Rule rule : npc.rules()) ruleKeys.add(npc.id() + "." + rule.id());
         for (Npc npc : npcs) for (Rule rule : npc.rules()) {
             if (!ruleKeys.containsAll(rule.requires())) throw new IllegalArgumentException("Unknown prerequisite in " + rule.id());
-            for (Action action : rule.actions()) {
+            for (Action action : rule.executableActions()) {
                 if (action.target() != null && !keys.contains(action.target())) throw new IllegalArgumentException("Unknown NPC target");
+            }
+            if (rule.graph() != null) for (var node : rule.graph().nodes()) if (node.condition() != null) for (var test : node.condition().tests()) {
+                if (test.kind() == ZombiesNpcGraph.TestKind.RULE_DONE && !ruleKeys.contains(test.reference())) throw new IllegalArgumentException("条件引用未知规则：" + test.reference());
+                if (test.kind() == ZombiesNpcGraph.TestKind.NPC_ALIVE && !keys.contains(test.reference())) throw new IllegalArgumentException("条件引用未知 NPC：" + test.reference());
+                if (rule.trigger() == Trigger.AUTO && test.kind() == ZombiesNpcGraph.TestKind.ITEM_ACTOR) throw new IllegalArgumentException("交互玩家物品条件只能用于玩家交互入口");
             }
         }
         Set<String> reachable = new java.util.HashSet<>();
@@ -85,7 +90,12 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
 
     public record Rule(String id, Trigger trigger, int minWave, List<Integer> openedBarriers,
                        boolean anyCondition, List<String> requires, List<Action> actions,
-                       double actionIntervalSeconds, String requiredItem, Integer requiredCount) {
+                       double actionIntervalSeconds, String requiredItem, Integer requiredCount, ZombiesNpcGraph graph) {
+        public Rule(String id, Trigger trigger, int minWave, List<Integer> openedBarriers,
+                    boolean anyCondition, List<String> requires, List<Action> actions,
+                    double actionIntervalSeconds, String requiredItem, Integer requiredCount) {
+            this(id, trigger, minWave, openedBarriers, anyCondition, requires, actions, actionIntervalSeconds, requiredItem, requiredCount, null);
+        }
         public Rule(String id, Trigger trigger, int minWave, List<Integer> openedBarriers,
                     boolean anyCondition, List<String> requires, List<Action> actions) {
             this(id, trigger, minWave, openedBarriers, anyCondition, requires, actions, DEFAULT_INTERVAL_SECONDS, "", 1);
@@ -99,13 +109,16 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs) {
             openedBarriers = openedBarriers == null ? List.of() : List.copyOf(openedBarriers);
             requires = requires == null ? List.of() : List.copyOf(requires);
             actions = actions == null ? List.of() : List.copyOf(actions);
-            if (openedBarriers.stream().anyMatch(group -> group < 1) || actions.isEmpty() || actions.size() > 64) {
+            if (openedBarriers.stream().anyMatch(group -> group < 1) || (graph == null && actions.isEmpty()) || actions.size() > 64) {
                 throw new IllegalArgumentException("Invalid barriers or actions");
             }
-            if (trigger == Trigger.AUTO && actions.stream().anyMatch(action -> action.kind() == Kind.TAKE_ITEM || action.kind() == Kind.GIVE_ITEM)) {
+            if (graph != null && !actions.isEmpty()) throw new IllegalArgumentException("节点流程与旧动作列表不能同时存在");
+            if (trigger == Trigger.AUTO && (graph == null ? actions : graph.actions()).stream().anyMatch(action -> action.kind() == Kind.TAKE_ITEM || action.kind() == Kind.GIVE_ITEM)) {
                 throw new IllegalArgumentException("Item transfers require INTERACT");
             }
         }
+
+        public List<Action> executableActions() { return graph == null ? actions : graph.actions(); }
 
         public boolean eligible(int wave, IntPredicate barrierOpen, Set<String> completed) {
             if (!completed.containsAll(requires)) return false;

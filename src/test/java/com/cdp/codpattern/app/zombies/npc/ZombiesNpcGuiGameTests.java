@@ -69,6 +69,7 @@ public final class ZombiesNpcGuiGameTests {
             var rule = working.addRule(npc);
             String dialogue = "任务对话\n".repeat(4000);
             rule.getAsJsonArray("actions").get(0).getAsJsonObject().addProperty("text", dialogue);
+            ZombiesNpcGraphDraft.ensure(rule);
             String request = working.request(initial.revision());
             var c2sBuffer = new FriendlyByteBuf(Unpooled.buffer());
             var originalPacket = ZombiesDeployToolActionC2SPacket.npcEditor(deployment, "save", request, 71);
@@ -79,7 +80,7 @@ public final class ZombiesNpcGuiGameTests {
                     && decoded.requestId() == 71 && io.netty.buffer.ByteBufUtil.equals(c2sBuffer, 0, check, 0, c2sBuffer.writerIndex()), "large dialogue survives bounded C2S transport");
             var saved = ZombiesNpcEditorService.perform(player, name, "save", request);
             helper.assertTrue(saved.error().isBlank() && Files.exists(path), "GUI saves actual NPC configuration " + saved.error());
-            helper.assertTrue(saved.config().npcs().get(0).rules().get(0).actions().get(0).text().equals(dialogue), "long dialogue preserved");
+            helper.assertTrue(saved.config().npcs().get(0).rules().get(0).graph().actions().get(0).text().equals(dialogue), "long graph dialogue preserved");
             String before = Files.readString(path);
             var stale = ZombiesNpcEditorService.perform(player, name, "save", request);
             helper.assertTrue(stale.error().endsWith("conflict") && Files.readString(path).equals(before), "stale GUI must not overwrite newer data");

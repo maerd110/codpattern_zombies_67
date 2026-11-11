@@ -86,10 +86,8 @@ public final class ZombiesNpcEditorDraft {
                 String value = requirements.get(i).getAsString();
                 if (value.startsWith(old + ".")) requirements.set(i, new com.google.gson.JsonPrimitive(name + value.substring(old.length())));
             }
-            for (JsonElement action : object.getAsJsonArray("actions")) {
-                var value = action.getAsJsonObject();
-                if (value.has("target") && value.get("target").getAsString().equals(old)) value.addProperty("target", name);
-            }
+            ZombiesNpcGraphDraft.references(object, value -> value.equals(old) ? name : value,
+                    value -> value.startsWith(old + ".") ? name + value.substring(old.length()) : value);
         }
     }
     public void renameRule(JsonObject npc, JsonObject rule, String name) {
@@ -101,6 +99,7 @@ public final class ZombiesNpcEditorDraft {
             for (int i = 0; i < requirements.size(); i++) if (requirements.get(i).getAsString().equals(previous)) {
                 requirements.set(i, new com.google.gson.JsonPrimitive(prefix + name));
             }
+            ZombiesNpcGraphDraft.references(candidate.getAsJsonObject(), value -> value, value -> value.equals(previous) ? prefix + name : value);
         }
     }
 }

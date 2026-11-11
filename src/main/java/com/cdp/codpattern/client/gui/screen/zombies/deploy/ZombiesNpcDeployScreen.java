@@ -43,6 +43,8 @@ public final class ZombiesNpcDeployScreen extends Screen {
     private int npcIndex = -1, ruleIndex = -1, actionIndex = -1;
     private int page, scroll, npcScroll;
     private int placementIndex;
+    private ZombiesNpcGraphScreen graphScreen, graphReturn;
+    private JsonObject graphAction;
     private int top, bottom, leftWidth, formX, formWidth;
     private final List<FormRow> rows = new ArrayList<>();
     private final List<EditBox> textBoxes = new ArrayList<>();
@@ -90,6 +92,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
             if (!response.error().isBlank()) {
                 message = response.error().startsWith("gui.") ? Component.translatable(response.error()).getString() : response.error();
                 rebuildWidgets();
+                if (graphScreen != null) graphScreen.refresh();
                 return;
             }
             if (draft == null) draft = new ZombiesNpcEditorDraft(response.config());
@@ -100,10 +103,12 @@ public final class ZombiesNpcDeployScreen extends Screen {
             clampSelection();
             message = tr("status." + response.status());
             rebuildWidgets();
+            if (graphScreen != null) graphScreen.refresh();
             if (next != null) next.run();
         } catch (RuntimeException failure) {
             message = detail(failure);
             rebuildWidgets();
+            if (graphScreen != null) graphScreen.refresh();
         }
     }
 
@@ -111,18 +116,21 @@ public final class ZombiesNpcDeployScreen extends Screen {
         rows.clear(); textBoxes.clear(); labels.clear();
         top = 74; bottom = height - 92;
         leftWidth = Math.max(84, Math.min(144, width / 4));
-        formX = leftWidth + 24; formWidth = width - formX - 12;
-        int tabWidth = (width - 32) / 3;
-        for (int i = 0; i < 3; i++) {
+        formX = graphReturn == null ? leftWidth + 24 : 12; formWidth = width - formX - 12;
+        int tabWidth = (width - 28) / 2;
+        if (graphReturn != null) {
+            button(tr("graph.back"), 12, 42, width - 24, this::returnToGraph, true);
+        } else for (int i = 0; i < 2; i++) {
             int target = i;
-            button((page == i ? "● " : "") + tr("page." + i), 12 + i * (tabWidth + 4), 42, tabWidth, () -> {
-                page = target; scroll = 0; rebuildWidgets();
+            button(tr(i == 0 ? "page.0" : "graph.title"), 12 + i * (tabWidth + 4), 42, tabWidth, () -> {
+                if (target == 1) openGraph(); else { page = 0; scroll = 0; rebuildWidgets(); }
             }, !busy() && draft != null);
         }
         if (draft != null) {
-            buildNpcList();
+            if (graphReturn == null) buildNpcList();
             if (npc() != null) {
-                switch (page) { case 0 -> basic(); case 1 -> rules(); case 2 -> actions(); }
+                if (graphAction != null) actionProperties(graphAction);
+                else switch (page) { case 0 -> basic(); case 1 -> rules(); case 2 -> actions(); }
             } else heading("empty");
             int visible = visibleRows();
             scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.size() - visible)));
@@ -191,25 +199,23 @@ public final class ZombiesNpcDeployScreen extends Screen {
                     String old = value(npc, "id", "") + ".";
                     if (prerequisite.startsWith(old)) prerequisites.set(i, new JsonPrimitive(newId + "." + prerequisite.substring(old.length())));
                 }
-                for (JsonElement action : rule.getAsJsonObject().getAsJsonArray("actions")) {
-                    JsonObject candidate = action.getAsJsonObject();
-                    if (value(candidate, "target", "").equals(value(npc, "id", ""))) candidate.addProperty("target", newId);
-                }
+                String oldId = value(npc, "id", "");
+                ZombiesNpcGraphDraft.references(rule.getAsJsonObject(), v -> v.equals(oldId) ? newId : v,
+                        v -> v.startsWith(oldId + ".") ? newId + v.substring(oldId.length()) : v);
             }
             draft.npcs().set(draft.npcs().size() - 1, clone); npcIndex = draft.npcs().size() - 1; scroll = 0; rebuildWidgets();
         });
     }
 
     private void rules() {
-        rowButton("add_rule", () -> { draft.addRule(npc()); ruleIndex = npc().getAsJsonArray("rules").size() - 1; actionIndex = 0; scroll = 0; rebuildWidgets(); });
-        ruleSelector();
+        if (graphReturn == null) rowButton("add_rule", () -> { draft.addRule(npc()); ruleIndex = npc().getAsJsonArray("rules").size() - 1; actionIndex = 0; scroll = 0; rebuildWidgets(); });
+        if (graphReturn == null) ruleSelector();
         if (rule() == null) { heading("no_rules"); return; }
         JsonObject rule = rule();
         text("rule_id", value(rule, "id", ""), next -> draft.renameRule(npc(), rule, next));
         selection("trigger", value(rule, "trigger", "INTERACT"), List.of("INTERACT", "AUTO"), "trigger.", selected -> {
-            if (selected.equals("AUTO") && rule.getAsJsonArray("actions").asList().stream()
-                    .anyMatch(element -> List.of("TAKE_ITEM", "GIVE_ITEM").contains(value(element.getAsJsonObject(), "kind", "")))) {
-                message = tr("error.auto_items"); return;
+            if (selected.equals("AUTO") && ZombiesNpcGraphDraft.usesActor(rule)) {
+                message = tr("graph.error.actor"); return;
             }
             rule.addProperty("trigger", selected); rebuildWidgets();
         });
@@ -243,7 +249,9 @@ public final class ZombiesNpcDeployScreen extends Screen {
         }
         for (String key : prerequisites) toggleMember(key, rule.getAsJsonArray("requires"), new JsonPrimitive(key));
         reorder(npc().getAsJsonArray("rules"), ruleIndex, index -> ruleIndex = index);
-        rowButton("delete_rule", () -> { npc().getAsJsonArray("rules").remove(ruleIndex); ruleIndex--; clampSelection(); scroll = 0; rebuildWidgets(); });
+        if (graphReturn == null) {
+            rowButton("delete_rule", () -> { npc().getAsJsonArray("rules").remove(ruleIndex); ruleIndex--; clampSelection(); scroll = 0; rebuildWidgets(); });
+        }
     }
 
     private void ruleSelector() {
@@ -271,7 +279,12 @@ public final class ZombiesNpcDeployScreen extends Screen {
             });
         }
         if (action() == null) return;
-        JsonObject action = action();
+        actionProperties(action());
+        reorder(actions, actionIndex, index -> actionIndex = index);
+        rowButton("delete_action", () -> { actions.remove(actionIndex); actionIndex--; clampSelection(); rebuildWidgets(); });
+    }
+
+    private void actionProperties(JsonObject action) {
         List<String> kinds = Arrays.stream(ZombiesNpcConfig.Kind.values()).map(Enum::name)
                 .filter(kind -> !value(rule(), "trigger", "INTERACT").equals("AUTO") || (!kind.equals("TAKE_ITEM") && !kind.equals("GIVE_ITEM"))).toList();
         selection("kind", value(action, "kind", "DIALOGUE"), kinds, "kind.", selected -> {
@@ -316,8 +329,6 @@ public final class ZombiesNpcDeployScreen extends Screen {
                 });
             }
         }
-        reorder(actions, actionIndex, index -> actionIndex = index);
-        rowButton("delete_action", () -> { actions.remove(actionIndex); actionIndex--; clampSelection(); rebuildWidgets(); });
     }
 
     private void inventoryPicker(JsonObject target, String itemKey, String countKey) {
@@ -505,6 +516,10 @@ public final class ZombiesNpcDeployScreen extends Screen {
         catch (RuntimeException failure) { message = detail(failure); }
     }
     private void footer() {
+        if (graphReturn != null) {
+            button(tr("graph.back"), 12, height - 34, width - 24, this::returnToGraph, true);
+            return;
+        }
         int w = (width - 32) / 3;
         button(tr("save"), 12, height - 60, w, () -> save(null), canEdit());
         button(tr("preview"), 16 + w, height - 60, w, () -> save(() -> request("preview", "", this::collapse)), canEdit());
@@ -521,6 +536,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         }, Component.literal(tr("unsaved")), Component.literal(tr("discard_warning")), Component.literal(tr("discard")), Component.literal(tr("continue_editing"))));
     }
     @Override public void onClose() {
+        if (graphReturn != null) { returnToGraph(); return; }
         if (busy()) return;
         confirmDiscard(() -> { ZombiesDeployClientActionHandler.clearNpcEditor(this); minecraft.setScreen(parent); });
     }
@@ -538,7 +554,11 @@ public final class ZombiesNpcDeployScreen extends Screen {
     }
     @Override public boolean keyPressed(int key, int scan, int modifiers) {
         if (key == GLFW.GLFW_KEY_ESCAPE) { onClose(); return true; }
-        if (hasControlDown() && key == GLFW.GLFW_KEY_S) { save(null); return true; }
+        if (hasControlDown() && key == GLFW.GLFW_KEY_S) {
+            if (graphReturn != null) { var graph = graphReturn; returnToGraph(); graph.saveGraph(); }
+            else save(null);
+            return true;
+        }
         return super.keyPressed(key, scan, modifiers);
     }
     @Override public boolean isPauseScreen() { return false; }
@@ -548,7 +568,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         graphics.drawString(font, title, 12, 10, 0xFFE8EFED, false);
         String subtitle = mapName() + (draft != null && draft.dirty() ? "  * " + tr("unsaved") : "") + (!editable && draft != null ? "  " + tr("read_only") : "");
         graphics.drawString(font, font.plainSubstrByWidth(subtitle, width - 24), 12, 26, 0xFF7FD6A0, false);
-        graphics.fill(formX - 7, top, formX - 6, bottom, 0x605B796D);
+        if (graphReturn == null) graphics.fill(formX - 7, top, formX - 6, bottom, 0x605B796D);
         for (Label label : labels) graphics.drawString(font, font.plainSubstrByWidth(label.text, label.width), label.x, label.y, 0xFFE8EFED, false);
         graphics.drawString(font, font.plainSubstrByWidth(message, width - 24), 12, height - 77, 0xFFFFCD78, false);
         if (rows.size() > visibleRows()) {
@@ -560,6 +580,30 @@ public final class ZombiesNpcDeployScreen extends Screen {
         super.render(graphics, mouseX, mouseY, partialTick);
         if (mouseY >= height - 82 && mouseY < height - 65 && !message.isBlank()) graphics.renderTooltip(font, Component.literal(message), mouseX, mouseY);
     }
+    void openGraph() {
+        if (npc() == null) { message = tr("empty"); return; }
+        if (graphScreen == null) graphScreen = new ZombiesNpcGraphScreen(this);
+        minecraft.setScreen(graphScreen);
+    }
+    ZombiesNpcEditorDraft graphDraft() { return draft; }
+    JsonObject graphNpc() { return npc(); }
+    JsonObject graphRule() { return rule(); }
+    boolean graphEditable() { return canEdit(); }
+    List<Integer> graphBarriers() { return barriers; }
+    String graphMessage() { return message; }
+    int graphNpcIndex() { return npcIndex; }
+    int graphRuleIndex() { return ruleIndex; }
+    void graphSelect(int npc, int rule) { npcIndex = npc; ruleIndex = rule; actionIndex = 0; clampSelection(); }
+    void graphSave() { save(null); if (graphScreen != null) graphScreen.refresh(); }
+    void graphEdit(ZombiesNpcGraphScreen graph, JsonObject action) {
+        graphReturn = graph; graphAction = action; page = action == null ? 1 : 2; scroll = 0;
+        minecraft.setScreen(this);
+    }
+    private void returnToGraph() {
+        var graph = graphReturn; graphReturn = null; graphAction = null; page = 0; scroll = 0;
+        minecraft.setScreen(graph);
+    }
+    void graphBack() { page = 0; scroll = 0; minecraft.setScreen(this); }
     private static String detail(Throwable failure) {
         Throwable cause = failure;
         while (cause.getCause() != null) cause = cause.getCause();
