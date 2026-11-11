@@ -75,8 +75,9 @@ public final class ZombiesNpcClientPreview {
                 render(screen, 640, 360, output.resolve("page-" + page + "-640.png"));
                 if (page == 1 && button(screen, "新增触发规则").getY() >= button(screen, "delivery ▾").getY())
                     throw new AssertionError("Add rule must precede rule selection");
-                if (page == 2 && button(screen, "新增执行动作").getY() >= button(screen, "1. 玩家交出物品 ▾").getY())
-                    throw new AssertionError("Add action must precede action selection");
+                if (page == 2 && (button(screen, "新增执行动作").getY() >= button(screen, "delivery ▾").getY()
+                        || button(screen, "delivery ▾").getY() >= button(screen, "1. 玩家交出物品 ▾").getY()))
+                    throw new AssertionError("Action page order must be add action, current rule, current action");
                 render(screen, 320, 240, output.resolve("page-" + page + "-320.png"));
             }
             set(screen, "page", 0); set(screen, "scroll", 5);

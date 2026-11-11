@@ -256,12 +256,13 @@ public final class ZombiesNpcDeployScreen extends Screen {
     }
 
     private void actions() {
+        if (rule() != null) rowButton("add_action", () -> {
+            draft.addAction(rule(), ZombiesNpcConfig.Kind.DIALOGUE, currentPosition());
+            actionIndex = rule().getAsJsonArray("actions").size() - 1; rebuildWidgets();
+        });
         ruleSelector();
         if (rule() == null) { heading("no_rules"); return; }
         JsonArray actions = rule().getAsJsonArray("actions");
-        rowButton("add_action", () -> {
-            draft.addAction(rule(), ZombiesNpcConfig.Kind.DIALOGUE, currentPosition()); actionIndex = actions.size() - 1; rebuildWidgets();
-        });
         if (!actions.isEmpty()) {
             List<String> options = new ArrayList<>();
             for (int i = 0; i < actions.size(); i++) options.add((i + 1) + ". " + tr("kind." + value(actions.get(i).getAsJsonObject(), "kind", "DIALOGUE")));
