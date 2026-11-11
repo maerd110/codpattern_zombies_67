@@ -253,7 +253,7 @@ public final class ZombiesWaveValidator {
                 .orElse(false);
     }
 
-    static List<String> supportedEntityIds() {
+    public static List<String> supportedEntityIds() {
         return Collections.unmodifiableList(SUPPORTED_ENTITY_IDS);
     }
 

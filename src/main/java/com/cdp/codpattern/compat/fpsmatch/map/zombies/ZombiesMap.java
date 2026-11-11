@@ -160,12 +160,15 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     private final Map<UUID, Integer> combatRegenCooldowns = new LinkedHashMap<>();
     private int rosterVersion = 1;
     private final ZombiesNpcRuntime npcRuntime;
+    private final com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime scenarioRuntime;
+    private com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig preparedScenarioConfig;
 
     public ZombiesMap(ServerLevel serverLevel, String mapName, AreaData areaData) {
         super(serverLevel, mapName, areaData);
         addTeam(ZombiesTeamNames.SURVIVORS, SURVIVOR_LIMIT);
         this.roomId = RoomId.of(BuiltInGameModes.ZOMBIES, mapName);
         this.npcRuntime = new ZombiesNpcRuntime(this);
+        this.scenarioRuntime = new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime(this);
         loadStartupConfigs(serverLevel == null ? null : serverLevel.getServer());
         this.runtimeState = new ZombiesRoomRuntimeState(roomId);
         this.playerStateService = new ZombiesPlayerStateService();
@@ -272,6 +275,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                 this::failurePriority,
                 state -> state.waveState().isWaveComplete(),
                 List.of(new ZombiesLifecycleRuntimeHooks()));
+        this.lifecycleRuntime.setIntermissionReady(()->!waveTextScheduler.isActive()&&!scenarioRuntime.dialogueActive());
         this.startVoteService = new ZombiesStartVoteService(new ZombiesStartVoteHooks());
         this.roomHandle = ZombiesRoomHandleFactory.create(this);
     }
@@ -319,6 +323,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
         if (runtimeState.phase() == ZombiesGamePhase.START_VOTE) {
             startVoteService.tickVoteSession();
         }
+        scenarioRuntime.tick();
         lifecycleRuntime.tick();
         npcRuntime.tick(npcWave());
         tickCombatRegen();
@@ -760,6 +765,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
         return objects;
     }
 
+    public com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime scenarioRuntime(){return scenarioRuntime;}
     public ZombiesNpcRuntime npcRuntime() { return npcRuntime; }
 
     public int npcWave() { return runtimeState.waveState().targetWave(); }
@@ -1202,6 +1208,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     }
 
     private void clearFrozenObjectsAndResetRuntime() {
+        scenarioRuntime.reset();
         npcRuntime.reset();
         waveTextScheduler.cancel();
         if (objectsFrozen) {
@@ -1524,6 +1531,8 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
             if (stage == ZombiesStartupFlow.ParticipantStage.BEFORE_OCCUPANCY_ACQUIRE) {
                 preparedNpcConfig = ZombiesNpcRepository.load(
                         ZombiesNpcRepository.path(getServerLevel().getServer(), getMapName()));
+                preparedScenarioConfig=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(getServerLevel().getServer(),getMapName()));
+                scenarioRuntime.validate(preparedScenarioConfig,preparedNpcConfig);
                 npcRuntime.validate(preparedNpcConfig);
                 if (recoveryBlocked()) throw new IllegalStateException("Terminated match cannot start");
                 for (UUID id : context.memberIds()) {
@@ -1582,6 +1591,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                 ZombiesPurchasableBlockService.PlacementChanges purchasePointChanges;
                 try {
                     npcRuntime.start(preparedNpcConfig, false);
+                    scenarioRuntime.start(preparedScenarioConfig);
                     purchasePointChanges = ZombiesPurchasableBlockService.ensureMissingObjects(
                             runtimeObjects(), ZombiesMap.this::levelForDimension);
                 } catch (RuntimeException failure) {
@@ -1696,6 +1706,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     private final class ZombiesCleanupHooks implements ZombiesCleanupService.Hooks {
         @Override
         public void beforeCleanup(ZombiesCleanupParticipant.ZombiesCleanupContext context) {
+            scenarioRuntime.reset();
             npcRuntime.reset();
             clearRuntimeBarrierBlocks();
             clearBarrierVisuals();
@@ -1757,7 +1768,8 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                         runtimeState.waveState().maxWave());
                 reviveIntermissionDeadSpectators();
                 playWaveIntro();
-                waveTextScheduler.startWave(runtimeState.waveState().targetWave(), ZombiesMap.this::sendWaveText);
+                if(scenarioRuntime.ownsDialogue(runtimeState.waveState().targetWave()))scenarioRuntime.startWaveText(runtimeState.waveState().targetWave());
+                else waveTextScheduler.startWave(runtimeState.waveState().targetWave(), ZombiesMap.this::sendWaveText);
             }
             if (runtimeState.phase() == ZombiesGamePhase.WAVE_ACTIVE && waveDirector != null) {
                 waveDirector.enterTargetWave(runtimeState.waveState());

@@ -34,6 +34,7 @@ public final class ZombiesDeployClientActionHandler {
         if (connection != minecraft.getConnection()) {
             editor = null;
             npcEditor = null;
+            com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesScenarioScreen.disconnected();
             connection = minecraft.getConnection();
             ZombiesDeployClientState.reset();
         }
@@ -41,6 +42,7 @@ public final class ZombiesDeployClientActionHandler {
             if (npcEditor != null) npcEditor.accept(packet);
             return;
         }
+        if(packet.openScreen()&&com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesScenarioScreen.reopenIfSuspended(packet.snapshot().selectedMap()))return;
         if (packet.openScreen() && npcEditor != null && npcEditor.suspended()
                 && npcEditor.mapName().equals(packet.snapshot().selectedMap())) {
             npcEditor.reopen();

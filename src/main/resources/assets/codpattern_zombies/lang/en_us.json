@@ -604,5 +604,8 @@
     "gui.codpattern.zombies.npc.conversation.add": "Add dialogue option",
     "gui.codpattern.zombies.npc.conversation.close": "Leave for now",
     "gui.codpattern.zombies.npc.conversation.none": "No dialogue options are available yet.",
-    "gui.codpattern.zombies.npc.conversation.portrait": "NPC"
+    "gui.codpattern.zombies.npc.conversation.portrait": "NPC",
+    "gui.codpattern.zombies.npc.kind.MAP_EVENT": "Trigger map event",
+    "gui.codpattern.zombies.npc.map_event": "Map event",
+    "gui.codpattern.zombies.npc.conversation.remove_line": "Delete dialogue line %s"
 }

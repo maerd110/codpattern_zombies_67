@@ -69,7 +69,7 @@ public class ZombiesDeployToolScreen extends Screen {
 
     @Override protected void init() {
         labels.clear(); editors.clear(); listValues.clear(); lastFocused = null;
-        bodyTop = 76;
+        bodyTop = 100;
         int footer = width < 420 ? 60 : 34;
         compactDetails = session.details && height < 360;
         issueTop = compactDetails ? bodyTop : height - footer - Math.min(118, Math.max(54, height / 4));
@@ -92,6 +92,10 @@ public class ZombiesDeployToolScreen extends Screen {
                     }
                     ZombiesDeployClientActionHandler.openNpcEditor(this, session.draft(false));
                 })).active = !session.busy() && !snapshot().selectedMap().isBlank();
+        button("波次与地图剧情",12,62,132,()->withCommitted(()->{
+            if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
+            var screen=new ZombiesScenarioScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
+        })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
         if (!compactDetails) {
             if (mapPage()) { buildMaps(); buildRegistration(); }
             else { buildTypes(); buildObjects(); buildFields(); }

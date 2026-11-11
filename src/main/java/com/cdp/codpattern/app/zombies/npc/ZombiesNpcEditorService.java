@@ -18,7 +18,9 @@ import java.util.List;
 /** All GUI mutations execute on the server thread and compare the last read file revision. */
 public final class ZombiesNpcEditorService {
     public record Snapshot(String mapName, String revision, ZombiesNpcConfig config, List<Integer> barriers,
-                           boolean editable, String status, String error) { }
+                           boolean editable, String status, String error,List<String> events) {
+        public Snapshot(String mapName,String revision,ZombiesNpcConfig config,List<Integer> barriers,boolean editable,String status,String error){this(mapName,revision,config,barriers,editable,status,error,List.of());}
+    }
     private ZombiesNpcEditorService() { }
 
     public static Snapshot perform(ServerPlayer player, String mapName, String operation, String payload) {
@@ -68,7 +70,7 @@ public final class ZombiesNpcEditorService {
     private static Snapshot snapshot(ZombiesMap map, ZombiesNpcConfig config, String status, String error) {
         return new Snapshot(map.getMapName(), revision(config), config,
                 map.barriers().stream().map(barrier -> barrier.group()).distinct().sorted().toList(),
-                map.currentPhase() == ZombiesGamePhase.WAITING, status, error);
+                map.currentPhase() == ZombiesGamePhase.WAITING, status, error,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(map.getServerLevel().getServer(),map.getMapName())).events().stream().map(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent::id).toList());
     }
 
     public static String revision(ZombiesNpcConfig config) {

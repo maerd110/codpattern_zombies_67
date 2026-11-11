@@ -25,9 +25,11 @@ public final class ZombiesNpcEvents {
         if (event.phase == net.minecraftforge.event.TickEvent.Phase.END && event.getServer().getTickCount() % 20 == 0
                 && com.phasetranscrystal.fpsmatch.core.FPSMCore.initialized()) {
             ZombiesNpcRuntime.cleanupDetached(event.getServer(), false);
+            com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime.cleanupDetached(event.getServer(),false);
         }
     }
     @SubscribeEvent(priority = EventPriority.LOWEST) public static void stopping(net.minecraftforge.event.server.ServerStoppingEvent event) {
         ZombiesNpcRuntime.cleanupDetached(event.getServer(), true);
+        com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime.cleanupDetached(event.getServer(),true);
     }
 }

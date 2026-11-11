@@ -149,6 +149,11 @@ public final class ZombiesWaveConfigRepository {
     }
 
     public LoadResult load() {
+        if(wavesDirectory!=null && wavesDirectory.getParent()!=null){
+            try{var scenario=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(wavesDirectory.getParent().resolve("scenario.json"));
+                if(scenario.waves()!=null)return loadConfigured(scenario.waves());
+            }catch(RuntimeException invalid){return new LoadResult(List.of(),List.of(new ZombiesWaveValidator.ValidationIssue("rules.wave_invalid",wavesDirectory,"Invalid scenario: "+invalid.getMessage()))); }
+        }
         List<ZombiesWaveDefinition> waves = new ArrayList<>();
         List<ZombiesWaveValidator.ValidationIssue> loadIssues = new ArrayList<>();
 
@@ -172,6 +177,16 @@ public final class ZombiesWaveConfigRepository {
         return new LoadResult(waves, issues);
     }
 
+    public LoadResult loadConfigured(List<JsonObject> objects) {
+        var waves=new ArrayList<ZombiesWaveDefinition>();var issues=new ArrayList<ZombiesWaveValidator.ValidationIssue>();
+        for(var object:objects){
+            try{if(object.has("bossIntro")&&(!object.get("bossIntro").isJsonPrimitive()||!object.getAsJsonPrimitive("bossIntro").isBoolean()))throw new IllegalArgumentException("bossIntro must be boolean");
+                var wave=GSON.fromJson(object,ZombiesWaveDefinition.class);int number=wave.getWave();
+                wave.attachSource(wavesDirectory.resolve("wave_"+number+".json"),number,object.has("mobs"));wave.applyDefaults(defaults);waves.add(wave);
+            }catch(RuntimeException e){issues.add(new ZombiesWaveValidator.ValidationIssue("rules.wave_invalid",wavesDirectory,"Invalid wave: "+e.getMessage()));}
+        }
+        waves.sort(Comparator.comparingInt(ZombiesWaveDefinition::getWave));issues.addAll(validator.validate(waves).getIssues());return new LoadResult(waves,issues);
+    }
     public Path getWavesDirectory() {
         return wavesDirectory;
     }

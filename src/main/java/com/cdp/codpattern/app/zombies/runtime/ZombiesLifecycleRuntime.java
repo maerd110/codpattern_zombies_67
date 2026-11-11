@@ -15,6 +15,8 @@ public final class ZombiesLifecycleRuntime {
     private final ZombiesPhaseStateMachine.FailurePriority failurePriority;
     private final ZombiesPhaseStateMachine.WaveCompletion waveCompletion;
     private final List<ZombiesLifecycleHooks> hooks;
+    private java.util.function.BooleanSupplier intermissionReady=()->true;
+    public void setIntermissionReady(java.util.function.BooleanSupplier ready){intermissionReady=Objects.requireNonNull(ready); }
 
     public ZombiesLifecycleRuntime(
             ZombiesRoomRuntimeState state,
@@ -80,7 +82,7 @@ public final class ZombiesLifecycleRuntime {
                 waveCompletion
         );
         if (result.nextPhase().isPresent()) {
-            transitionTo(result.nextPhase().get());
+            if(state.phase()!=ZombiesGamePhase.INTERMISSION || result.nextPhase().get()!=ZombiesGamePhase.WAVE_ACTIVE || intermissionReady.getAsBoolean())transitionTo(result.nextPhase().get());
         }
         return ZombiesServiceResult.ok();
     }

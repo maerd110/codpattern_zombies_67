@@ -46,7 +46,12 @@ public final class ZombiesNpcBlockJournal extends SavedData {
         return tag;
     }
 
-    public void capture(ServerLevel level, String room, BlockPos pos) {
+    public void capture(ServerLevel level, String room, BlockPos pos) {captureAll(level,room,java.util.List.of(pos));}
+    public void captureAll(ServerLevel level,String room,java.util.Collection<BlockPos> positions){
+        for(var pos:positions)captureCell(level,room,pos);
+        level.getDataStorage().save();
+    }
+    private void captureCell(ServerLevel level, String room, BlockPos pos) {
         Map<BlockPos, CompoundTag> cells = rooms.computeIfAbsent(room, ignored -> new LinkedHashMap<>());
         if (cells.containsKey(pos)) return;
         CompoundTag before = new CompoundTag();
@@ -56,7 +61,6 @@ public final class ZombiesNpcBlockJournal extends SavedData {
         cells.put(pos.immutable(), before);
         setDirty();
         // Persist undo information before changing a chunk, including block-entity contents.
-        level.getDataStorage().save();
     }
 
     public void restore(ServerLevel level, String room) {
@@ -84,7 +88,6 @@ public final class ZombiesNpcBlockJournal extends SavedData {
         level.save(null, true, false);
         rooms.remove(room);
         setDirty();
-        level.getDataStorage().save();
     }
 
     public void restoreAll(ServerLevel level) {

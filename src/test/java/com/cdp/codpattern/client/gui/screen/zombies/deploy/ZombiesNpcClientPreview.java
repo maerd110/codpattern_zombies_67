@@ -147,7 +147,8 @@ public final class ZombiesNpcClientPreview {
             graphChecks(screen, working, client, output);
             sharedGraphChecks(screen,client,output);
             dialogueChecks(screen,client,output);
-            Files.writeString(output.resolve("result.txt"), "PASS 37 client renders, dialogue answers/pagination/close, choice node editing/visibility/ports, fresh interaction gates, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
+            scenarioChecks(screen,client,output);
+            Files.writeString(output.resolve("result.txt"), "PASS 47 client renders, wave/cast/dialogue/event deployment and line deletion, dialogue answers/pagination/close, choice node editing/visibility/ports, fresh interaction gates, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -337,6 +338,25 @@ public final class ZombiesNpcClientPreview {
         render(graph,1280,720,output.resolve("choice-canvas-1280.png"));
         graph.init(client,320,240);set(graph,"selected",owner.graphNpc().get("id").getAsString()+"."+r.get("id").getAsString()+"/"+choice.get("id").getAsString());press(graph,"节点属性");
         render(graph,320,240,output.resolve("choice-inspector-320.png"));
+    }
+    private static void scenarioChecks(ZombiesNpcDeployScreen previous,Minecraft client,Path output)throws Exception{
+        // A player dialogue node exposes deletion next to each prose line.
+        var d=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var npc=d.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));d.addRule(npc);ZombiesNpcSharedCanvas.ensure(d);
+        var node=ZombiesNpcGraphDraft.add(ZombiesNpcSharedCanvas.looseRule(d),ZombiesNpcGraph.Type.CHOICE,600,100,null);node.addProperty("text","保留第一句\n删除第二句");
+        var owner=new ZombiesNpcDeployScreen((ZombiesDeployToolScreen)get(previous,"parent"),new ZombiesDeployDraft("删除台词","INITIAL",-1,"MVP1_MINIMAL",java.util.Map.of()));set(owner,"draft",d);set(owner,"editable",true);owner.graphSelect(0,0);owner.init(client,1280,1000);press(owner,"逻辑画布");var graph=(ZombiesNpcGraphScreen)client.screen;set(graph,"selected","_loose/"+node.get("id").getAsString());graph.init(client,1280,1000);press(graph,"删除对话行 2");if(!node.get("text").getAsString().equals("保留第一句"))throw new AssertionError("Delete dialogue prose line removes only the selected line");render(graph,1280,1000,output.resolve("delete-dialogue-line-1280.png"));
+        var wave=com.google.gson.JsonParser.parseString("{\"wave\":1,\"maxAlive\":8,\"mobs\":[{\"entity\":\"minecraft:zombie\",\"count\":3}]}").getAsJsonObject();
+        var speaker=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Speaker("guide","电台向导","gold","white",true,false);
+        var dialogue=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Dialogue(1,List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Line("guide","准备好，怪物就要来了。",2)));
+        var event=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent("gate","北门变化",true,2,"",List.of(),com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Weather.RAIN,18000L);
+        var config=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,List.of(wave),List.of(speaker),List.of(dialogue),List.of(event));
+        var screen=new ZombiesScenarioScreen((Screen)get(previous,"parent"),"图形部署测试");var data=ZombiesNpcRepository.GSON.toJsonTree(config).getAsJsonObject();set(screen,"data",data);set(screen,"saved",data.toString());set(screen,"editable",true);set(screen,"ruleIds",List.of("guide.quest"));client.setScreen(screen);
+        for(int page=0;page<4;page++){set(screen,"page",page);set(screen,"expanded",0);set(screen,"scroll",0);render(screen,640,480,output.resolve("scenario-"+page+"-640.png"));render(screen,320,240,output.resolve("scenario-"+page+"-320.png"));}
+        set(screen,"page",0);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1200);press(screen,"新增怪物");if(data.getAsJsonArray("waves").get(0).getAsJsonObject().getAsJsonArray("mobs").size()!=2)throw new AssertionError("Wave editor adds mob cards");press(screen,"删除怪物 2");
+        set(screen,"page",1);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1200);screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox b&&b.getMessage().getString().equals("显示名字")).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("广播员");if(!data.getAsJsonArray("speakers").get(0).getAsJsonObject().get("name").getAsString().equals("广播员"))throw new AssertionError("Speaker fields are attached to saved draft");
+        set(screen,"page",2);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1200);press(screen,"新增波前台词");press(screen,"上移台词 2");var lines=data.getAsJsonArray("dialogues").get(0).getAsJsonObject().getAsJsonArray("lines");if(!lines.get(0).getAsJsonObject().get("text").getAsString().equals("新台词"))throw new AssertionError("Wave speech order can be edited");press(screen,"删除台词 1");if(lines.size()!=1||!lines.get(0).getAsJsonObject().get("speaker").getAsString().equals("guide"))throw new AssertionError("Speech deletion preserves remaining speaker reference");
+        set(screen,"page",3);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1400);press(screen,"需要已完成的 NPC 规则：不限 ▾");button(client.screen,"guide.quest").onPress();if(!data.getAsJsonArray("events").get(0).getAsJsonObject().get("rule").getAsString().equals("guide.quest"))throw new AssertionError("Event GUI selects NPC rule dependency");screen.init(client,1280,1400);press(screen,"新增方块／区域变化");press(screen,"清空区域为空气");var region=data.getAsJsonArray("events").get(0).getAsJsonObject().getAsJsonArray("regions").get(0).getAsJsonObject();if(!region.get("block").getAsString().equals("minecraft:air"))throw new AssertionError("Region can remove structure blocks");press(screen,"选择部署方块");render(client.screen,320,240,output.resolve("scenario-block-picker-320.png"));client.screen.onClose();
+        var valid=ZombiesNpcRepository.GSON.fromJson(data,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.class);if(valid.events().get(0).regions().size()!=1||valid.waves().get(0).getAsJsonArray("mobs").size()!=1)throw new AssertionError("Scenario GUI roundtrip preserves all four pages");
+        ZombiesScenarioScreen.disconnected();
     }
     private static void connect(ZombiesNpcGraphScreen graph,com.google.gson.JsonObject rule,String from,String port,String to)throws Exception{
         crossConnect(graph,rule,from,port,rule,to);

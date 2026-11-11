@@ -227,6 +227,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
             inspector.add(y->{var box=addRenderableWidget(new EditBox(font,inspectorX+6,y,inspectorWidth-12,20,Component.literal(tr("dialogue"))));
                 box.setMaxLength(8192);box.setValue(textLines.get(j));box.setEditable(editable());
                 box.setResponder(v->{remember();textLines.set(j,v);n.addProperty("text",String.join("\n",textLines));});});
+            rowButton(tr("conversation.remove_line",i+1),()->mutate(()->{textLines.remove(j);n.addProperty("text",String.join("\n",textLines));}),editable()&&textLines.size()>1);
         }
         rowButton(tr("add_line"),()->mutate(()->n.addProperty("text",value(n,"text","")+"\n")),editable());
         rowButton(tr("conversation.preview"),()->{
@@ -333,6 +334,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
                 rowButton(tr("add_line"), () -> mutate(() -> a.addProperty("text", value(a,"text","") + "\n")), editable());
             }
             case "TAKE_ITEM", "GIVE_ITEM" -> { field(tr("item"), a, "item", "minecraft:emerald"); field(tr("count"), a, "count", "1"); }
+            case "MAP_EVENT" -> select(tr("map_event"),owner.graphEvents(),value(a,"text",""),Function.identity(),v->mutate(()->a.addProperty("text",v)));
             case "OPEN_BARRIER" -> select(tr("barrier_group"), owner.graphBarriers().stream().map(String::valueOf).toList(), value(a,"barrierGroup","1"), Function.identity(), v -> mutate(() -> a.addProperty("barrierGroup", Integer.parseInt(v))));
             default -> line(tr("graph.full_properties"));
         }
@@ -560,7 +562,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
             case "ACTION" -> {
                 var a = n.getAsJsonObject("action");
                 yield switch (value(a, "kind", "")) {
-                    case "DIALOGUE" -> value(a, "text", "");
+                    case "DIALOGUE", "MAP_EVENT" -> value(a, "text", "");
                     case "TAKE_ITEM", "GIVE_ITEM" -> value(a, "item", "") + " × " + value(a, "count", "1");
                     case "OPEN_BARRIER" -> tr("barrier", value(a, "barrierGroup", "1"));
                     case "SET_BLOCK" -> value(a, "block", "") + (a.has("placements") ? " × " + a.getAsJsonArray("placements").size() : "");

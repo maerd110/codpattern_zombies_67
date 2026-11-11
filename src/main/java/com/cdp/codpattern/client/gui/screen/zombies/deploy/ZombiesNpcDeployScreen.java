@@ -34,6 +34,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
     private ZombiesNpcEditorDraft draft;
     private String revision = "";
     private List<Integer> barriers = List.of();
+    private List<String> events=List.of();
     private boolean editable;
     private boolean suspended;
     private long pending = -1;
@@ -100,6 +101,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
             else draft.accept(response.config());
             revision = response.revision();
             barriers = response.barriers();
+            events=response.events()==null?List.of():response.events();
             npcIndex = Math.min(Math.max(0, npcIndex), draft.npcs().size() - 1);
             clampSelection();
             message = tr("status." + response.status());
@@ -326,6 +328,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
             case "SET_BLOCK" -> {
                 blockPlacements(action);
             }
+            case "MAP_EVENT" -> selection("map_event",value(action,"text",""),events,"",selected->{action.addProperty("text",selected);rebuildWidgets();});
             case "OPEN_BARRIER" -> {
                 List<String> groups = barriers.stream().map(String::valueOf).toList();
                 if (groups.isEmpty()) heading("no_barriers");
@@ -592,6 +595,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
     JsonObject graphNpc() { return npc(); }
     JsonObject graphRule() { return rule(); }
     boolean graphEditable() { return canEdit(); }
+    List<String> graphEvents(){return events;}
     List<Integer> graphBarriers() { return barriers; }
     String graphMessage() { return message; }
     int graphNpcIndex() { return npcIndex; }

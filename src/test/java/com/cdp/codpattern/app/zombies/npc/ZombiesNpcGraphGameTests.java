@@ -413,6 +413,46 @@ public final class ZombiesNpcGraphGameTests {
         f.actor.getInventory().setItem(15,new ItemStack(Items.EMERALD));
         h.runAtTickTime(30,()->{try{f.map.npcRuntime().tick(1);var refreshed=f.map.npcRuntime().dialogue(f.actor);h.assertTrue(refreshed!=null&&refreshed.options().size()==1&&!refreshed.token().equals(first.token()),"open dialogue refreshes newly unlocked choices");h.assertTrue(f.actor.getInventory().countItem(Items.DIAMOND)==0&&!ZombiesNpcRuntime.selectDialogue(f.actor,first.token(),"yes"),"unlocking updates buttons without executing a consequence or accepting old session");}finally{f.close();}h.succeed();});
     }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=160)
+    public static void scenarioSpeechHoldsSpawnPhaseThroughLastLine(GameTestHelper h){var f=new Fixture(h);try{
+        var speaker=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Speaker("guide","向导","gold","aqua",true,false);
+        var config=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,null,List.of(speaker),List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Dialogue(1,List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Line("guide","准备",1),new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Line("guide","出发",2)),.5)),List.of());
+        var rt=f.map.scenarioRuntime();rt.start(config);rt.startWaveText(1);
+        var state=new com.cdp.codpattern.app.zombies.runtime.ZombiesRoomRuntimeState(com.cdp.codpattern.app.match.model.RoomId.of("zombies","scenario-text"));state.configureMaxWave(2);state.transitionTo(ZombiesGamePhase.INTERMISSION);
+        var lifecycle=new com.cdp.codpattern.app.zombies.runtime.ZombiesLifecycleRuntime(state,new com.cdp.codpattern.app.zombies.runtime.ZombiesPhaseStateMachine.Config(0,1,0),null,s0->false,List.of());lifecycle.setIntermissionReady(()->!rt.dialogueActive());
+        for(int tick=0;tick<69;tick++){rt.tick();lifecycle.tick();h.assertTrue(state.phase()==ZombiesGamePhase.INTERMISSION,"spawn phase is held through initial delay, both lines and final reading duration");}
+        h.assertTrue(f.map.lines.equals(List.of("[向导] 准备","[向导] 出发")),"speaker order and content are retained");rt.tick();lifecycle.tick();h.assertTrue(state.phase()==ZombiesGamePhase.WAVE_ACTIVE&&!rt.dialogueActive(),"spawn begins after final line duration, rather than while text is playing");rt.reset();
+    }finally{f.map.scenarioRuntime().reset();f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void scenarioRegionWaveNpcTriggerAndReset(GameTestHelper h){var f=new Fixture(h);try{
+        var at=f.origin.offset(2,0,0);h.getLevel().setBlock(at,Blocks.AIR.defaultBlockState(),18);h.getLevel().setBlock(at.east(),Blocks.AIR.defaultBlockState(),18);
+        var event=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent("door","通道",true,2,"guide.flow",List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region(at,at.east(),"minecraft:stone")),com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Weather.RAIN,18000L);
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"end"),node("end",Type.END,""))));
+        var rt=f.map.scenarioRuntime();rt.start(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,null,List.of(),List.of(),List.of(event)));rt.tick();h.assertTrue(h.getLevel().getBlockState(at).isAir(),"NPC and wave gate both required");
+        f.map.wave=2;rt.tick();h.assertTrue(!rt.completed("door"),"wave alone does not trigger NPC gated event");f.interact();long daytime=h.getLevel().getDayTime();boolean rain=h.getLevel().isRaining();rt.tick();
+        h.assertTrue(rt.completed("door")&&h.getLevel().getBlockState(at).is(Blocks.STONE)&&h.getLevel().getBlockState(at.east()).is(Blocks.STONE),"completed NPC plus wave applies full region");
+        h.assertTrue(h.getLevel().getDayTime()==daytime&&h.getLevel().isRaining()==rain,"room environment never mutates dimension-wide weather or time");
+        h.getLevel().setBlock(at,Blocks.AIR.defaultBlockState(),18);rt.tick();h.assertTrue(h.getLevel().getBlockState(at).isAir(),"event runs only once per round");
+        f.map.npcRuntime().reset();rt.reset();h.assertTrue(h.getLevel().getBlockState(at.east()).isAir(),"map region changes restore through the persistent journal");
+    }finally{f.map.scenarioRuntime().reset();f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void npcActionCallsManualMapEvent(GameTestHelper h){var f=new Fixture(h);try{
+        var at=f.origin.offset(2,0,0);h.getLevel().setBlock(at,Blocks.AIR.defaultBlockState(),18);
+        var event=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent("bridge","桥梁",false,0,"",List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region(at,at,"minecraft:oak_log")),null,null);
+        var config=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,null,List.of(),List.of(),List.of(event));f.map.scenarioRuntime().start(config);
+        var a=new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.MAP_EVENT,null,null,"bridge",null,0,null,null,0);
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"event"),action("event",a,"end"),node("end",Type.END,""))));
+        f.map.scenarioRuntime().tick();h.assertTrue(h.getLevel().getBlockState(at).isAir(),"manual event is not automatically fired");f.interact();h.assertTrue(h.getLevel().getBlockState(at).is(Blocks.OAK_LOG),"NPC action invokes selected event");
+    }finally{f.map.scenarioRuntime().reset();f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void scenarioValidationPreventsUnboundedAndOutsideChanges(GameTestHelper h){var f=new Fixture(h);try{
+        rejects(()->new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region(BlockPos.ZERO,new BlockPos(Integer.MAX_VALUE,Integer.MAX_VALUE,Integer.MAX_VALUE),"minecraft:stone"));
+        var outside=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent("outside","outside",true,1,"",List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region(f.origin.offset(20,0,0),f.origin.offset(20,0,0),"minecraft:stone")),null,null);
+        rejects(()->f.map.scenarioRuntime().validate(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,null,List.of(),List.of(),List.of(outside)),ZombiesNpcConfig.empty()));
+        rejects(()->new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,null,List.of(),List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Dialogue(1,List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Line("unknown","text",1)))),List.of()));
+        var invalid=com.google.gson.JsonParser.parseString("{\"wave\":1,\"maxAlive\":0,\"mobs\":[]}").getAsJsonObject();
+        var repo=new com.cdp.codpattern.app.zombies.service.ZombiesWaveConfigRepository(java.nio.file.Path.of("build/verification/wave-validation"));h.assertTrue(!repo.loadConfigured(List.of(invalid)).isValid(),"GUI saves use the same wave validator as file loading");
+    }finally{f.close();}h.succeed();}
     private static Node choice(List<Option> options){return new Node("choose",Type.CHOICE,0,0,null,null,0,"","",true,"What will you do?","",options);}
     private static Node node(String id,Type type,String next){return new Node(id,type,0,0,null,null,0,next,"");}
     private static Node action(String id,ZombiesNpcConfig.Action a,String next){return new Node(id,Type.ACTION,0,0,a,null,0,next,"");}

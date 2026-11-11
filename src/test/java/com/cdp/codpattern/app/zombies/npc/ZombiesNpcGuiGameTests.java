@@ -27,6 +27,27 @@ import java.util.UUID;
 @GameTestHolder("codpattern_npc")
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGuiGameTests {
+    @GameTest(template="empty",timeoutTicks=200)
+    public static void scenarioEditorImportsSavesValidatesAndRejectsStaleWrites(GameTestHelper h)throws Exception{
+        var origin=h.absolutePos(new BlockPos(1,2,1));String name="scenario-gui-"+UUID.randomUUID().toString().substring(0,8);
+        var map=new ZombiesMap(h.getLevel(),name,new AreaData(origin.offset(-1,-1,-1),origin.offset(5,5,5))){boolean running;@Override public com.cdp.codpattern.app.zombies.model.ZombiesGamePhase currentPhase(){return running?com.cdp.codpattern.app.zombies.model.ZombiesGamePhase.WAVE_ACTIVE:super.currentPhase();}};
+        var core=FPSMCore.getInstance();core.registerMap(map.getGameType(),map);var player=new FakePlayer(h.getLevel(),new GameProfile(UUID.randomUUID(),"scenario-admin")){@Override public boolean hasPermissions(int level){return level<=2;}};player.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(ZombiesItemRegister.ZOMBIES_DEPLOY_TOOL.get()));
+        var path=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(h.getLevel().getServer(),name);
+        try{
+            var loaded=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"load","");h.assertTrue(loaded.error().isBlank()&&!loaded.config().waves().isEmpty(),"deployment editor imports existing wave configuration");
+            var waveDir=com.cdp.codpattern.config.zombies.ZombiesConfigPaths.zombiesMapWaves(h.getLevel().getServer(),name);var original=Files.readString(waveDir.resolve("wave_001.json"));
+            var working=ZombiesNpcRepository.GSON.toJsonTree(loaded.config()).getAsJsonObject();working.getAsJsonArray("waves").get(0).getAsJsonObject().addProperty("maxAlive",9);
+            var speaker=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Speaker("narrator","旁白","gold","white",true,false);working.getAsJsonArray("speakers").add(ZombiesNpcRepository.GSON.toJsonTree(speaker));
+            var dialogue=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Dialogue(1,List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Line("narrator","前方危险",3)),1);working.getAsJsonArray("dialogues").set(0,ZombiesNpcRepository.GSON.toJsonTree(dialogue));
+            var req=new JsonObject();req.addProperty("revision",loaded.revision());req.add("config",working);
+            var saved=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"save",req.toString());h.assertTrue(saved.error().isBlank()&&Files.exists(path),"graphical scenario save succeeds");
+            var runtimeWaves=new com.cdp.codpattern.app.zombies.service.ZombiesWaveConfigRepository(waveDir).load();h.assertTrue(runtimeWaves.isValid()&&runtimeWaves.getWaves().get(0).getMaxAlive()==9,"startup consumes GUI wave overrides");h.assertTrue(Files.readString(waveDir.resolve("wave_001.json")).equals(original),"import keeps original wave files intact");
+            var disk=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(path);map.scenarioRuntime().start(disk);h.assertTrue(map.scenarioRuntime().ownsDialogue(2),"GUI scenario owns the full wave dialogue list so deleting an entry cannot resurrect legacy text");h.assertTrue(disk.dialogues().get(0).delaySeconds()==1&&disk.dialogues().get(0).lines().get(0).seconds()==3&&disk.speakers().get(0).bold(),"cast, format and relative dialogue timing persist");
+            h.assertTrue(!com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"save",req.toString()).error().isBlank(),"stale concurrent saves rejected");req.addProperty("revision",saved.revision());map.running=true;h.assertTrue(!com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"save",req.toString()).error().isBlank(),"running map rejects edits");map.running=false;
+            var packet=new ZombiesNpcDialogueNetwork.EditorRequest(UUID.randomUUID(),name,"save",req.toString());var buf=new FriendlyByteBuf(Unpooled.buffer());try{packet.encode(buf);h.assertTrue(packet.equals(ZombiesNpcDialogueNetwork.EditorRequest.decode(buf)),"bounded editor request codec");}finally{buf.release();}
+            var reply=new ZombiesNpcDialogueNetwork.EditorReply(packet.token(),ZombiesNpcRepository.GSON.toJson(saved));buf=new FriendlyByteBuf(Unpooled.buffer());try{reply.encode(buf);h.assertTrue(reply.equals(ZombiesNpcDialogueNetwork.EditorReply.decode(buf)),"bounded editor response codec");}finally{buf.release();}
+        }finally{map.scenarioRuntime().reset();map.npcRuntime().reset();core.unregisterMap(map);Files.deleteIfExists(path);}h.succeed();
+    }
     @GameTest(template = "empty", timeoutTicks = 200)
     public static void graphicalDraftPreservesRulesAndReferences(GameTestHelper helper) {
         var working = new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());

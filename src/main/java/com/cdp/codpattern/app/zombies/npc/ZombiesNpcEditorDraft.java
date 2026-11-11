@@ -67,7 +67,7 @@ public final class ZombiesNpcEditorDraft {
         action.addProperty("kind", kind.name());
         switch (kind) {
             case NPC -> { if (!action.has("appearance")) action.add("appearance", new JsonObject()); }
-            case DIALOGUE -> defaultValue(action, "text", "");
+            case DIALOGUE, MAP_EVENT -> defaultValue(action, "text", "");
             case TAKE_ITEM, GIVE_ITEM -> { defaultValue(action, "item", "minecraft:emerald"); if (!action.has("count")) action.addProperty("count", 1); }
             case SET_BLOCK -> {
                 if (!action.has("position")) action.add("position", position(position));

@@ -77,6 +77,7 @@ public final class ZombiesNpcRuntime {
                         }
                       }
                     }
+                    case MAP_EVENT -> map.scenarioRuntime().requireEvent(action.text());
                     case OPEN_BARRIER -> requireBarrier(action.barrierGroup());
                     case TAKE_ITEM, GIVE_ITEM -> ZombiesNpcInventory.parse(action.item());
                     default -> { }
@@ -480,10 +481,21 @@ public final class ZombiesNpcRuntime {
                 map.openNpcBarrier(action.barrierGroup());
             }
             case SET_BLOCK -> placeBlocks(action.blockPlacements());
+            case MAP_EVENT -> map.scenarioRuntime().trigger(action.text());
             default -> throw new IllegalStateException("Unexpected NPC action");
         }
     }
 
+    public boolean isRuleComplete(String key){return completed.contains(key);}
+    public void validateMapBlocks(List<ZombiesNpcConfig.BlockPlacement> placements){
+        // Reuse the same map/device boundaries and static-block policy as NPC changes, in bounded batches.
+        for(int i=0;i<placements.size();i+=256){var batch=placements.subList(i,Math.min(i+256,placements.size()));if(batch.isEmpty())continue;
+            var action=new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.SET_BLOCK,null,null,null,null,0,null,null,0,null,null,null,batch);
+            var npc=new ZombiesNpcConfig.Npc("event_validation",new ZombiesNpcConfig.Appearance("",null,null,true,batch.get(0).position()),"",List.of(new ZombiesNpcConfig.Rule("event",ZombiesNpcConfig.Trigger.AUTO,0,List.of(),false,List.of(),List.of(action))));
+            validate(new ZombiesNpcConfig(1,List.of(npc)));
+        }
+    }
+    public void applyMapBlocks(List<ZombiesNpcConfig.BlockPlacement> placements){validateMapBlocks(placements);placeBlocks(placements);}
     private void placeBlocks(List<ZombiesNpcConfig.BlockPlacement> placements) {
         Map<BlockPos, BlockState> changes = new LinkedHashMap<>();
         for (var placement : placements) {
@@ -493,11 +505,11 @@ public final class ZombiesNpcRuntime {
             changes.put(pos, parseBlock(placement.block()));
         }
         Map<BlockPos, BlockState> before = new LinkedHashMap<>();
+        ZombiesNpcBlockJournal.get(level()).captureAll(level(), map.getMapName(), changes.keySet());
         try {
             for (var change : changes.entrySet()) {
                 BlockPos pos = change.getKey();
                 before.put(pos, level().getBlockState(pos));
-                ZombiesNpcBlockJournal.get(level()).capture(level(), map.getMapName(), pos);
                 if (!level().setBlock(pos, change.getValue(), 18) && !level().getBlockState(pos).equals(change.getValue())) {
                     throw new IllegalStateException("Cannot place NPC block " + pos);
                 }

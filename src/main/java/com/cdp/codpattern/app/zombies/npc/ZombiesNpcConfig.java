@@ -62,7 +62,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
 
     public enum Pose { STANDING, SITTING, LYING }
     public enum Trigger { INTERACT, AUTO }
-    public enum Kind { NPC, DIALOGUE, TAKE_ITEM, GIVE_ITEM, SET_BLOCK, OPEN_BARRIER }
+    public enum Kind { NPC, DIALOGUE, TAKE_ITEM, GIVE_ITEM, SET_BLOCK, OPEN_BARRIER, MAP_EVENT }
 
     public record Position(double x, double y, double z, float yaw) {
         public Position {
@@ -163,6 +163,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
             if (placements.size() > 256) throw new IllegalArgumentException("At most 256 blocks per action");
             if (kind == null) throw new IllegalArgumentException("Action needs kind");
             switch (kind) {
+                case MAP_EVENT -> { if(text==null||!text.matches("[a-zA-Z0-9_-]{1,64}"))throw new IllegalArgumentException("请选择地图事件"); }
                 case NPC -> { if (appearance == null && dialogue == null) throw new IllegalArgumentException("NPC action needs appearance or dialogue"); }
                 case DIALOGUE -> { if (text == null) throw new IllegalArgumentException("DIALOGUE needs text"); }
                 case TAKE_ITEM, GIVE_ITEM -> {
