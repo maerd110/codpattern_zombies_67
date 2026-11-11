@@ -583,5 +583,7 @@
     "gui.codpattern.zombies.npc.loose.label": "Unassigned: connect to a flow",
     "gui.codpattern.zombies.npc.loose.attach_first": "Attach this end to a rule first.",
     "npc.item.received": "“%s” placed in backpack × %s",
-    "npc.item.delivered": "“%s” delivered × %s"
+    "npc.item.delivered": "“%s” delivered × %s",
+    "gui.codpattern.zombies.npc.debug.mode": "NPC debug mode (whole map)",
+    "gui.codpattern.zombies.npc.condition.reference": "Rule state"
 }

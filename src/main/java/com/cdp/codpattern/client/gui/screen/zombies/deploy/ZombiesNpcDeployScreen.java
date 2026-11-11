@@ -185,6 +185,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
         bool("alive", appearance, "alive", true);
         bool("invulnerable", appearance, "invulnerable", true);
+        bool("debug.mode",draft.options(),"debug",false);
         text("dialogue_interval", npc, "dialogueIntervalSeconds", "1");
         position(appearance, "position");
         if (!value(npc,"dialogue","").isBlank()) rowButton("dialogue.import", () -> {

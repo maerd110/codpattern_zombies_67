@@ -5,10 +5,12 @@ import java.util.Set;
 import java.util.function.IntPredicate;
 
 /** Immutable authoring data. Runtime progress is deliberately kept outside this file. */
-public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph.Node> looseNodes) {
-    public ZombiesNpcConfig(int version,List<Npc> npcs){this(version,npcs,List.of());}
+public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph.Node> looseNodes, Boolean debug) {
+    public ZombiesNpcConfig(int version,List<Npc> npcs){this(version,npcs,List.of(),false);}
+    public ZombiesNpcConfig(int version,List<Npc> npcs,List<ZombiesNpcGraph.Node> looseNodes){this(version,npcs,looseNodes,false);}
     public static final double DEFAULT_INTERVAL_SECONDS = 1;
     public ZombiesNpcConfig {
+        debug=debug==null?false:debug;
         if (version != 1) throw new IllegalArgumentException("NPC version must be 1");
         npcs = List.copyOf(npcs);
         looseNodes=looseNodes==null?List.of():List.copyOf(looseNodes);

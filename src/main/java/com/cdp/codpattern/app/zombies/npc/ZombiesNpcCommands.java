@@ -121,7 +121,7 @@ public final class ZombiesNpcCommands {
                         default -> throw new IllegalArgumentException("Unknown NPC operation");
                     }
                 }
-                config = new ZombiesNpcConfig(1, npcs, config.looseNodes());
+                config = new ZombiesNpcConfig(1, npcs, config.looseNodes(), config.debug());
                 room.npcRuntime().validate(config);
                 ZombiesNpcRepository.save(path, config);
                 room.npcRuntime().reset();

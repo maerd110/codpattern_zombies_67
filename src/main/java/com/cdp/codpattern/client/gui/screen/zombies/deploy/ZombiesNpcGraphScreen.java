@@ -495,7 +495,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         g.drawString(font, font.plainSubstrByWidth(title, NW - 12), 6, 6, 0xFFFFFFFF, false);
         g.drawString(font, font.plainSubstrByWidth(summary(n).replace('\n', ' '), NW - 24), 10, 29, 0xFFCDDCE5, false);
         { g.fill(-4, 39, 4, 47, 0xFF8CD6F0); g.drawString(font, tr("graph.in"), 8, 42, 0xFF93ACBD, false); }
-        if(Set.of("ENTRY","BRANCH","AWAIT").contains(value(n,"type",""))){g.fill(-4,64,4,72,0xFFB895F5);g.drawString(font,tr("shared.dependency_in"),8,65,0xFFD2B9FA,false);}
+        if(Set.of("ENTRY","BRANCH","AWAIT").contains(value(n,"type",""))){g.fill(-4,64,4,72,0xFFB895F5);g.drawString(font,tr(value(n,"type","").equals("ENTRY")?"shared.dependency_in":"condition.reference"),8,65,0xFFD2B9FA,false);}
         for (String p : ports(n)) {
             int py = p.equals("onFalse") ? 68 : 43;
             String label = tr(p.equals("completed")?"shared.completed":p.equals("onFalse") ? "graph.false" : value(n, "type", "").equals("BRANCH") ? "graph.true" : "graph.next");
@@ -528,13 +528,14 @@ public final class ZombiesNpcGraphScreen extends Screen {
         };
     }
     private void curve(GuiGraphics g,double x0,double y0,double x1,double y1,int color){
-        if(x1>=x0+20){double bend=Math.max(24,Math.min(150,(x1-x0)*.45));bezier(g,x0,y0,x0+bend,y0,x1-bend,y1,x1,y1,color);}
-        else{double route=Math.max(y0,y1)+Math.min(120,50+Math.abs(x1-x0)*.08);
-            bezier(g,x0,y0,x0+60,y0,x0+60,route,x0+35,route,color);
-            segment(g,x0+35,route,x1-35,route,color);
-            bezier(g,x1-35,route,x1-60,route,x1-60,y1,x1,y1,color);
+        if(x1>=x0){double bend=Math.max(2,Math.min(150*zoom,(x1-x0)*.45));bezier(g,x0,y0,x0+bend,y0,x1-bend,y1,x1,y1,color);}
+        else{double margin=60*zoom,turn=35*zoom;
+            double route=Math.max(y0,y1)+zoom*Math.min(120,50+Math.abs(x1-x0)/zoom*.08);
+            bezier(g,x0,y0,x0+margin,y0,x0+margin,route,x0+turn,route,color);
+            segment(g,x0+turn,route,x1-turn,route,color);
+            bezier(g,x1-turn,route,x1-margin,route,x1-margin,y1,x1,y1,color);
         }
-        segment(g,x1-5,y1-3,x1,y1,color);segment(g,x1-5,y1+3,x1,y1,color);
+        double arrow=Math.max(1.5,5*zoom);segment(g,x1-arrow,y1-arrow*.6,x1,y1,color);segment(g,x1-arrow,y1+arrow*.6,x1,y1,color);
     }
     private void bezier(GuiGraphics g,double ax,double ay,double bx,double by,double cx,double cy,double dx,double dy,int color){
         double length=Math.hypot(bx-ax,by-ay)+Math.hypot(cx-bx,cy-by)+Math.hypot(dx-cx,dy-cy);
@@ -544,7 +545,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
     private void segment(GuiGraphics g,double ax,double ay,double bx,double by,int color){
         if(Math.max(ax,bx)<8||Math.min(ax,bx)>canvasRight||Math.max(ay,by)<94||Math.min(ay,by)>canvasBottom)return;
         double length=Math.hypot(bx-ax,by-ay);if(length<.001)return;
-        double nx=-(by-ay)/length,ny=(bx-ax)/length;
+        double scale=Math.max(.4,Math.min(1,Math.sqrt(zoom)));
+        double nx=-(by-ay)/length*scale,ny=(bx-ax)/length*scale;
         var buffer=g.bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.gui());var matrix=g.pose().last().pose();
         int r=(color>>16)&255,green=(color>>8)&255,b=color&255;
         for(int strip=0;strip<3;strip++){

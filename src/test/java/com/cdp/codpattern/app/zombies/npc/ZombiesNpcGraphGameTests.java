@@ -21,6 +21,41 @@ import static com.cdp.codpattern.app.zombies.npc.ZombiesNpcGraph.*;
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGraphGameTests {
     @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void debugDiagnosticsDefaultOffAndAdminOnly(GameTestHelper h){var f=new Fixture(h);try{
+        var c=new Condition(Match.ALL,List.of(new Test(TestKind.WAVE,3,"",1,"",false)));
+        var r=new ZombiesNpcConfig.Rule("wait",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(),0,"",1,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"wait"),condition("wait",Type.AWAIT,c,"end",""),node("end",Type.END,""))));
+        var npc=new ZombiesNpcConfig.Npc("guide",new ZombiesNpcConfig.Appearance("guide",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin)),"",List.of(r),0);
+        f.map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(npc)),false);f.interact();h.assertTrue(f.map.notices.isEmpty(),"normal play has no waiting diagnostics by default");
+        f.map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(npc),List.of(),true),false);f.interact();h.assertTrue(f.map.notices.stream().anyMatch(m->m.getString().contains("3")),"enabled debug mode explains the wait to an administrator");
+        f.map.notices.clear();f.map.admin=false;f.map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(npc),List.of(),true),false);f.interact();h.assertTrue(f.map.notices.isEmpty(),"debug does not leak to non-admin players");
+    }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void mismatchedItemGateExplainsQueuedCrossNpcResume(GameTestHelper h){var f=new Fixture(h);
+        String key="minecraft:tripwire_hook{display:{Name:'{\"text\":\"品C229钥匙\"}'}}";
+        var c=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:emerald",1,"",false)));
+        var firstGraph=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"check"),condition("check",Type.BRANCH,c,"take","no"),action("take",item(ZombiesNpcConfig.Kind.TAKE_ITEM,key),"say"),action("say",say("queued followup"),"end"),action("no",say("missing"),"entry"),node("end",Type.END,"")));
+        var wait=new Condition(Match.ALL,List.of(new Test(TestKind.WAVE,2,"",1,"",false)));
+        var secondGraph=new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"intro"),action("intro",say("intro"),"wait"),condition("wait",Type.AWAIT,wait,"give",""),action("give",item(ZombiesNpcConfig.Kind.GIVE_ITEM,key),"end"),node("end",Type.END,"")));
+        var a=new ZombiesNpcConfig.Rule("first",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(),0,"",1,firstGraph);
+        var b=new ZombiesNpcConfig.Rule("second",ZombiesNpcConfig.Trigger.INTERACT,0,List.of(),false,List.of(),List.of(),0,"",1,secondGraph);
+        var n1=new ZombiesNpcConfig.Npc("guide",new ZombiesNpcConfig.Appearance("guide",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin)),"",List.of(a),0);
+        var n2=new ZombiesNpcConfig.Npc("guard",new ZombiesNpcConfig.Appearance("guard",null,ZombiesNpcConfig.Pose.STANDING,true,position(f.origin.offset(4,0,0))),"",List.of(b),0);
+        f.actor.getInventory().setItem(15,new ItemStack(Items.EMERALD));f.map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(n1,n2)),false);f.interact();
+        h.assertTrue(f.map.lines.isEmpty(),"emerald gate incorrectly permits entering a missing-key transfer and pauses there");
+        for(int tick=1;tick<=60;tick++){int t=tick;h.runAtTickTime(tick,()->{
+            if(t==10){var npc=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin.offset(4,0,0)).inflate(1)).stream().filter(n->n.getName().getString().equals("guard")).findFirst().orElseThrow();f.map.npcRuntime().interact(f.actor,"guard",npc);}
+            if(t==15)f.map.wave=2;f.map.npcRuntime().tick(f.map.wave);
+            if(t==60){try{h.assertTrue(f.map.lines.equals(List.of("[guard] intro","[guide] queued followup")),"reward unblocks the already-started first sequence without another click; no new rule is implicitly started");h.assertTrue(f.actor.getInventory().countItem(Items.TRIPWIRE_HOOK)==0,"queued transfer consumes the key as configured");}finally{f.close();}h.succeed();}
+        });}
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void matchingKeyGateDoesNotQueueAnUnstartedTrade(GameTestHelper h){var f=new Fixture(h);try{
+        var c=new Condition(Match.ALL,List.of(new Test(TestKind.ITEM_ACTOR,0,"minecraft:tripwire_hook",1,"",false)));
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"check"),condition("check",Type.BRANCH,c,"take","no"),action("take",item(ZombiesNpcConfig.Kind.TAKE_ITEM,"minecraft:tripwire_hook"),"end"),action("no",say("missing key"),"entry"),node("end",Type.END,""))));
+        f.interact();f.actor.getInventory().setItem(15,new ItemStack(Items.TRIPWIRE_HOOK));f.map.npcRuntime().tick(1);
+        h.assertTrue(f.actor.getInventory().countItem(Items.TRIPWIRE_HOOK)==1&&f.map.lines.equals(List.of("[guide] missing key")),"a correct failed gate returns to entry and receiving an item alone cannot restart the rule");
+    }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
     public static void allFalseConditionsRouteDuringOpening(GameTestHelper h){
         for(int wave:List.of(0,2))for(boolean open:List.of(false,true)){var f=new Fixture(h);try{
             f.map.phase=wave==0?ZombiesGamePhase.OPENING_COUNTDOWN:ZombiesGamePhase.WAVE_ACTIVE;f.map.wave=wave;f.map.barrierOpen=open;
@@ -156,7 +191,7 @@ public final class ZombiesNpcGraphGameTests {
         f.interact();f.map.npcRuntime().tick(1);f.map.npcRuntime().tick(1);
         h.assertTrue(f.map.lines.equals(List.of("[guard] delivered","[guard] ready")),"cross-NPC target action and automatic dependency execute in order, interaction rule waits");
         h.runAtTickTime(20,()->{try{
-            var entity=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin.offset(4,0,0)).inflate(1)).stream().findFirst().orElseThrow();
+            var entity=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin.offset(4,0,0)).inflate(1)).stream().filter(n->n.getName().getString().equals("guard")).findFirst().orElseThrow();
             f.map.npcRuntime().interact(f.actor,"guard",entity);
             h.assertTrue(f.map.lines.size()==3 && f.map.lines.get(2).equals("[guard] next interaction"),"linked interaction rule still requires interaction with its own NPC");
             f.map.npcRuntime().start(config,false);f.map.npcRuntime().tick(1);
@@ -313,15 +348,15 @@ public final class ZombiesNpcGraphGameTests {
     private static final class Fixture{
         final TestMap map;final BlockPos origin;final ServerPlayer actor;
         Fixture(GameTestHelper h){origin=h.absolutePos(new BlockPos(1,2,1));map=new TestMap(h.getLevel(),"graph-"+UUID.randomUUID().toString().substring(0,8),new AreaData(origin.offset(-1,-1,-1),origin.offset(8,5,8)));FPSMCore.getInstance().registerMap(map.getGameType(),map);actor=player();}
-        ServerPlayer player(){var p=new FakePlayer(map.getServerLevel(),new GameProfile(UUID.randomUUID(),"graph-actor")){@Override public void sendSystemMessage(Component message){map.notices.add(message);}};p.moveTo(origin.getX()+.5,origin.getY(),origin.getZ()+.5);map.actors.add(p);return p;}
+        ServerPlayer player(){var p=new FakePlayer(map.getServerLevel(),new GameProfile(UUID.randomUUID(),"graph-actor")){@Override public boolean hasPermissions(int level){return map.admin&&level<=2;}@Override public void sendSystemMessage(Component message){map.notices.add(message);}};p.moveTo(origin.getX()+.5,origin.getY(),origin.getZ()+.5);map.actors.add(p);return p;}
         void start(ZombiesNpcConfig.Trigger trigger,ZombiesNpcGraph graph){var r=new ZombiesNpcConfig.Rule("flow",trigger,0,List.of(),false,List.of(),List.of(),0,"",1,graph);start(List.of(r),0);}
         void start(List<ZombiesNpcConfig.Rule> rules,double interval){var npc=new ZombiesNpcConfig.Npc("guide",new ZombiesNpcConfig.Appearance("guide",null,ZombiesNpcConfig.Pose.STANDING,true,position(origin)),"",rules,interval);map.npcRuntime().start(new ZombiesNpcConfig(1,List.of(npc)),false);}
         void interact(){interact(actor);}
-        void interact(ServerPlayer player){var npc=map.getServerLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(origin).inflate(1)).stream().findFirst().orElseThrow();map.npcRuntime().interact(player,"guide",npc);}
+        void interact(ServerPlayer player){var npc=map.getServerLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(origin).inflate(1)).stream().filter(n->n.getName().getString().equals("guide")).findFirst().orElseThrow();map.npcRuntime().interact(player,"guide",npc);}
         void close(){map.npcRuntime().reset();FPSMCore.getInstance().unregisterMap(map);}
     }
     private static final class TestMap extends ZombiesMap{
-        final List<ServerPlayer> actors=new ArrayList<>();final List<String> lines=new ArrayList<>();final List<Long> times=new ArrayList<>();final List<Component> notices=new ArrayList<>();int wave=1;boolean barrierOpen;ZombiesGamePhase phase=ZombiesGamePhase.WAVE_ACTIVE;
+        final List<ServerPlayer> actors=new ArrayList<>();final List<String> lines=new ArrayList<>();final List<Long> times=new ArrayList<>();final List<Component> notices=new ArrayList<>();int wave=1;boolean barrierOpen,admin=true;ZombiesGamePhase phase=ZombiesGamePhase.WAVE_ACTIVE;
         TestMap(net.minecraft.server.level.ServerLevel l,String n,AreaData a){super(l,n,a);}
         @Override public ZombiesGamePhase currentPhase(){return phase;}
         @Override public boolean npcBarrierOpen(int group){return barrierOpen;}

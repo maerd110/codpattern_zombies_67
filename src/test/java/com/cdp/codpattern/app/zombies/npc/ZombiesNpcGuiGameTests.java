@@ -78,6 +78,7 @@ public final class ZombiesNpcGuiGameTests {
             tests.get(0).getAsJsonObject().addProperty("value",0);
             var done=ZombiesNpcGraphDraft.test();done.addProperty("kind","RULE_DONE");done.addProperty("reference","npc_2.rule_1");tests.add(done);
             ZombiesNpcGraphDraft.connect(rule,"node_1","next",gateNode.get("id").getAsString());ZombiesNpcGraphDraft.connect(rule,gateNode.get("id").getAsString(),"next","node_2");ZombiesNpcGraphDraft.connect(rule,gateNode.get("id").getAsString(),"onFalse","node_3");
+            working.options().addProperty("debug",true);
             String request = working.request(initial.revision());
             var c2sBuffer = new FriendlyByteBuf(Unpooled.buffer());
             var originalPacket = ZombiesDeployToolActionC2SPacket.npcEditor(deployment, "save", request, 71);
@@ -92,6 +93,7 @@ public final class ZombiesNpcGuiGameTests {
             helper.assertTrue(saved.config().npcs().get(1).rules().get(0).requires().equals(List.of("npc_1.rule_1")) && saved.config().npcs().get(0).rules().get(0).graph().canvasVersion()==1,"shared layout and cross-NPC dependency survive actual save packets");
             var persisted=ZombiesNpcRepository.load(path).npcs().get(0).rules().get(0).graph().nodes().stream().filter(n->n.type()==ZombiesNpcGraph.Type.BRANCH).findFirst().orElseThrow().condition();
             helper.assertTrue(persisted.tests().get(0).value()==0&&persisted.tests().get(1).reference().equals("npc_2.rule_1"),"GUI edit from wave three to zero reaches actual JSON without deleting the other rule condition");
+            helper.assertTrue(saved.config().debug()&&ZombiesNpcRepository.load(path).debug(),"debug toggle survives actual GUI save and file reload");
             String before = Files.readString(path);
             var stale = ZombiesNpcEditorService.perform(player, name, "save", request);
             helper.assertTrue(stale.error().endsWith("conflict") && Files.readString(path).equals(before), "stale GUI must not overwrite newer data");

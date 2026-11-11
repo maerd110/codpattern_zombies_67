@@ -583,5 +583,7 @@
     "gui.codpattern.zombies.npc.loose.label": "未归属：连入流程后确定",
     "gui.codpattern.zombies.npc.loose.attach_first": "请先将结束节点接入一条规则。",
     "npc.item.received": "“%s”已放入背包 × %s",
-    "npc.item.delivered": "“%s”已交付 × %s"
+    "npc.item.delivered": "“%s”已交付 × %s",
+    "gui.codpattern.zombies.npc.debug.mode": "NPC 调试模式（关卡全局）",
+    "gui.codpattern.zombies.npc.condition.reference": "规则状态"
 }

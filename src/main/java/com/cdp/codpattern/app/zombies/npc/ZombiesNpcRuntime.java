@@ -230,6 +230,7 @@ public final class ZombiesNpcRuntime {
             }
         }
         if (npc.rules().stream().anyMatch(rule -> rule.graph() != null)) {
+            if(!config.debug() || !player.hasPermissions(2))return;
             for(var rule:npc.rules())if(rule.trigger()==ZombiesNpcConfig.Trigger.INTERACT&&!completed.contains(id+"."+rule.id())) {
                 player.sendSystemMessage(Component.literal("规则 "+rule.id()+" 的入口条件未满足：最低波次 "+rule.minWave()+"，屏障 "+rule.openedBarriers()+"，前置规则 "+rule.requires()+(rule.requiredItem().isBlank()?"":"，所需物品 "+rule.requiredItem()+" × "+rule.requiredCount())));return;
             }
@@ -314,7 +315,7 @@ public final class ZombiesNpcRuntime {
     }
 
     private void reportPending(ServerPlayer actor,Sequence sequence){
-        if(actor==null)return;String text="剧情正在按设置的间隔执行，请稍候。";
+        if(actor==null || !config.debug() || !actor.hasPermissions(2))return;String text="剧情正在按设置的间隔执行，请稍候。";
         if(sequence.graphNodes!=null){var node=sequence.graphNodes.get(sequence.cursor);if(node.type()==ZombiesNpcGraph.Type.AWAIT){
             var details=new java.util.ArrayList<String>();for(var test:node.condition().tests())details.add((test.negated()?"不满足 ":"")+switch(test.kind()){
                 case WAVE->"波次达到 "+test.value();case BARRIER->"屏障已开启 "+test.value();case RULE_DONE->"规则已完成 "+test.reference();case NPC_ALIVE->"NPC 存活 "+test.reference();case ITEM_ROOM,ITEM_ACTOR->"持有 "+test.item()+" × "+test.count();});

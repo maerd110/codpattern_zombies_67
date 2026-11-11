@@ -121,6 +121,13 @@ public final class ZombiesNpcClientPreview {
             if (!styled.chatName().equals("电台向导") || !styled.nameColor().equals("aqua") || !styled.textColor().equals("#00ffaa"))
                 throw new AssertionError("Chat name, hex color and preset selection persist in draft");
             render(screen, 640, 360, output.resolve("chat-settings-640.png"));
+            screen.init(client,640,720);
+            var debugLabel=((java.util.List<?>)get(screen,"labels")).stream().filter(label->{try{return get(label,"text").equals("NPC 调试模式（关卡全局）");}catch(Exception e){throw new RuntimeException(e);}}).findFirst().orElseThrow();
+            int debugY=(int)get(debugLabel,"y")-6;
+            var toggle=screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button b&&b.getY()==debugY).map(c->(net.minecraft.client.gui.components.Button)c).findFirst().orElseThrow();toggle.onPress();
+            if(!working.validated().debug())throw new AssertionError("Debug switch enables map-wide diagnostics");
+            screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button b&&b.getY()==debugY).map(c->(net.minecraft.client.gui.components.Button)c).findFirst().orElseThrow().onPress();
+            if(working.validated().debug())throw new AssertionError("Debug switch can return to normal play");
             press(screen, "新增 NPC");
             if (working.npcs().size() != 3) throw new AssertionError("Add NPC button");
             if (working.validated().npcs().get(2).dialogueIntervalSeconds() != 1) throw new AssertionError("New NPC defaults to one second");
@@ -139,7 +146,7 @@ public final class ZombiesNpcClientPreview {
                 throw new AssertionError("All block placements must expose their own fields");
             graphChecks(screen, working, client, output);
             sharedGraphChecks(screen,client,output);
-            Files.writeString(output.resolve("result.txt"), "PASS 30 client renders, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
+            Files.writeString(output.resolve("result.txt"), "PASS 31 client renders, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -246,6 +253,7 @@ public final class ZombiesNpcClientPreview {
         f=ZombiesNpcSharedCanvas.find(draft,"doctor.trade");if(f.entry().get("x").getAsDouble()<=oldX)throw new AssertionError("Global redo restores group movement");
         press(graph,"定位当前规则");if(((java.util.Map<?,?>)get(graph,"index")).size()!=9)throw new AssertionError("Focus moves the viewport without hiding other NPCs");
         render(graph,960,540,output.resolve("shared-focused-960.png"));render(graph,320,240,output.resolve("shared-small-320.png"));
+        graph.init(client,1280,720);set(graph,"zoom",.2);set(graph,"panX",40.0);set(graph,"panY",0.0);render(graph,1280,720,output.resolve("zoom-20-1280.png"));
         draft.validated();
         graph.init(client,1280,1000);press(graph,"+ 条件分支");bindLatest(graph,owner);
         var r=owner.graphRule();var branch=ZombiesNpcGraphDraft.find(r,"node_4");
@@ -357,6 +365,9 @@ public final class ZombiesNpcClientPreview {
                     boolean visible=false;
                     for(int x=432;x<=438;x++)for(int y=216;y<=222;y++){int pixel=image.getPixelRGBA(x,y);if(((pixel>>8)&255)>150&&(pixel&255)>50)visible=true;}
                     if(!visible)throw new AssertionError("Execution curve must render visibly between entry and action ports");
+                }
+                if(file.getFileName().toString().equals("zoom-20-1280.png")){
+                    for(int x=128;x<136;x++)for(int y=125;y<135;y++){int pixel=image.getPixelRGBA(x,y);if(((pixel>>8)&255)>180&&(pixel&255)>50&&((pixel>>16)&255)>130)throw new AssertionError("Forward wires at 20% must not detour into oversized loops");}
                 }
                 image.writeToFile(file);
             }
