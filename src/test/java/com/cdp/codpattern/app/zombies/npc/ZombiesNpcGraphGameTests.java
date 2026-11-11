@@ -453,6 +453,16 @@ public final class ZombiesNpcGraphGameTests {
         var invalid=com.google.gson.JsonParser.parseString("{\"wave\":1,\"maxAlive\":0,\"mobs\":[]}").getAsJsonObject();
         var repo=new com.cdp.codpattern.app.zombies.service.ZombiesWaveConfigRepository(java.nio.file.Path.of("build/verification/wave-validation"));h.assertTrue(!repo.loadConfigured(List.of(invalid)).isValid(),"GUI saves use the same wave validator as file loading");
     }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void sceneSchemaRejectsCorruptionAndReadsLegacyFill(GameTestHelper h){
+        rejects(()->new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(2,1,1,List.of("minecraft:air"),List.of(0)));
+        rejects(()->new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(2,1,1,List.of("minecraft:air"),List.of(0,2)));
+        rejects(()->new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(4096,4096,4096,List.of("minecraft:air"),List.of(0)));
+        var scene=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(2,1,1,List.of("minecraft:stone"),List.of(0,0));
+        rejects(()->new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region(BlockPos.ZERO,BlockPos.ZERO,null,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.RegionMode.SCENE,scene,null,null));
+        var legacy=ZombiesNpcRepository.GSON.fromJson("{\"from\":{\"x\":0,\"y\":0,\"z\":0},\"to\":{\"x\":1,\"y\":0,\"z\":0},\"block\":\"minecraft:stone\"}",com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region.class);
+        h.assertTrue(legacy.mode()==com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.RegionMode.FILL&&legacy.placements().size()==2,"old single-block fill regions retain their original behavior");h.succeed();
+    }
     private static Node choice(List<Option> options){return new Node("choose",Type.CHOICE,0,0,null,null,0,"","",true,"What will you do?","",options);}
     private static Node node(String id,Type type,String next){return new Node(id,type,0,0,null,null,0,next,"");}
     private static Node action(String id,ZombiesNpcConfig.Action a,String next){return new Node(id,Type.ACTION,0,0,a,null,0,next,"");}

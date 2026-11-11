@@ -30,6 +30,7 @@ import java.util.List;
 public final class ZombiesNpcClientPreview {
     private static boolean changingLanguage;
     private static boolean finished;
+    private static int renderCount;
     private static java.util.concurrent.CompletableFuture<Void> languageReload;
     @Mod.EventBusSubscriber(modid = ZombiesAddonConstants.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.MOD)
     public static final class Setup {
@@ -148,7 +149,7 @@ public final class ZombiesNpcClientPreview {
             sharedGraphChecks(screen,client,output);
             dialogueChecks(screen,client,output);
             scenarioChecks(screen,client,output);
-            Files.writeString(output.resolve("result.txt"), "PASS 47 client renders, wave/cast/dialogue/event deployment and line deletion, dialogue answers/pagination/close, choice node editing/visibility/ports, fresh interaction gates, expanded condition/placement lists, explicit actor possession choices, retry-end controls and shared graph editing\n");
+            Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -350,13 +351,71 @@ public final class ZombiesNpcClientPreview {
         var event=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent("gate","北门变化",true,2,"",List.of(),com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Weather.RAIN,18000L);
         var config=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,List.of(wave),List.of(speaker),List.of(dialogue),List.of(event));
         var screen=new ZombiesScenarioScreen((Screen)get(previous,"parent"),"图形部署测试");var data=ZombiesNpcRepository.GSON.toJsonTree(config).getAsJsonObject();set(screen,"data",data);set(screen,"saved",data.toString());set(screen,"editable",true);set(screen,"ruleIds",List.of("guide.quest"));client.setScreen(screen);
-        for(int page=0;page<4;page++){set(screen,"page",page);set(screen,"expanded",0);set(screen,"scroll",0);render(screen,640,480,output.resolve("scenario-"+page+"-640.png"));render(screen,320,240,output.resolve("scenario-"+page+"-320.png"));}
-        set(screen,"page",0);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1200);press(screen,"新增怪物");if(data.getAsJsonArray("waves").get(0).getAsJsonObject().getAsJsonArray("mobs").size()!=2)throw new AssertionError("Wave editor adds mob cards");press(screen,"删除怪物 2");
-        set(screen,"page",1);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1200);screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox b&&b.getMessage().getString().equals("显示名字")).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("广播员");if(!data.getAsJsonArray("speakers").get(0).getAsJsonObject().get("name").getAsString().equals("广播员"))throw new AssertionError("Speaker fields are attached to saved draft");
-        set(screen,"page",2);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1200);press(screen,"新增波前台词");press(screen,"上移台词 2");var lines=data.getAsJsonArray("dialogues").get(0).getAsJsonObject().getAsJsonArray("lines");if(!lines.get(0).getAsJsonObject().get("text").getAsString().equals("新台词"))throw new AssertionError("Wave speech order can be edited");press(screen,"删除台词 1");if(lines.size()!=1||!lines.get(0).getAsJsonObject().get("speaker").getAsString().equals("guide"))throw new AssertionError("Speech deletion preserves remaining speaker reference");
-        set(screen,"page",3);set(screen,"expanded",0);set(screen,"scroll",0);screen.init(client,1280,1400);press(screen,"需要已完成的 NPC 规则：不限 ▾");button(client.screen,"guide.quest").onPress();if(!data.getAsJsonArray("events").get(0).getAsJsonObject().get("rule").getAsString().equals("guide.quest"))throw new AssertionError("Event GUI selects NPC rule dependency");screen.init(client,1280,1400);press(screen,"新增方块／区域变化");press(screen,"清空区域为空气");var region=data.getAsJsonArray("events").get(0).getAsJsonObject().getAsJsonArray("regions").get(0).getAsJsonObject();if(!region.get("block").getAsString().equals("minecraft:air"))throw new AssertionError("Region can remove structure blocks");press(screen,"选择部署方块");render(client.screen,320,240,output.resolve("scenario-block-picker-320.png"));client.screen.onClose();
-        var valid=ZombiesNpcRepository.GSON.fromJson(data,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.class);if(valid.events().get(0).regions().size()!=1||valid.waves().get(0).getAsJsonArray("mobs").size()!=1)throw new AssertionError("Scenario GUI roundtrip preserves all four pages");
+        for(int page=0;page<4;page++){
+            scenarioRoot(screen,client,page,640,480);render(screen,640,480,output.resolve("scenario-"+page+"-640.png"));render(screen,320,240,output.resolve("scenario-"+page+"-320.png"));
+            if(screen.children().stream().anyMatch(c->c instanceof net.minecraft.client.gui.components.EditBox))throw new AssertionError("Overview must display cards without expanding forms");
+            scenarioCard(screen,0);if(screen.children().stream().anyMatch(c->c instanceof net.minecraft.client.gui.components.EditBox))throw new AssertionError("Single click only selects a card");
+            press(screen,"编辑所选");render(screen,640,600,output.resolve("scenario-detail-"+page+"-640.png"));render(screen,320,240,output.resolve("scenario-detail-"+page+"-320.png"));
+        }
+        scenarioRoot(screen,client,0,1280,1200);scenarioCard(screen,0);scenarioCard(screen,0); // Double-click opens detail.
+        if(screen.children().stream().noneMatch(c->c instanceof net.minecraft.client.gui.components.EditBox))throw new AssertionError("Double click opens card details");
+        press(screen,"管理怪物 · 1 种");press(screen,"新增怪物");
+        if(data.getAsJsonArray("waves").get(0).getAsJsonObject().getAsJsonArray("mobs").size()!=2)throw new AssertionError("Mob editor adds independent entries");
+        screen.onClose();render(screen,640,480,output.resolve("scenario-mob-cards-640.png"));
+        scenarioCard(screen,1);press(screen,"编辑所选");screen.init(client,1280,1200);press(screen,"删除此条目");
+        if(!(client.screen instanceof net.minecraft.client.gui.screens.ConfirmScreen confirmation))throw new AssertionError("Deletion asks for confirmation");
+        confirmation.keyPressed(GLFW.GLFW_KEY_ESCAPE,0,0); // Escape cancels; explicitly confirm next via its first button.
+        client.setScreen(screen);screen.init(client,1280,1200);press(screen,"删除此条目");
+        ((net.minecraft.client.gui.components.Button)client.screen.children().get(0)).onPress();
+        if(data.getAsJsonArray("waves").get(0).getAsJsonObject().getAsJsonArray("mobs").size()!=1)throw new AssertionError("Deleting a card removes only the selected mob");
+        scenarioRoot(screen,client,1,1280,1200);scenarioCard(screen,0);press(screen,"编辑所选");screen.init(client,1280,1200);
+        screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox box&&box.getMessage().getString().equals("显示名字")).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("广播员");
+        if(!data.getAsJsonArray("speakers").get(0).getAsJsonObject().get("name").getAsString().equals("广播员"))throw new AssertionError("Card details edit the existing working copy");
+        scenarioRoot(screen,client,2,1280,1200);scenarioCard(screen,0);press(screen,"编辑所选");screen.init(client,1280,1200);press(screen,"管理台词 · 1 句");press(screen,"新增台词");screen.init(client,1280,1200);press(screen,"上移台词");
+        var lines=data.getAsJsonArray("dialogues").get(0).getAsJsonObject().getAsJsonArray("lines");if(!lines.get(0).getAsJsonObject().get("text").getAsString().equals("新台词"))throw new AssertionError("Dialogue cards preserve editable playback order");
+        screen.onClose();render(screen,640,480,output.resolve("scenario-line-cards-640.png"));
+        scenarioRoot(screen,client,3,1280,1400);scenarioCard(screen,0);press(screen,"编辑所选");screen.init(client,1280,1400);press(screen,"需要已完成的 NPC 规则：不限 ▾");button(client.screen,"guide.quest").onPress();
+        if(!data.getAsJsonArray("events").get(0).getAsJsonObject().get("rule").getAsString().equals("guide.quest"))throw new AssertionError("Event card edits NPC completion requirements");
+        screen.init(client,1280,1400);press(screen,"管理区域变化 · 0 处");press(screen,"新增区域变化");
+        var region=data.getAsJsonArray("events").get(0).getAsJsonObject().getAsJsonArray("regions").get(0).getAsJsonObject();
+        if(!region.get("mode").getAsString().equals("SCENE"))throw new AssertionError("New regions offer prebuilt scene capture");
+        screen.init(client,1280,1400);render(screen,640,1000,output.resolve("scenario-scene-detail-640.png"));
+        // Simulate the world corner-selection path, without a live client world.
+        press(screen,"到地图框选源场景");
+        ZombiesScenarioScreen.selectionInput(true,false,false,new net.minecraft.core.BlockPos(4,5,6));ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(5,5,6));
+        var box=ZombiesScenarioScreen.selectionBounds();if(box==null||box.getXsize()!=2||box.getYsize()!=1||box.getZsize()!=1)throw new AssertionError("World selection highlights inclusive source bounds");
+        ZombiesScenarioScreen.selectionInput(false,true,true,null);screen.init(client,1280,1400);
+        var scene=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(2,1,1,List.of("minecraft:stone","minecraft:air"),List.of(0,1));
+        var token=java.util.UUID.randomUUID();set(screen,"pending",token);set(screen,"captureTarget",region);
+        var reply=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.Snapshot("图形部署测试","",null,List.of(),List.of(),true,"",scene);
+        ZombiesScenarioScreen.accept(new ZombiesNpcDialogueNetwork.EditorReply(token,ZombiesNpcRepository.GSON.toJson(reply)));
+        if(get(screen,"data")!=data||!region.has("scene")||region.getAsJsonObject("to").get("x").getAsInt()!=1)throw new AssertionError("Capture reply attaches the scene while preserving unsaved changes and sizes destination");
+        screen.init(client,1280,1400);press(screen,"到地图选择放置位置");ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(10,20,30));
+        if(region.getAsJsonObject("to").get("x").getAsInt()!=11||ZombiesScenarioScreen.selecting())throw new AssertionError("Target placement preserves captured dimensions and exits selection mode");
+        render(screen,640,1000,output.resolve("scenario-captured-scene-640.png"));
+        screen.init(client,1280,1400);press(screen,"变化方式：场景快照 ▾");button(client.screen,"方块填充").onPress();screen.init(client,1280,1400);
+        render(screen,640,1000,output.resolve("scenario-fill-detail-640.png"));screen.init(client,1280,1400);press(screen,"选择部署方块");render(client.screen,320,240,output.resolve("scenario-block-picker-320.png"));client.screen.onClose();screen.init(client,1280,1400);
+        press(screen,"变化方式：方块填充 ▾");button(client.screen,"场景快照").onPress();
+        if(!region.has("scene")||!region.get("mode").getAsString().equals("SCENE"))throw new AssertionError("Fill/scene mode switching preserves the captured template");
+        screen.onClose();render(screen,640,480,output.resolve("scenario-region-cards-640.png"));
+        var valid=ZombiesNpcRepository.GSON.fromJson(data,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.class);
+        if(valid.events().get(0).regions().get(0).placements().size()!=2||valid.dialogues().get(0).lines().size()!=2)throw new AssertionError("Cards retain scene snapshots and all other pages in one working copy");
+        for(int n=2;n<=6;n++){var copy=wave.deepCopy();copy.addProperty("wave",n);copy.addProperty("maxAlive",n*4);data.getAsJsonArray("waves").add(copy);}
+        for(int n=2;n<=4;n++){
+            var cast=data.getAsJsonArray("speakers").get(0).getAsJsonObject().deepCopy();cast.addProperty("id","speaker_"+n);cast.addProperty("name",n==2?"守卫":n==3?"电台广播":"旁白");data.getAsJsonArray("speakers").add(cast);
+            var speech=data.getAsJsonArray("dialogues").get(0).getAsJsonObject().deepCopy();speech.addProperty("wave",n);data.getAsJsonArray("dialogues").add(speech);
+            var ev=data.getAsJsonArray("events").get(0).getAsJsonObject().deepCopy();ev.addProperty("id","event_"+n);ev.addProperty("name",n==2?"北门变化":n==3?"夜幕降临":"旧桥重建");ev.addProperty("minWave",n*2);data.getAsJsonArray("events").add(ev);
+        }
+        for(int page=0;page<4;page++){scenarioRoot(screen,client,page,1280,720);render(screen,1280,720,output.resolve("scenario-card-overview-"+page+"-1280.png"));}
+        set(screen,"selectionRegion",region);set(screen,"suspended",true);if(!ZombiesScenarioScreen.selecting())throw new AssertionError("Selection context remains active until explicitly ended");
+        com.cdp.codpattern.event.client.zombies.ZombiesScenarioSelection.loggedOut(null);if(ZombiesScenarioScreen.selecting())throw new AssertionError("Disconnect clears world selection before another server is joined");
         ZombiesScenarioScreen.disconnected();
+    }
+    private static void scenarioRoot(ZombiesScenarioScreen screen,Minecraft client,int page,int width,int height)throws Exception{
+        set(screen,"page",page);((java.util.Deque<?>)get(screen,"navigation")).clear();screen.init(client,width,height);
+    }
+    private static void scenarioCard(ZombiesScenarioScreen screen,int index){
+        var cards=screen.children().stream().filter(c->c.getClass().getSimpleName().equals("CardButton")).map(c->(net.minecraft.client.gui.components.Button)c).toList();cards.get(index).onPress();
     }
     private static void connect(ZombiesNpcGraphScreen graph,com.google.gson.JsonObject rule,String from,String port,String to)throws Exception{
         crossConnect(graph,rule,from,port,rule,to);
@@ -429,7 +488,7 @@ public final class ZombiesNpcClientPreview {
                 if(file.getFileName().toString().equals("zoom-20-1280.png")){
                     for(int x=128;x<136;x++)for(int y=125;y<135;y++){int pixel=image.getPixelRGBA(x,y);if(((pixel>>8)&255)>180&&(pixel&255)>50&&((pixel>>16)&255)>130)throw new AssertionError("Forward wires at 20% must not detour into oversized loops");}
                 }
-                image.writeToFile(file);
+                image.writeToFile(file);renderCount++;
             }
         } finally {
             modelView.popPose(); RenderSystem.applyModelViewMatrix(); RenderSystem.setProjectionMatrix(projection, sorting);

@@ -22,12 +22,35 @@ public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Spea
         public Dialogue {ZombiesNpcConfig.intervalTicks(delaySeconds);if(wave<1)throw new IllegalArgumentException("波次必须大于 0");lines=List.copyOf(lines);if(lines.size()>256)throw new IllegalArgumentException("每波最多 256 句台词");}
     }
     public enum Weather { CLEAR,RAIN,THUNDER }
-    public record Region(BlockPos from,BlockPos to,String block) {
-        public Region {if(from==null||to==null||block==null||block.isBlank())throw new IllegalArgumentException("区域需要两个坐标和方块");
+    public enum RegionMode { FILL, SCENE }
+    /** Palette data is relative to the destination's minimum corner; air is deliberately included. */
+    public record Scene(int sizeX,int sizeY,int sizeZ,List<String> palette,List<Integer> blocks) {
+        public Scene {
+            if(sizeX<1||sizeY<1||sizeZ<1||sizeX>4096||sizeY>4096||sizeZ>4096||(long)sizeX*sizeY*sizeZ>4096)throw new IllegalArgumentException("场景最多 4096 格");
+            palette=List.copyOf(palette==null?List.of():palette);blocks=List.copyOf(blocks==null?List.of():blocks);
+            if(palette.isEmpty()||palette.size()>4096||palette.stream().anyMatch(v->v==null||v.isBlank()||v.length()>1024)||blocks.size()!=sizeX*sizeY*sizeZ)throw new IllegalArgumentException("场景方块数据不完整");
+            int count=palette.size();if(blocks.stream().anyMatch(i->i==null||i<0||i>=count))throw new IllegalArgumentException("场景方块索引无效");
+        }
+        public BlockPos endAt(BlockPos origin){return origin.offset(sizeX-1,sizeY-1,sizeZ-1);}
+    }
+    public record Region(BlockPos from,BlockPos to,String block,RegionMode mode,Scene scene,BlockPos sourceFrom,BlockPos sourceTo) {
+        public Region(BlockPos from,BlockPos to,String block){this(from,to,block,RegionMode.FILL,null,null,null);}
+        public Region {
+            mode=mode==null?(scene==null?RegionMode.FILL:RegionMode.SCENE):mode;
+            if(from==null||to==null)throw new IllegalArgumentException("区域需要两个目标坐标");
             long a=Math.abs((long)from.getX()-to.getX())+1,b=Math.abs((long)from.getY()-to.getY())+1,c=Math.abs((long)from.getZ()-to.getZ())+1;
-            if(a>4096||b>4096||c>4096)throw new IllegalArgumentException("区域过大");long cells=a*b*c;
-            if(cells<1||cells>4096)throw new IllegalArgumentException("单个区域最多 4096 个方块");}
-        public List<ZombiesNpcConfig.BlockPlacement> placements(){var cells=new ArrayList<ZombiesNpcConfig.BlockPlacement>();for(var p:BlockPos.betweenClosed(from,to))cells.add(new ZombiesNpcConfig.BlockPlacement(new ZombiesNpcConfig.Position(p.getX(),p.getY(),p.getZ(),0),block));return cells;}
+            if(a>4096||b>4096||c>4096||a*b*c>4096)throw new IllegalArgumentException("单个区域最多 4096 个方块");
+            if(mode==RegionMode.FILL&&(block==null||block.isBlank()))throw new IllegalArgumentException("填充区域需要选择方块");
+            if(mode==RegionMode.SCENE){if(scene==null)throw new IllegalArgumentException("请先读取部署者搭建的目标场景");if(a!=scene.sizeX()||b!=scene.sizeY()||c!=scene.sizeZ())throw new IllegalArgumentException("目标区域尺寸与已读取场景不一致");}
+        }
+        public List<ZombiesNpcConfig.BlockPlacement> placements(){
+            var cells=new ArrayList<ZombiesNpcConfig.BlockPlacement>();
+            if(mode==RegionMode.FILL){for(var p:BlockPos.betweenClosed(from,to))cells.add(placement(p,block));}
+            else {var origin=new BlockPos(Math.min(from.getX(),to.getX()),Math.min(from.getY(),to.getY()),Math.min(from.getZ(),to.getZ()));int i=0;
+                for(int y=0;y<scene.sizeY();y++)for(int z=0;z<scene.sizeZ();z++)for(int x=0;x<scene.sizeX();x++)cells.add(placement(origin.offset(x,y,z),scene.palette().get(scene.blocks().get(i++))));}
+            return cells;
+        }
+        private static ZombiesNpcConfig.BlockPlacement placement(BlockPos p,String block){return new ZombiesNpcConfig.BlockPlacement(new ZombiesNpcConfig.Position(p.getX(),p.getY(),p.getZ(),0),block);}
     }
     public record MapEvent(String id,String name,boolean automatic,int minWave,String rule,List<Region> regions,Weather weather,Long time) {
         public MapEvent {requireId(id);if(name==null||name.length()>128||minWave<0||time!=null&&(time<0||time>23999))throw new IllegalArgumentException("地图事件名字、波次或时间无效");

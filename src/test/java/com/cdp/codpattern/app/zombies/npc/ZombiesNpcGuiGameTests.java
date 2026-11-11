@@ -28,6 +28,44 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class ZombiesNpcGuiGameTests {
     @GameTest(template="empty",timeoutTicks=200)
+    public static void capturedSceneCopiesMixedStatesAirAndRestoresRound(GameTestHelper h)throws Exception{
+        var origin=h.absolutePos(new BlockPos(1,2,1));String name="scene-copy-"+UUID.randomUUID().toString().substring(0,8);
+        var map=new ZombiesMap(h.getLevel(),name,new AreaData(origin.offset(-1,-1,-1),origin.offset(8,5,8))){boolean running;@Override public com.cdp.codpattern.app.zombies.model.ZombiesGamePhase currentPhase(){return running?com.cdp.codpattern.app.zombies.model.ZombiesGamePhase.WAVE_ACTIVE:super.currentPhase();}};
+        var core=FPSMCore.getInstance();core.registerMap(map.getGameType(),map);
+        var player=new FakePlayer(h.getLevel(),new GameProfile(UUID.randomUUID(),"scene-admin")){@Override public boolean hasPermissions(int level){return level<=2;}};player.moveTo(origin.getX()+.5,origin.getY(),origin.getZ()+.5);player.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(ZombiesItemRegister.ZOMBIES_DEPLOY_TOOL.get()));
+        var path=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(h.getLevel().getServer(),name);
+        var source=origin.offset(2,0,2);var destination=origin.offset(2,0,4);var level=h.getLevel();
+        level.setBlock(source,net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),18);
+        var rotated=net.minecraft.world.level.block.Blocks.OAK_LOG.defaultBlockState().setValue(net.minecraft.world.level.block.RotatedPillarBlock.AXIS,net.minecraft.core.Direction.Axis.Z);level.setBlock(source.east(),rotated,18);level.setBlock(source.east(2),net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(),18);
+        for(int x=0;x<3;x++)level.setBlock(destination.east(x),net.minecraft.world.level.block.Blocks.GLASS.defaultBlockState(),18);
+        try{
+            var request=new JsonObject();request.add("from",ZombiesNpcRepository.GSON.toJsonTree(source.east(2)));request.add("to",ZombiesNpcRepository.GSON.toJsonTree(source));
+            var response=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"capture",request.toString());h.assertTrue(response.error().isBlank()&&response.scene()!=null,"admin captures reversed corners from actual world");
+            var scene=response.scene();h.assertTrue(scene.blocks().size()==3&&scene.palette().size()==3&&scene.sizeX()==3,"snapshot retains stone, oriented log and air");h.assertTrue(!Files.exists(path)&&level.getBlockState(destination).is(net.minecraft.world.level.block.Blocks.GLASS),"capture does not save configuration or alter the target scene");
+            var region=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region(destination,scene.endAt(destination),null,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.RegionMode.SCENE,scene,source,source.east(2));
+            var event=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent("change","场景替换",false,0,"",List.of(region),null,null);
+            var config=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,null,List.of(),List.of(),List.of(event));com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.save(path,config);
+            var loaded=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(path);h.assertTrue(config.equals(loaded),"scene palette, source metadata and target roundtrip to disk");
+            level.setBlock(source,net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(),18);level.setBlock(source.east(),net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState(),18);
+            map.scenarioRuntime().validate(loaded,ZombiesNpcConfig.empty());map.running=true;map.scenarioRuntime().start(loaded);map.scenarioRuntime().trigger("change");
+            h.assertTrue(level.getBlockState(destination).is(net.minecraft.world.level.block.Blocks.STONE)&&level.getBlockState(destination.east()).equals(rotated)&&level.getBlockState(destination.east(2)).isAir(),"event applies saved individual block states, including air, without rereading modified source");
+            map.scenarioRuntime().reset();for(int x=0;x<3;x++)h.assertTrue(level.getBlockState(destination.east(x)).is(net.minecraft.world.level.block.Blocks.GLASS),"round reset restores original destination blocks");
+        }finally{map.scenarioRuntime().reset();map.npcRuntime().reset();core.unregisterMap(map);Files.deleteIfExists(path);}h.succeed();
+    }
+    @GameTest(template="empty",timeoutTicks=200)
+    public static void sceneCaptureRejectsRunningUnauthorizedAndUnsupportedSources(GameTestHelper h){
+        var origin=h.absolutePos(new BlockPos(1,2,1));String name="scene-deny-"+UUID.randomUUID().toString().substring(0,8);
+        var map=new ZombiesMap(h.getLevel(),name,new AreaData(origin.offset(-1,-1,-1),origin.offset(5,5,5))){boolean running;@Override public com.cdp.codpattern.app.zombies.model.ZombiesGamePhase currentPhase(){return running?com.cdp.codpattern.app.zombies.model.ZombiesGamePhase.WAVE_ACTIVE:super.currentPhase();}};
+        var core=FPSMCore.getInstance();core.registerMap(map.getGameType(),map);var player=new FakePlayer(h.getLevel(),new GameProfile(UUID.randomUUID(),"scene-check")){@Override public boolean hasPermissions(int level){return level<=2;}};player.moveTo(origin.getX()+.5,origin.getY(),origin.getZ()+.5);player.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(ZombiesItemRegister.ZOMBIES_DEPLOY_TOOL.get()));
+        var request=new JsonObject();request.add("from",ZombiesNpcRepository.GSON.toJsonTree(origin));request.add("to",ZombiesNpcRepository.GSON.toJsonTree(origin));
+        try{
+            h.getLevel().setBlock(origin,net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState(),18);var unsupported=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"capture",request.toString());h.assertTrue(!unsupported.error().isBlank()&&unsupported.scene()==null,"unsupported scene blocks fail with no partial capture");
+            request.add("to",ZombiesNpcRepository.GSON.toJsonTree(origin.offset(4096,0,0)));h.assertTrue(!com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"capture",request.toString()).error().isBlank(),"oversized source rejected before reading cells");
+            request.add("from",ZombiesNpcRepository.GSON.toJsonTree(origin.offset(300,0,0)));request.add("to",request.get("from").deepCopy());h.assertTrue(!com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"capture",request.toString()).error().isBlank(),"remote or unloaded source rejected");
+            map.running=true;h.assertTrue(!com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"capture",request.toString()).error().isBlank(),"capture during play rejected");map.running=false;player.setItemInHand(InteractionHand.MAIN_HAND,ItemStack.EMPTY);h.assertTrue(!com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioEditorService.perform(player,name,"capture",request.toString()).error().isBlank(),"capture requires the actual admin deployment tool");
+        }finally{core.unregisterMap(map);}h.succeed();
+    }
+    @GameTest(template="empty",timeoutTicks=200)
     public static void scenarioEditorImportsSavesValidatesAndRejectsStaleWrites(GameTestHelper h)throws Exception{
         var origin=h.absolutePos(new BlockPos(1,2,1));String name="scenario-gui-"+UUID.randomUUID().toString().substring(0,8);
         var map=new ZombiesMap(h.getLevel(),name,new AreaData(origin.offset(-1,-1,-1),origin.offset(5,5,5))){boolean running;@Override public com.cdp.codpattern.app.zombies.model.ZombiesGamePhase currentPhase(){return running?com.cdp.codpattern.app.zombies.model.ZombiesGamePhase.WAVE_ACTIVE:super.currentPhase();}};
