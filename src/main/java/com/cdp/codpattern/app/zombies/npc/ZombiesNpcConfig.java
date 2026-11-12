@@ -76,7 +76,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
     public record Combat(CombatMode mode,String gun,double range){
         public Combat { mode=mode==null?CombatMode.OFF:mode;gun=gun==null?"":gun;
             if(!Double.isFinite(range)||range<4||range>64)throw new IllegalArgumentException("作战射程为 4 至 64 格");
-            if(mode!=CombatMode.OFF&&gun.isBlank())throw new IllegalArgumentException("请先读取 NPC 使用的 TaCZ 枪械");
+            if(mode==CombatMode.GUARD&&gun.isBlank())throw new IllegalArgumentException("请先读取 NPC 使用的 TaCZ 枪械");
         }
     }
     public record Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable,

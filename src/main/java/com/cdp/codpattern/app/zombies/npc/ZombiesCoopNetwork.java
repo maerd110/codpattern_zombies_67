@@ -14,7 +14,7 @@ public final class ZombiesCoopNetwork {
         static Action decode(FriendlyByteBuf b){return new Action(b.readUtf(16),b.readUUID(),b.readUUID(),b.readVarInt(),b.readVarInt());}
     }
     public record State(CompoundTag data){void encode(FriendlyByteBuf b){b.writeNbt(data);}static State decode(FriendlyByteBuf b){var d=b.readNbt();return new State(d==null?new CompoundTag():d);}}
-    public static void install(){if(channel!=null)return;channel=NetworkRegistry.newSimpleChannel(new net.minecraft.resources.ResourceLocation(ZombiesAddonConstants.MOD_ID,"coop"),()->"2","2"::equals,"2"::equals);
+    public static void install(){if(channel!=null)return;channel=NetworkRegistry.newSimpleChannel(new net.minecraft.resources.ResourceLocation(ZombiesAddonConstants.MOD_ID,"coop"),()->"3","3"::equals,"3"::equals);
         channel.messageBuilder(Action.class,0,NetworkDirection.PLAY_TO_SERVER).encoder(Action::encode).decoder(Action::decode).consumerMainThread((p,c)->{var sender=c.get().getSender();if(sender!=null)handle(sender,p);c.get().setPacketHandled(true);}).add();
         channel.messageBuilder(State.class,1,NetworkDirection.PLAY_TO_CLIENT).encoder(State::encode).decoder(State::decode).consumerMainThread((p,c)->{com.cdp.codpattern.client.runtime.ModeClientActionHandlers.dispatch("codpattern:zombies_coop",p);c.get().setPacketHandled(true);}).add();
     }
@@ -29,7 +29,12 @@ public final class ZombiesCoopNetwork {
                 case "deposit","withdraw"->{runtime.transfer(player,request.amount(),request.operation().equals("deposit"));notice=(request.operation().equals("deposit")?"已存入 ":"已取出 ")+request.amount()+" 点";}
                 case "swap"->{runtime.exchange(player,request.token(),request.amount());notice="NPC 枪械已更换";page="npc";token=runtime.offer(player,focus);}
                 case "interact"->{runtime.interact(player,focus);return;}
-                case "ping"->{runtime.pings.mark(player);}
+                case "dialogue"->{runtime.dialogue(player,focus);return;}
+                case "ping"->{runtime.orders.point(player);}
+                case "clear_ping"->{runtime.pings.clear(player);notice="已清除自己的标记";}
+                case "arm_guard","arm_protect"->{runtime.orders.arm(player,focus,request.operation().equals("arm_guard"));notice="使用中键指定目标，右键取消";}
+                case "cancel_order"->{runtime.orders.cancel(player);notice="已取消指定目标";}
+                case "resume_near"->{runtime.resumeNearby(player,focus);notice="NPC 已恢复部署任务";}
                 case "resume"->{runtime.resume(player,focus);notice="NPC 已恢复原任务";}
                 case "call"->{long tick=player.level().getGameTime();var data=player.getPersistentData();if(data.contains("coop.call.tick")&&tick-data.getLong("coop.call.tick")<10)return;data.putLong("coop.call.tick",tick);runtime.call(player,focus);notice="已呼叫附近 NPC；靠近后右键可换枪";}
                 default->throw new IllegalArgumentException("未知操作");

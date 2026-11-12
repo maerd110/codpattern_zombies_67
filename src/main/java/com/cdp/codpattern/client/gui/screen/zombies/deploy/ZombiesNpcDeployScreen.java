@@ -438,6 +438,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
             for(int i=0;i<inv.getContainerSize();i++){var stack=inv.getItem(i);if(com.tacz.guns.api.item.IGun.getIGunOrNull(stack)!=null)entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(),stack.save(new CompoundTag()).toString(),stack.getHoverName().getString(),1));}
             minecraft.setScreen(new ZombiesNpcStackPickerScreen(this,tr("combat.read"),entries,chosenGun->{config.addProperty("gun",chosenGun.value());rebuildWidgets();}));
         });
+        if(value(config,"mode","OFF").equals("FOLLOW"))rowButton("combat.clear",()->{config.addProperty("gun","");rebuildWidgets();});
     }
     private void optional(JsonObject object, String key, String label, JsonElement defaultValue) {
         rows.add((x, y, w) -> button(tr(object.has(key) ? "change" : "keep", tr(label)), x, y, w, () -> {

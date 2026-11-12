@@ -616,9 +616,10 @@
     "gui.codpattern.zombies.npc.combat.FOLLOW": "Follow teammate",
     "gui.codpattern.zombies.npc.combat.range": "Range (4–64 blocks)",
     "gui.codpattern.zombies.npc.combat.gun": "Gun: %s",
+    "gui.codpattern.zombies.npc.combat.clear": "Clear gun, follow without firing",
     "gui.codpattern.zombies.npc.combat.read": "Select TaCZ gun from inventory",
     "gui.codpattern.zombies.npc.combat.none": "Not selected",
-    "key.codpattern.zombies.bank": "Open team bank",
+    "key.codpattern.zombies.bank": "Open team command wheel",
     "key.codpattern.zombies.call_npc": "Call nearby support NPC",
     "key.categories.codpattern.zombies": "Zombies",
     "key.codpattern.zombies.ping": "Ping position or dropped gun"

@@ -13,12 +13,16 @@ final class ZombiesNpcCombat {
     private ZombiesNpcConfig.Combat config;
     Vec3 anchor; UUID follow;
     private boolean drawn;
+    ZombiesNpcConfig.CombatMode orderMode; Vec3 orderAnchor; UUID orderFollow;
+    void guard(Vec3 point){resume();orderMode=ZombiesNpcConfig.CombatMode.GUARD;orderAnchor=point;npc.getNavigation().stop();}
+    void protect(UUID player){resume();orderMode=ZombiesNpcConfig.CombatMode.FOLLOW;orderFollow=player;npc.getNavigation().stop();}
+    private ZombiesNpcConfig.CombatMode mode(){return orderMode==null?config.mode():orderMode;}
     UUID weaponRevision=UUID.randomUUID(),calledBy;
     int callUntil;
     ItemStack loan=ItemStack.EMPTY;
     boolean calledFor(net.minecraft.world.entity.player.Player p){return p!=null&&p.getUUID().equals(calledBy)&&npc.tickCount<callUntil;}
     void call(net.minecraft.server.level.ServerPlayer player){calledBy=player.getUUID();callUntil=npc.tickCount+1200;}
-    void resume(){calledBy=null;callUntil=0;}
+    void resume(){calledBy=null;callUntil=0;orderMode=null;orderAnchor=null;orderFollow=null;}
     void equipLoan(ItemStack stack){loan=stack.copy();loan.setCount(1);npc.setItemSlot(EquipmentSlot.MAINHAND,loan.copy());drawn=false;weaponRevision=UUID.randomUUID();}
 
     com.tacz.guns.api.entity.ShootResult lastResult;
@@ -30,8 +34,8 @@ final class ZombiesNpcCombat {
         stack.setCount(1);return stack;
     }
     void configure(ZombiesNpcConfig.Combat next){
-        config=next;drawn=false;anchor=npc.position();follow=null;
-        npc.setItemSlot(EquipmentSlot.MAINHAND,next.mode()==ZombiesNpcConfig.CombatMode.OFF?ItemStack.EMPTY:loan.isEmpty()?gun(next.gun()):loan.copy());weaponRevision=UUID.randomUUID();
+        config=next;drawn=false;anchor=npc.position();follow=null;resume();
+        npc.setItemSlot(EquipmentSlot.MAINHAND,next.mode()==ZombiesNpcConfig.CombatMode.OFF?ItemStack.EMPTY:loan.isEmpty()?(next.gun().isBlank()?ItemStack.EMPTY:gun(next.gun())):loan.copy());weaponRevision=UUID.randomUUID();
         npc.setDropChance(EquipmentSlot.MAINHAND,0);
     }
     boolean active(){return config!=null&&config.mode()!=ZombiesNpcConfig.CombatMode.OFF;}
@@ -42,16 +46,17 @@ final class ZombiesNpcCombat {
         npc.setNoAi(false);npc.setNoGravity(false);
         if(anchor==null)anchor=npc.position();
         if(npc.tickCount%10==0){
-            Vec3 destination=anchor;
+            Vec3 destination=orderAnchor==null?anchor:orderAnchor;
             var caller=owner.combatPlayers().stream().filter(this::calledFor).findFirst().orElse(null);
             if(caller!=null)destination=caller.position();
-            else if(config.mode()==ZombiesNpcConfig.CombatMode.FOLLOW){
-                var players=owner.combatPlayers();var leader=players.stream().filter(p->p.getUUID().equals(follow)).findFirst().orElseGet(()->players.stream().min(java.util.Comparator.comparingDouble(npc::distanceToSqr)).orElse(null));
-                if(leader!=null){follow=leader.getUUID();destination=leader.position();}
+            else if(mode()==ZombiesNpcConfig.CombatMode.FOLLOW){
+                var players=owner.combatPlayers();var leader=players.stream().filter(p->p.getUUID().equals(orderFollow==null?follow:orderFollow)).findFirst().orElseGet(()->players.stream().min(java.util.Comparator.comparingDouble(npc::distanceToSqr)).orElse(null));
+                if(orderFollow!=null&&players.stream().noneMatch(p->p.getUUID().equals(orderFollow))){resume();destination=anchor;}else if(leader!=null){follow=leader.getUUID();destination=leader.position();}
             }
-            if(owner.insideCombatArea(destination)&&npc.position().distanceToSqr(destination)>(config.mode()==ZombiesNpcConfig.CombatMode.FOLLOW?9:1))npc.getNavigation().moveTo(destination.x,destination.y,destination.z,1.0);
+            if(owner.insideCombatArea(destination)&&npc.position().distanceToSqr(destination)>(caller!=null||mode()==ZombiesNpcConfig.CombatMode.FOLLOW?9:1))npc.getNavigation().moveTo(destination.x,destination.y,destination.z,1.0);
             else npc.getNavigation().stop();
         }
+        if(IGun.getIGunOrNull(npc.getMainHandItem())==null){npc.setTarget(null);if(drawn)IGunOperator.fromLivingEntity(npc).aim(false);return;}
         var target=npc.getTarget();
         if(target!=null&&(!owner.combatTarget(target)||npc.distanceToSqr(target)>config.range()*config.range()||!npc.hasLineOfSight(target)))npc.setTarget(null);
         if(npc.tickCount>=searchAt){searchAt=npc.tickCount+5;

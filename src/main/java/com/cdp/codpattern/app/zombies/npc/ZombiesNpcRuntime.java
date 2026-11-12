@@ -100,7 +100,7 @@ public final class ZombiesNpcRuntime {
     }
 
     private void validateAppearance(ZombiesNpcConfig.Appearance appearance) {
-        if(appearance.combat()!=null&&appearance.combat().mode()!=ZombiesNpcConfig.CombatMode.OFF)ZombiesNpcCombat.gun(appearance.combat().gun());
+        if(appearance.combat()!=null&&appearance.combat().mode()!=ZombiesNpcConfig.CombatMode.OFF&&!appearance.combat().gun().isBlank())ZombiesNpcCombat.gun(appearance.combat().gun());
         if (appearance.skin() != null && (ResourceLocation.tryParse(appearance.skin()) == null || !appearance.skin().endsWith(".png"))) {
             throw new IllegalArgumentException("Skin must be a resource location ending in .png");
         }
