@@ -33,7 +33,8 @@ public final class ZombiesNpcRenderer extends MobRenderer<ZombiesNpcEntity, Play
             // Centre the sideways model above its position, inside the matching horizontal hit box.
             stack.translate(.9, .26, 0);
             stack.mulPose(Axis.ZP.rotationDegrees(90));
-        } else if(npc.posture()==3){stack.translate(0,-.38,0);
+        } else if(npc.posture()==5){stack.translate(0,-.25,0);
+        } else if(npc.posture()==3){stack.translate(0,-.625,0);
         } else if (npc.posture() == 1) {
             stack.translate(0, -0.55, 0);
         }

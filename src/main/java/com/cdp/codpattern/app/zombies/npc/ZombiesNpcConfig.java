@@ -60,7 +60,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
         if (id == null || !id.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("IDs use letters, digits, _ and - (1-64 characters)");
     }
 
-    public enum Pose { STANDING, SITTING, LYING, GROUND_SITTING, SUPINE }
+    public enum Pose { STANDING, SITTING, LYING, GROUND_SITTING, SUPINE, KNEELING }
     public enum Trigger { INTERACT, AUTO }
     public enum Kind { NPC, DIALOGUE, TAKE_ITEM, GIVE_ITEM, SET_BLOCK, OPEN_BARRIER, MAP_EVENT }
 

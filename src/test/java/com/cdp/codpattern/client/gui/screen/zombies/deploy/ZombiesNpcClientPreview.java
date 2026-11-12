@@ -160,7 +160,7 @@ public final class ZombiesNpcClientPreview {
                 };
                 render(boxPreview,320,240,output.resolve("world-box-"+angle+".png"));
             }
-            for(int posture:new int[]{0,1,2,3,4}){
+            for(int posture:new int[]{0,1,2,3,4,5}){
                 Screen posePreview=new Screen(net.minecraft.network.chat.Component.literal("NPC posture")){
                     @Override public void render(GuiGraphics g,int mx,int my,float partial){
                         g.fill(0,0,width,height,0xFF606873);g.fill(15,200,width-15,202,0xFFA0A7B0);g.flush();
@@ -168,7 +168,8 @@ public final class ZombiesNpcClientPreview {
                         var ps=g.pose();ps.pushPose();ps.translate(160,200,250);ps.scale(95,-95,95);ps.mulPose(com.mojang.math.Axis.YP.rotationDegrees(145));
                         if(posture==2){ps.translate(.9,.26,0);ps.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90));}
                         else if(posture==4){ps.translate(0,.26,-1);ps.mulPose(com.mojang.math.Axis.XP.rotationDegrees(90));}
-                        else if(posture==3)ps.translate(0,-.38,0);
+                        else if(posture==5)ps.translate(0,-.25,0);
+                        else if(posture==3)ps.translate(0,-.625,0);
                         else if(posture==1)ps.translate(0,-.55,0);
                         ps.scale(-1,-1,1);ps.translate(0,-1.501,0);
                         var buffers=client.renderBuffers().bufferSource();model.renderToBuffer(ps,buffers.getBuffer(net.minecraft.client.renderer.RenderType.entityCutoutNoCull(net.minecraft.resources.ResourceLocation.tryParse("minecraft:textures/entity/player/wide/steve.png"))),15728880,net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY,1,1,1,1);buffers.endBatch();ps.popPose();
@@ -403,7 +404,7 @@ public final class ZombiesNpcClientPreview {
             var bindings=new net.minecraft.client.gui.screens.controls.KeyBindsScreen(manager,client.options);client.setScreen(bindings);render(bindings,640,360,output.resolve("coop-key-settings-640.png"));var modeButton=bindings.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.Button b&&b.getMessage().getString().startsWith("协作轮盘：")).map(c->(net.minecraft.client.gui.components.Button)c).findFirst().orElseThrow();modeButton.onPress();if(com.cdp.codpattern.zombiesaddon.ZombiesClientConfig.holdWheel())throw new AssertionError("Vanilla key binding settings persist click/hold preference");if(java.util.Arrays.stream(client.options.keyMappings).noneMatch(k->k==com.cdp.codpattern.client.zombies.ZombiesCoopClient.DROP_GUN))throw new AssertionError("Gun drop binding must be registered in vanilla controls");
         }finally{com.cdp.codpattern.client.zombies.ZombiesCoopClient.BANK.setKey(oldKey);net.minecraft.client.KeyMapping.resetMapping();com.cdp.codpattern.zombiesaddon.ZombiesClientConfig.setHoldWheel(oldMode);}
         data.putString("orderMode","guard");data.putString("orderName","焦沃");com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept(new ZombiesCoopNetwork.State(data));render(hud,640,360,output.resolve("coop-order-target-640.png"));data.remove("orderMode");data.remove("orderName");com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept(new ZombiesCoopNetwork.State(data));
-        var marks=new net.minecraft.nbt.ListTag();var ping=new net.minecraft.nbt.CompoundTag();ping.putDouble("z",-6);ping.putString("text","队友 · AK-47");ping.putBoolean("gun",true);marks.add(ping);
+        var marks=new net.minecraft.nbt.ListTag();var ping=new net.minecraft.nbt.CompoundTag();ping.putDouble("z",-6);ping.putString("text","队友 · AK-47");ping.putBoolean("gun",true);ping.putString("rarity","epic");ping.putInt("level",3);ping.putInt("upgrade",5);marks.add(ping);
         var labels=com.cdp.codpattern.client.zombies.ZombiesTeamPingRenderer.project(new Matrix4f(),new Matrix4f().perspective((float)Math.toRadians(70),4f/3,.05f,128),net.minecraft.world.phys.Vec3.ZERO,marks);
         if(labels.size()!=1||labels.get(0).meters()!=6)throw new AssertionError("World ping projection and distance");
         if(!com.cdp.codpattern.client.zombies.ZombiesTeamPingRenderer.project(new Matrix4f().rotateY((float)Math.PI),new Matrix4f().perspective((float)Math.toRadians(70),4f/3,.05f,128),net.minecraft.world.phys.Vec3.ZERO,marks).isEmpty())throw new AssertionError("Markers behind the camera must not mirror into view");

@@ -13,6 +13,15 @@ final class ZombiesNpcCombat {
     private ZombiesNpcConfig.Combat config;
     Vec3 anchor; UUID follow;
     private boolean drawn;
+    long nextStanceAt;
+    void resetStance(){nextStanceAt=0;npc.guardPose(-1);}
+    void updateStance(long now){
+        var guardAnchor=orderAnchor==null?anchor:orderAnchor;
+        boolean stationed=mode()==ZombiesNpcConfig.CombatMode.GUARD&&guardAnchor!=null&&npc.position().distanceToSqr(guardAnchor)<=1&&npc.owner().combatPlayers().stream().noneMatch(this::calledFor);
+        if(!stationed){npc.guardPose(0);nextStanceAt=0;return;}
+        if(nextStanceAt==0){npc.guardPose(npc.basePosture()==5?5:0);nextStanceAt=now+600+npc.getRandom().nextInt(601);}
+        else if(now>=nextStanceAt){npc.guardPose(npc.posture()==5?0:5);nextStanceAt=now+600+npc.getRandom().nextInt(601);}
+    }
     ZombiesNpcConfig.CombatMode orderMode; Vec3 orderAnchor; UUID orderFollow;
     void guard(Vec3 point){resume();orderMode=ZombiesNpcConfig.CombatMode.GUARD;orderAnchor=point;npc.getNavigation().stop();}
     void protect(UUID player){resume();orderMode=ZombiesNpcConfig.CombatMode.FOLLOW;orderFollow=player;npc.getNavigation().stop();}
@@ -35,18 +44,19 @@ final class ZombiesNpcCombat {
         stack.setCount(1);return stack;
     }
     void configure(ZombiesNpcConfig.Combat next){
-        config=next;drawn=false;anchor=npc.position();follow=null;resume();
+        resetStance();config=next;drawn=false;anchor=npc.position();follow=null;resume();
         npc.setItemSlot(EquipmentSlot.MAINHAND,next.mode()==ZombiesNpcConfig.CombatMode.OFF?ItemStack.EMPTY:loan.isEmpty()?(next.gun().isBlank()?ItemStack.EMPTY:gun(next.gun())):loan.copy());weaponRevision=UUID.randomUUID();
         npc.setDropChance(EquipmentSlot.MAINHAND,0);
     }
     boolean active(){return config!=null&&config.mode()!=ZombiesNpcConfig.CombatMode.OFF;}
-    private void stop(){npc.setDeltaMovement(Vec3.ZERO);npc.setTarget(null);npc.getNavigation().stop();if(drawn)IGunOperator.fromLivingEntity(npc).aim(false);npc.setNoAi(true);npc.setNoGravity(true);}
+    private void stop(){resetStance();npc.setDeltaMovement(Vec3.ZERO);npc.setTarget(null);npc.getNavigation().stop();if(drawn)IGunOperator.fromLivingEntity(npc).aim(false);npc.setNoAi(true);npc.setNoGravity(true);}
     void tick(){
         var owner=npc.owner();
-        if(!active()||owner==null||!owner.combatAllowed()||!npc.storyAlive()||npc.posture()!=0){stop();return;}
+        if(!active()||owner==null||!owner.combatAllowed()||!npc.storyAlive()||(npc.basePosture()!=0&&npc.basePosture()!=5)){stop();return;}
         npc.setNoAi(false);npc.setNoGravity(false);
         if(owner.managementPaused(npc)){npc.setTarget(null);npc.getNavigation().stop();npc.setDeltaMovement(Vec3.ZERO);if(drawn)IGunOperator.fromLivingEntity(npc).aim(false);return;}
         if(anchor==null)anchor=npc.position();
+        updateStance(npc.level().getGameTime());
         if(npc.tickCount%10==0){
             Vec3 destination=orderAnchor==null?anchor:orderAnchor;
             var caller=owner.combatPlayers().stream().filter(this::calledFor).findFirst().orElse(null);

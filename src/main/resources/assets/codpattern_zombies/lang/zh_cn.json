@@ -609,6 +609,7 @@
     "gui.codpattern.zombies.npc.map_event": "地图事件／任务指引",
     "gui.codpattern.zombies.npc.conversation.remove_line": "删除对话行 %s",
     "gui.codpattern.zombies.npc.pose.GROUND_SITTING": "坐地（屈膝）",
+    "gui.codpattern.zombies.npc.pose.KNEELING": "单膝蹲姿",
     "gui.codpattern.zombies.npc.pose.SUPINE": "平躺",
     "gui.codpattern.zombies.npc.combat": "作战方式",
     "gui.codpattern.zombies.npc.combat.OFF": "不作战",

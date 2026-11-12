@@ -15,7 +15,7 @@ public final class ZombiesNpcOrders {
     private final Map<UUID,Pending> pending=new HashMap<>();
     ZombiesNpcOrders(ZombiesCoopRuntime room,ZombiesMap map){this.room=room;this.map=map;}
     public void arm(ServerPlayer player,int preferred,boolean guard){var npc=room.support(player,preferred);pending.put(player.getUUID(),new Pending(npc.getUUID(),guard,player.level().getGameTime()+600));}
-    private Pending pending(ServerPlayer player){var p=pending.get(player.getUUID());if(p!=null&&(p.expires()<player.level().getGameTime()||!room.allowed(player)||!(map.getServerLevel().getEntity(p.npc()) instanceof ZombiesNpcEntity npc)||!map.npcRuntime().supportNpcs().contains(npc)||npc.posture()!=0)){pending.remove(player.getUUID());return null;}return p;}
+    private Pending pending(ServerPlayer player){var p=pending.get(player.getUUID());if(p!=null&&(p.expires()<player.level().getGameTime()||!room.allowed(player)||!(map.getServerLevel().getEntity(p.npc()) instanceof ZombiesNpcEntity npc)||!map.npcRuntime().supportNpcs().contains(npc)||!npc.combatPosture())){pending.remove(player.getUUID());return null;}return p;}
     public void snapshot(ServerPlayer player,CompoundTag out){var p=pending(player);if(p!=null){out.putString("orderMode",p.guard()?"guard":"protect");out.putString("orderName",map.getServerLevel().getEntity(p.npc()).getName().getString());}}
     public void point(ServerPlayer player){var p=pending(player);if(p==null){room.pings.mark(player);return;}var npc=(ZombiesNpcEntity)map.getServerLevel().getEntity(p.npc());
         Vec3 eye=player.getEyePosition(),end=eye.add(player.getViewVector(1).scale(96));var hit=player.level().clip(new ClipContext(eye,end,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,player));

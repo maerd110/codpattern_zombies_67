@@ -17,6 +17,7 @@ import net.minecraftforge.network.NetworkHooks;
 public final class ZombiesNpcEntity extends PathfinderMob {
     private static final EntityDataAccessor<String> SKIN = SynchedEntityData.defineId(ZombiesNpcEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Integer> POSTURE = SynchedEntityData.defineId(ZombiesNpcEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> GUARD_POSE = SynchedEntityData.defineId(ZombiesNpcEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> STORY_ALIVE = SynchedEntityData.defineId(ZombiesNpcEntity.class, EntityDataSerializers.BOOLEAN);
     private ZombiesNpcRuntime owner;
     private String npcId = "";
@@ -45,13 +46,16 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     @Override protected void defineSynchedData() {
         super.defineSynchedData();
         entityData.define(SKIN, "minecraft:textures/entity/player/wide/steve.png");
-        entityData.define(POSTURE, 0);
+        entityData.define(POSTURE, 0);entityData.define(GUARD_POSE,-1);
         entityData.define(STORY_ALIVE, true);
     }
 
     void bind(ZombiesNpcRuntime runtime, String id) { owner = runtime; npcId = id; }
     public String skin() { return entityData.get(SKIN); }
-    public int posture() { return entityData.get(POSTURE); }
+    public int posture() { int guard=entityData.get(GUARD_POSE);return guard<0?basePosture():guard; }
+    int basePosture(){return entityData.get(POSTURE);}
+    void guardPose(int pose){entityData.set(GUARD_POSE,pose);}
+    public boolean combatPosture(){return posture()==0||posture()==5;}
     public boolean storyAlive() { return entityData.get(STORY_ALIVE); }
     public String chatName() { return chatName.isBlank() ? getName().getString() : chatName; }
     public String nameColor() { return nameColor; }
@@ -59,7 +63,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
 
     public boolean lying() { return storyDataReady && (!storyAlive() || posture() == ZombiesNpcConfig.Pose.LYING.ordinal() || posture() == ZombiesNpcConfig.Pose.SUPINE.ordinal()); }
     @Override public net.minecraft.world.entity.EntityDimensions getDimensions(net.minecraft.world.entity.Pose pose) {
-        return lying() ? net.minecraft.world.entity.EntityDimensions.scalable(2.1F, .8F) : posture()==3 ? net.minecraft.world.entity.EntityDimensions.scalable(.9F,1.65F) : super.getDimensions(pose);
+        return lying() ? net.minecraft.world.entity.EntityDimensions.scalable(2.1F, .8F) : posture()==5 ? net.minecraft.world.entity.EntityDimensions.scalable(.6F,1.55F) : posture()==3 ? net.minecraft.world.entity.EntityDimensions.scalable(.9F,1.65F) : super.getDimensions(pose);
     }
     @Override protected net.minecraft.world.phys.AABB makeBoundingBox() {
         if (!lying()) return super.makeBoundingBox();
@@ -68,15 +72,15 @@ public final class ZombiesNpcEntity extends PathfinderMob {
         return new net.minecraft.world.phys.AABB(getX()-x,getY(),getZ()-z,getX()+x,getY()+.8,getZ()+z);
     }
     @Override protected float getStandingEyeHeight(net.minecraft.world.entity.Pose pose, net.minecraft.world.entity.EntityDimensions dimensions) {
-        return lying() ? .35F : posture()==3 ? 1.4F : super.getStandingEyeHeight(pose, dimensions);
+        return lying() ? .35F : posture()==5 ? 1.3F : posture()==3 ? 1.4F : super.getStandingEyeHeight(pose, dimensions);
     }
     @Override public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
         super.onSyncedDataUpdated(key);
-        if (storyDataReady && (POSTURE.equals(key) || STORY_ALIVE.equals(key))) refreshDimensions();
+        if (storyDataReady && (POSTURE.equals(key) || GUARD_POSE.equals(key) || STORY_ALIVE.equals(key))) refreshDimensions();
     }
     @Override public void tick() {
         if(!storyAlive())setNoGravity(true);
-        if(!storyAlive()||posture()!=0)setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        if(!storyAlive()||!combatPosture())setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
         super.tick();
         if(!storyAlive()){setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);setNoGravity(true);}
         if (lying()) setBoundingBox(makeBoundingBox());
@@ -89,7 +93,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
             setCustomNameVisible(!appearance.name().isEmpty());
         }
         if (appearance.skin() != null) entityData.set(SKIN, appearance.skin());
-        if (appearance.pose() != null) entityData.set(POSTURE, appearance.pose().ordinal());
+        if (appearance.pose() != null) {guardPose(-1);combat.resetStance();entityData.set(POSTURE, appearance.pose().ordinal());}
         if (appearance.alive() != null) {
             entityData.set(STORY_ALIVE, appearance.alive());
             dead = !appearance.alive();
@@ -116,7 +120,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     @Override protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
         if (!level().isClientSide && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer && owner != null) {
-            if(storyAlive()&&posture()==0&&combat.active()){ZombiesCoopNetwork.openNpc(serverPlayer,this);return InteractionResult.CONSUME;}
+            if(storyAlive()&&combatPosture()&&combat.active()){ZombiesCoopNetwork.openNpc(serverPlayer,this);return InteractionResult.CONSUME;}
             combat.follow=serverPlayer.getUUID();
             owner.interact(serverPlayer, npcId, this);
         }

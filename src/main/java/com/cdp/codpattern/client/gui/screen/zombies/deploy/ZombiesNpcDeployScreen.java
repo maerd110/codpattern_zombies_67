@@ -184,7 +184,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         color("name_color", appearance, "nameColor");
         color("text_color", appearance, "textColor");
         text("skin", appearance, "skin", "minecraft:textures/entity/player/wide/steve.png");
-        choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE"), "STANDING", "pose.");
+        choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE", "KNEELING"), "STANDING", "pose.");
         bool("alive", appearance, "alive", true);
         bool("invulnerable", appearance, "invulnerable", true);
         combat(appearance);
@@ -412,7 +412,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         optional(patch, "skin", "skin", new JsonPrimitive("minecraft:textures/entity/player/wide/steve.png"));
         if (patch.has("skin")) text("skin", patch, "skin", "");
         optional(patch, "pose", "pose", new JsonPrimitive("STANDING"));
-        if (patch.has("pose")) choice("pose", patch, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE"), "STANDING", "pose.");
+        if (patch.has("pose")) choice("pose", patch, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE", "KNEELING"), "STANDING", "pose.");
         optional(patch, "alive", "alive", new JsonPrimitive(true));
         if (patch.has("alive")) bool("alive", patch, "alive", true);
         optional(patch, "invulnerable", "invulnerable", new JsonPrimitive(true));
