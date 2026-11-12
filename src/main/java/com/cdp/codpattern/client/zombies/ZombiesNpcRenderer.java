@@ -17,14 +17,21 @@ import net.minecraftforge.fml.common.Mod;
 
 @Mod.EventBusSubscriber(modid = ZombiesAddonConstants.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class ZombiesNpcRenderer extends MobRenderer<ZombiesNpcEntity, PlayerModel<ZombiesNpcEntity>> {
+    private final PlayerModel<ZombiesNpcEntity> wideModel, slimModel;
     public ZombiesNpcRenderer(EntityRendererProvider.Context context) {
         super(context, new ZombiesNpcPoseModel(context.bakeLayer(ModelLayers.PLAYER)), 0.4F);
+        wideModel=model;
+        slimModel=new ZombiesNpcPoseModel(context.bakeLayer(ModelLayers.PLAYER_SLIM),true);
         addLayer(new net.minecraft.client.renderer.entity.layers.ItemInHandLayer<>(this,context.getItemInHandRenderer()));
     }
     @SubscribeEvent public static void register(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ZombiesNpcRegister.NPC.get(), ZombiesNpcRenderer::new);
     }
-    @Override public ResourceLocation getTextureLocation(ZombiesNpcEntity npc) { return ResourceLocation.tryParse(npc.skin()); }
+    @Override public ResourceLocation getTextureLocation(ZombiesNpcEntity npc) { return ZombiesNpcSkins.resolve(npc.skin()).texture(); }
+    @Override public void render(ZombiesNpcEntity npc,float yaw,float partial,PoseStack stack,net.minecraft.client.renderer.MultiBufferSource buffers,int light){
+        model=ZombiesNpcSkins.resolve(npc.skin()).slim()?slimModel:wideModel;
+        super.render(npc,yaw,partial,stack,buffers,light);
+    }
     @Override protected void setupRotations(ZombiesNpcEntity npc, PoseStack stack, float age, float yaw, float partialTick) {
         if(npc.lying())stack.mulPose(Axis.YP.rotationDegrees(180-yaw));else super.setupRotations(npc,stack,age,yaw,partialTick);
         if (npc.posture()==4) {

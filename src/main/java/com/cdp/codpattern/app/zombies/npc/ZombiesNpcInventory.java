@@ -8,8 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Plans every transfer against copies before committing any inventory slot. */
-final class ZombiesNpcInventory {
+public final class ZombiesNpcInventory {
     private ZombiesNpcInventory() { }
+    public static void grant(ServerPlayer player,List<ZombiesNpcConfig.Action> actions){commit(player,plan(player,actions));}
     static boolean contains(ServerPlayer player, String specification, int count) {
         ItemStack required = parse(specification);
         int found = 0;

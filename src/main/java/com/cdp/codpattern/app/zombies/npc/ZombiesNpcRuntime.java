@@ -102,7 +102,7 @@ public final class ZombiesNpcRuntime {
 
     private void validateAppearance(ZombiesNpcConfig.Appearance appearance) {
         if(appearance.combat()!=null&&appearance.combat().mode()!=ZombiesNpcConfig.CombatMode.OFF&&!appearance.combat().gun().isBlank())ZombiesNpcCombat.gun(appearance.combat().gun());
-        if (appearance.skin() != null && (ResourceLocation.tryParse(appearance.skin()) == null || !appearance.skin().endsWith(".png"))) {
+        if (appearance.playerSkin()==null && appearance.skin() != null && (ResourceLocation.tryParse(appearance.skin()) == null || !appearance.skin().endsWith(".png"))) {
             throw new IllegalArgumentException("Skin must be a resource location ending in .png");
         }
         if (appearance.position() != null) validatePosition(appearance.position());
@@ -414,12 +414,12 @@ public final class ZombiesNpcRuntime {
                 }
             }
             if(next.equals(sequence.rule.graph().entry().id())) {
-                sequence.cursor=next;sequence.nodeStarted=false;sequence.line=0;sequence.executedAction=false;
+                sequence.cursor=next;sequence.nodeStarted=false;sequence.line=0;sequence.segment=0;sequence.executedAction=false;
                 if(sequence.rule.trigger()==ZombiesNpcConfig.Trigger.INTERACT){sequences.remove(sequence.npc.id());releaseUnusedChunks();}
                 else sequence.due=now+20;
                 return;
             }
-            sequence.cursor = next; sequence.nodeStarted = false; sequence.line = 0; sequence.notice="";
+            sequence.cursor = next; sequence.nodeStarted = false; sequence.line = 0; sequence.segment=0;sequence.notice="";
         }
         throw new IllegalStateException("NPC graph execution budget exceeded");
     }
@@ -438,15 +438,18 @@ public final class ZombiesNpcRuntime {
     private void openDialogue(Sequence s,ZombiesNpcGraph.Node node) {
         if(!canConverse(s))return;
         for(var runtime:ACTIVE)for(var other:runtime.sequences.values())if(other!=s && other.actor!=null && other.actor.getUUID().equals(s.actor.getUUID()))runtime.closeDialogue(other);
-        String speaker=node.speaker().isBlank()?s.npc.id():node.speaker();var entity=entities.get(speaker);
+        var segment=s.segment<node.segments().size()?node.segments().get(s.segment):null;
+        String chosenSpeaker=segment==null?node.speaker():segment.speaker();
+        String speaker=chosenSpeaker.isBlank()?s.npc.id():chosenSpeaker;var entity=entities.get(speaker);
         var name=Component.literal(entity.chatName()).withStyle(style->style.withColor(net.minecraft.network.chat.TextColor.parseColor(entity.nameColor())));
-        var text=Component.literal(node.text()).withStyle(style->style.withColor(net.minecraft.network.chat.TextColor.parseColor(entity.textColor())));
+        var text=Component.literal(segment==null?node.text():segment.text()).withStyle(style->style.withColor(net.minecraft.network.chat.TextColor.parseColor(entity.textColor())));
         var options=visibleOptions(s,node);
         s.refreshAt=level().getGameTime()+20;
         s.view=new ZombiesNpcDialogueNetwork.View(UUID.randomUUID(),true,entity.getId(),name,text,options);
         ZombiesNpcDialogueNetwork.send(s.actor,s.view);
     }
     private List<ZombiesNpcDialogueNetwork.Answer> visibleOptions(Sequence s,ZombiesNpcGraph.Node node) {
+        if(s.segment<node.segments().size())return List.of(new ZombiesNpcDialogueNetwork.Answer("segment_next",node.segments().get(s.segment).reply()));
         return node.options().stream().filter(o->o.condition()==null||condition(o.condition(),s.actor))
                 .map(o->new ZombiesNpcDialogueNetwork.Answer(o.id(),o.text())).toList();
     }
@@ -460,6 +463,10 @@ public final class ZombiesNpcRuntime {
             if(!runtime.canConverse(s)){runtime.closeDialogue(s);return false;}
             if(option.isEmpty()){runtime.closeDialogue(s);return true;}
             var node=s.graphNodes.get(s.cursor);
+            if(s.segment<node.segments().size()){
+                if(!option.equals("segment_next")||s.view.options().stream().noneMatch(o->o.id().equals(option)))return false;
+                runtime.closeDialogue(s);s.segment++;runtime.openDialogue(s,node);return true;
+            }
             var selected=node.options().stream().filter(o->o.id().equals(option)).findFirst().orElse(null);
             // The option must have been offered AND still be eligible; old or forged packets cannot run a branch.
             if(selected==null||s.view.options().stream().noneMatch(o->o.id().equals(option))
@@ -470,7 +477,9 @@ public final class ZombiesNpcRuntime {
             if(selected.next().equals(s.rule.graph().entry().id())) {
                 runtime.sequences.remove(s.npc.id());runtime.releaseUnusedChunks();return true;
             }
-            s.cursor=selected.next();s.nodeStarted=false;s.interactionReceived=false;s.line=0;s.notice="";s.due=runtime.level().getGameTime();
+            boolean waitForInteraction=selected.closeOnSelect()||selected.next().equals(node.id());
+            s.cursor=selected.next();s.nodeStarted=waitForInteraction;s.interactionReceived=false;s.line=0;s.segment=0;s.notice="";s.due=runtime.level().getGameTime();
+            if(waitForInteraction)return true;
             runtime.advance(s);return true;
         }
         return false;
@@ -545,6 +554,7 @@ public final class ZombiesNpcRuntime {
         ServerPlayer actor;
         int index;
         int line;
+        int segment;
         long due;
         String blockedMessage = "";
         String notice="";long lastNotice;

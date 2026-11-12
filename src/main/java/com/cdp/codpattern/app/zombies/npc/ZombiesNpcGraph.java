@@ -31,16 +31,25 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             return match == Match.ALL ? stream.allMatch(check) : stream.anyMatch(check);
         }
     }
-    public record Option(String id, String text, Condition condition, String next) {
+    public record Option(String id, String text, Condition condition, String next, Boolean closeOnSelect) {
+        public Option(String id,String text,Condition condition,String next){this(id,text,condition,next,false);}
         public Option {
             if (id == null || !id.matches("[a-zA-Z0-9_-]{1,64}") || text == null || text.isBlank() || text.length() > 256)
                 throw new IllegalArgumentException("对话选项需要编号和 1 至 256 字的按钮文字");
             next = next == null ? "" : next;
+            closeOnSelect = Boolean.TRUE.equals(closeOnSelect);
+        }
+    }
+    public record Segment(String text, String reply, String speaker) {
+        public Segment {
+            text=text==null?"":text;reply=reply==null?"":reply;speaker=speaker==null?"":speaker;
+            if(text.isBlank()||text.length()>8192||reply.isBlank()||reply.length()>256)throw new IllegalArgumentException("每段问答需要 NPC 台词和 1 至 256 字的回应按钮");
         }
     }
     public record Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action,
                        Condition condition, double seconds, String next, String onFalse, Boolean complete,
-                       String text, String speaker, List<Option> options) {
+                       String text, String speaker, List<Option> options, List<Segment> segments) {
+        public Node(String id,Type type,double x,double y,ZombiesNpcConfig.Action action,Condition condition,double seconds,String next,String onFalse,Boolean complete,String text,String speaker,List<Option> options){this(id,type,x,y,action,condition,seconds,next,onFalse,complete,text,speaker,options,List.of());}
         public Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action, Condition condition, double seconds, String next, String onFalse, Boolean complete) {
             this(id,type,x,y,action,condition,seconds,next,onFalse,complete,"","",List.of());
         }
@@ -51,11 +60,13 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             text = text == null ? "" : text;
             speaker = speaker == null ? "" : speaker;
             options = options == null ? List.of() : List.copyOf(options);
+            segments=segments==null?List.of():List.copyOf(segments);
+            if(segments.size()>31)throw new IllegalArgumentException("一个对话块最多 32 段对话");
             if (text.length() > 8192) throw new IllegalArgumentException("对话正文最多 8192 字");
             if (type == Type.CHOICE) {
                 if (options.isEmpty() || options.size() > 12 || options.stream().map(Option::id).distinct().count() != options.size())
                     throw new IllegalArgumentException("玩家选择节点需要 1 至 12 个编号不同的选项");
-            } else if (!options.isEmpty() || !text.isEmpty() || !speaker.isEmpty()) throw new IllegalArgumentException("此节点不支持对话选项");
+            } else if (!options.isEmpty() || !text.isEmpty() || !speaker.isEmpty() || !segments.isEmpty()) throw new IllegalArgumentException("此节点不支持对话选项");
             complete = complete == null ? true : complete;
             if (id == null || !id.matches("[a-zA-Z0-9_-]{1,64}") || type == null) throw new IllegalArgumentException("节点编号或类型无效");
             if (!Double.isFinite(x) || !Double.isFinite(y) || Math.abs(x) > 100000 || Math.abs(y) > 100000) throw new IllegalArgumentException("节点位置无效");
@@ -94,15 +105,19 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             }
         }
         Map<String, Integer> colors = new HashMap<>();
-        visit(entries.get(0).id(), byId, colors);
-        if (colors.size() != nodes.size()) throw new IllegalArgumentException("存在未连接到事件入口的节点，请连接或删除后保存");
+        for(var node:nodes)visit(node.id(),byId,colors);
+        var reachable=new HashSet<String>();var pending=new ArrayDeque<String>();pending.add(entries.get(0).id());
+        while(!pending.isEmpty()){String id=pending.removeFirst();if(reachable.add(id))pending.addAll(byId.get(id).outputs());}
+        if (reachable.size() != nodes.size()) throw new IllegalArgumentException("存在未连接到事件入口的节点，请连接或删除后保存");
+        for(var node:nodes)for(var option:node.options())if(option.closeOnSelect()&&byId.get(option.next()).type()!=Type.CHOICE)throw new IllegalArgumentException("关闭后等待的目标必须是玩家对话块");
     }
     private static void visit(String id, Map<String, Node> nodes, Map<String, Integer> colors) {
         int color = colors.getOrDefault(id, 0);
         if (color == 1) throw new IllegalArgumentException("连线形成循环，请使用等待条件节点等待事件");
         if (color == 2) return;
         colors.put(id, 1);
-        for (String next : nodes.get(id).outputs()) if(nodes.get(next).type()!=Type.ENTRY) visit(next, nodes, colors);
+        // Choice edges consume a fresh player selection, so they cannot form an automatic execution loop.
+        if(nodes.get(id).type()!=Type.CHOICE)for (String next : nodes.get(id).outputs()) if(nodes.get(next).type()!=Type.ENTRY) visit(next, nodes, colors);
         colors.put(id, 2);
     }
     public Node entry() { return nodes.stream().filter(n -> n.type() == Type.ENTRY).findFirst().orElseThrow(); }

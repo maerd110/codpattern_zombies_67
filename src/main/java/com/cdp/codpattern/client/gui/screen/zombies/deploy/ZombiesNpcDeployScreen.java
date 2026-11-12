@@ -175,6 +175,15 @@ public final class ZombiesNpcDeployScreen extends Screen {
         }, canEdit() && npc() != null);
     }
 
+    private void skin(JsonObject appearance){
+        boolean player=appearance.has("playerSkin")&&!appearance.get("playerSkin").isJsonNull();
+        if(player){
+            String name=value(appearance.getAsJsonObject("playerSkin"),"name","");
+            rows.add((x,y,w)->labels.add(new Label(tr("player_skin.current")+name,x,y+6,w)));
+            rowButton("player_skin.resource",()->{appearance.remove("playerSkin");rebuildWidgets();});
+        }else text("skin",appearance,"skin","minecraft:textures/entity/player/wide/steve.png");
+        rowButton("player_skin.open",()->minecraft.setScreen(new ZombiesNpcSkinScreen(this,result->{appearance.add("playerSkin",ZombiesNpcRepository.GSON.toJsonTree(result));rebuildWidgets();})));
+    }
     private void basic() {
         JsonObject npc = npc();
         text("id", value(npc, "id", ""), next -> draft.renameNpc(npc, next));
@@ -183,7 +192,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         text("chat_name", appearance, "chatName", "");
         color("name_color", appearance, "nameColor");
         color("text_color", appearance, "textColor");
-        text("skin", appearance, "skin", "minecraft:textures/entity/player/wide/steve.png");
+        skin(appearance);
         choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE", "KNEELING"), "STANDING", "pose.");
         bool("alive", appearance, "alive", true);
         bool("invulnerable", appearance, "invulnerable", true);
@@ -410,7 +419,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         optional(patch, "textColor", "text_color", new JsonPrimitive("#FFFFFF"));
         if (patch.has("textColor")) color("text_color", patch, "textColor");
         optional(patch, "skin", "skin", new JsonPrimitive("minecraft:textures/entity/player/wide/steve.png"));
-        if (patch.has("skin")) text("skin", patch, "skin", "");
+        if (patch.has("skin")) skin(patch);
         optional(patch, "pose", "pose", new JsonPrimitive("STANDING"));
         if (patch.has("pose")) choice("pose", patch, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE", "KNEELING"), "STANDING", "pose.");
         optional(patch, "alive", "alive", new JsonPrimitive(true));
@@ -442,7 +451,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
     }
     private void optional(JsonObject object, String key, String label, JsonElement defaultValue) {
         rows.add((x, y, w) -> button(tr(object.has(key) ? "change" : "keep", tr(label)), x, y, w, () -> {
-            if (object.has(key)) object.remove(key); else object.add(key, defaultValue.deepCopy());
+            if (object.has(key)) {object.remove(key);if(key.equals("skin"))object.remove("playerSkin");} else object.add(key, defaultValue.deepCopy());
             rebuildWidgets();
         }, canEdit()));
     }

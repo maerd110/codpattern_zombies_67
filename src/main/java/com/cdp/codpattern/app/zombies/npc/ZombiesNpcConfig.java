@@ -34,6 +34,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
         for (Npc npc : npcs) for (Rule rule : npc.rules()) {
             if (!ruleKeys.containsAll(rule.requires())) throw new IllegalArgumentException("Unknown prerequisite in " + rule.id());
             if (rule.graph() != null) for (var node : rule.graph().nodes()) if (!node.speaker().isBlank() && !keys.contains(node.speaker())) throw new IllegalArgumentException("对话引用未知 NPC：" + node.speaker());
+            if(rule.graph()!=null)for(var node:rule.graph().nodes())for(var segment:node.segments())if(!segment.speaker().isBlank()&&!keys.contains(segment.speaker()))throw new IllegalArgumentException("分段对话引用未知 NPC："+segment.speaker());
             for (Action action : rule.executableActions()) {
                 if (action.target() != null && !keys.contains(action.target())) throw new IllegalArgumentException("Unknown NPC target");
             }
@@ -80,7 +81,8 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
         }
     }
     public record Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable,
-                             String chatName, String nameColor, String textColor, Combat combat) {
+                             String chatName, String nameColor, String textColor, Combat combat, ZombiesNpcPlayerSkin playerSkin) {
+        public Appearance(String name,String skin,Pose pose,Boolean alive,Position position,Boolean invulnerable,String chatName,String nameColor,String textColor,Combat combat){this(name,skin,pose,alive,position,invulnerable,chatName,nameColor,textColor,combat,null);}
         public Appearance(String name,String skin,Pose pose,Boolean alive,Position position,Boolean invulnerable,String chatName,String nameColor,String textColor){this(name,skin,pose,alive,position,invulnerable,chatName,nameColor,textColor,null);}
         public Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable) {
             this(name, skin, pose, alive, position, invulnerable, null, null, null);

@@ -1,5 +1,7 @@
 package com.cdp.codpattern.client.gui.screen.zombies.deploy;
 
+import com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen;
+
 import com.cdp.codpattern.app.zombies.deploy.ZombiesDeployDraft;
 import com.cdp.codpattern.app.zombies.deploy.ZombiesDeploySnapshot;
 import com.cdp.codpattern.app.zombies.npc.*;
@@ -180,6 +182,7 @@ public final class ZombiesNpcClientPreview {
             }
             coopChecks(client,output);
             scenarioChecks(screen,client,output);
+            playerSkinChecks(screen,client,output);
             Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
@@ -420,6 +423,10 @@ public final class ZombiesNpcClientPreview {
         var d=new ZombiesNpcEditorDraft(ZombiesNpcConfig.empty());var npc=d.addNpc(new ZombiesNpcConfig.Position(1,64,1,0));d.addRule(npc);ZombiesNpcSharedCanvas.ensure(d);
         var node=ZombiesNpcGraphDraft.add(ZombiesNpcSharedCanvas.looseRule(d),ZombiesNpcGraph.Type.CHOICE,600,100,null);node.addProperty("text","保留第一句\n删除第二句");
         var owner=new ZombiesNpcDeployScreen((ZombiesDeployToolScreen)get(previous,"parent"),new ZombiesDeployDraft("删除台词","INITIAL",-1,"MVP1_MINIMAL",java.util.Map.of()));set(owner,"draft",d);set(owner,"editable",true);owner.graphSelect(0,0);owner.init(client,1280,1000);press(owner,"逻辑画布");var graph=(ZombiesNpcGraphScreen)client.screen;set(graph,"selected","_loose/"+node.get("id").getAsString());graph.init(client,1280,1000);press(graph,"删除对话行 2");if(!node.get("text").getAsString().equals("保留第一句"))throw new AssertionError("Delete dialogue prose line removes only the selected line");render(graph,1280,1000,output.resolve("delete-dialogue-line-1280.png"));
+        graph.init(client,1280,1000);press(graph,"新增前置问答段");graph.init(client,1280,1000);
+        if(node.getAsJsonArray("segments").size()!=1)throw new AssertionError("One choice block holds multiple dialogue segments");
+        var part=node.getAsJsonArray("segments").get(0).getAsJsonObject();part.addProperty("text","别开枪！先听我说。");part.addProperty("reply","你是谁？");graph.init(client,1280,1000);render(graph,640,480,output.resolve("segmented-dialogue-editor-640.png"));graph.init(client,1280,1000);press(graph,"预览对话窗口（显示全部选项）");
+        if(!(client.screen instanceof ZombiesNpcDialogueScreen first)||!((ZombiesNpcDialogueNetwork.View)get(first,"view")).text().getString().equals("别开枪！先听我说。"))throw new AssertionError("Preview starts at the first authored segment");render(client.screen,640,360,output.resolve("segmented-dialogue-preview-640.png"));press(client.screen,"你是谁？");if(!(client.screen instanceof ZombiesNpcDialogueScreen last)||!((ZombiesNpcDialogueNetwork.View)get(last,"view")).text().getString().equals("保留第一句"))throw new AssertionError("Preview response advances inside the same block");client.screen.onClose();
         var wave=com.google.gson.JsonParser.parseString("{\"wave\":1,\"maxAlive\":8,\"mobs\":[{\"entity\":\"minecraft:zombie\",\"count\":3}]}").getAsJsonObject();
         var speaker=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Speaker("guide","电台向导","gold","white",true,false);
         var dialogue=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Dialogue(1,List.of(new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Line("guide","准备好，怪物就要来了。",2)));
@@ -485,9 +492,16 @@ public final class ZombiesNpcClientPreview {
         }
         for(int page=0;page<4;page++){scenarioRoot(screen,client,page,1280,720);render(screen,1280,720,output.resolve("scenario-card-overview-"+page+"-1280.png"));}
         scenarioRoot(screen,client,4,1280,900);press(screen,"新增任务指引");screen.init(client,1280,900);screen.children().stream().filter(c->c instanceof net.minecraft.client.gui.components.EditBox b&&b.getMessage().getString().equals("更新后的任务文本（留空清除）")).map(c->(net.minecraft.client.gui.components.EditBox)c).findFirst().orElseThrow().setValue("抵达二楼，与焦沃会合");render(screen,640,480,output.resolve("objective-editor-640.png"));render(screen,320,240,output.resolve("objective-editor-320.png"));if(!ZombiesNpcRepository.GSON.fromJson(data,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.class).tasks().get(0).text().equals("抵达二楼，与焦沃会合"))throw new AssertionError("task editor must update saved configuration");
+        scenarioRoot(screen,client,5,1280,1400);press(screen,"新增区域道具");screen.init(client,1280,1400);press(screen,"到地图框选触发区域");ZombiesScenarioScreen.selectionInput(true,false,false,new net.minecraft.core.BlockPos(2,63,2));ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(6,66,8));var areaBounds=ZombiesScenarioScreen.selectionBounds();if(areaBounds==null||areaBounds.getXsize()!=5||areaBounds.getYsize()!=4||areaBounds.getZsize()!=7)throw new AssertionError("Area reward world selection stores independent 3D corners");ZombiesScenarioScreen.selectionInput(false,true,true,null);screen.init(client,1280,1400);render(screen,640,480,output.resolve("area-reward-detail-640.png"));render(screen,320,240,output.resolve("area-reward-detail-320.png"));screen.init(client,1280,1400);press(screen,"管理奖励道具 · 1 种");press(screen,"新增奖励道具");screen.init(client,1280,1400);screen.onClose();render(screen,640,480,output.resolve("area-reward-item-cards-640.png"));var areaConfig=ZombiesNpcRepository.GSON.fromJson(data,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.class);if(areaConfig.areaRewards().size()!=1||areaConfig.areaRewards().get(0).items().size()!=2||areaConfig.tasks().size()!=1)throw new AssertionError("Area rewards save together with other scenario tabs");
         set(screen,"selectionRegion",region);set(screen,"suspended",true);if(!ZombiesScenarioScreen.selecting())throw new AssertionError("Selection context remains active until explicitly ended");
         com.cdp.codpattern.event.client.zombies.ZombiesScenarioSelection.loggedOut(null);if(ZombiesScenarioScreen.selecting())throw new AssertionError("Disconnect clears world selection before another server is joined");
         ZombiesScenarioScreen.disconnected();
+    }
+    private static void playerSkinChecks(Screen parent,Minecraft client,Path output)throws Exception{
+        if(!com.cdp.codpattern.client.zombies.ZombiesNpcSkins.lookup("not a player name").isCompletedExceptionally())throw new AssertionError("Invalid profile queries fail before network access");
+        String texture=java.util.Base64.getEncoder().encodeToString(("{\"textures\":{\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/"+"b".repeat(64)+"\"}}}").getBytes(java.nio.charset.StandardCharsets.UTF_8));var profile=new com.cdp.codpattern.app.zombies.npc.ZombiesNpcPlayerSkin("Alex",java.util.UUID.randomUUID().toString(),texture,"");
+        var cacheField=com.cdp.codpattern.client.zombies.ZombiesNpcSkins.class.getDeclaredField("TEXTURES");cacheField.setAccessible(true);@SuppressWarnings("unchecked") var cache=(java.util.Map<String,com.cdp.codpattern.client.zombies.ZombiesNpcSkins.Resolved>)cacheField.get(null);cache.put(profile.synced(),new com.cdp.codpattern.client.zombies.ZombiesNpcSkins.Resolved(net.minecraft.resources.ResourceLocation.tryParse("minecraft:textures/entity/player/wide/steve.png"),true));
+        var selected=new java.util.concurrent.atomic.AtomicReference<com.cdp.codpattern.app.zombies.npc.ZombiesNpcPlayerSkin>();var screen=new ZombiesNpcSkinScreen(parent,selected::set);screen.init(client,640,360);set(screen,"result",profile);screen.init(client,640,360);render(screen,640,360,output.resolve("player-skin-query-640.png"));render(screen,320,240,output.resolve("player-skin-query-320.png"));screen.init(client,640,360);press(screen,"使用此玩家皮肤");if(selected.get()!=profile||!com.cdp.codpattern.client.zombies.ZombiesNpcSkins.resolve(profile.synced()).slim())throw new AssertionError("Choosing a profile uses the saved snapshot and its slim model cache");cache.remove(profile.synced());
     }
     private static void scenarioRoot(ZombiesScenarioScreen screen,Minecraft client,int page,int width,int height)throws Exception{
         set(screen,"page",page);((java.util.Deque<?>)get(screen,"navigation")).clear();screen.init(client,width,height);

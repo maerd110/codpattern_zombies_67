@@ -38,6 +38,7 @@ public final class ZombiesNpcGraphDraft {
             JsonArray tests = new JsonArray(); tests.add(test()); condition.add("tests", tests); node.add("condition", condition);
         }
         if (type == ZombiesNpcGraph.Type.CHOICE) {
+            node.add("segments",new JsonArray());
             node.addProperty("text", ""); node.addProperty("speaker", "");
             var options = new JsonArray(); options.add(option(1)); node.add("options", options);
         }
@@ -50,15 +51,17 @@ public final class ZombiesNpcGraphDraft {
     }
     public static void connect(JsonObject rule, String from, String port, String to) {
         var source = find(rule, from); var target = find(rule, to);
-        if (source == null || target == null || from.equals(to)) throw new IllegalArgumentException("这两个节点不能相连");
+        if (source == null || target == null || from.equals(to)&&!source.get("type").getAsString().equals("CHOICE")) throw new IllegalArgumentException("这两个节点不能相连");
         if (!ports(source).contains(port)) throw new IllegalArgumentException("请选择有效出口");
-        if (!target.get("type").getAsString().equals("ENTRY") && reaches(rule, to, from, new HashSet<>())) throw new IllegalArgumentException("不能形成循环；等待事件请使用等待条件节点");
+        if (!source.get("type").getAsString().equals("CHOICE")&&!target.get("type").getAsString().equals("ENTRY") && reaches(rule, to, from, new HashSet<>())) throw new IllegalArgumentException("自动执行连线不能形成循环；返回对话请使用玩家选择出口");
         target(source, port, to);
+        if(port.startsWith("option:")){var option=portObject(source,port);if(from.equals(to))option.addProperty("closeOnSelect",true);else if(!target.get("type").getAsString().equals("CHOICE"))option.addProperty("closeOnSelect",false);}
     }
     private static boolean reaches(JsonObject rule, String start, String target, Set<String> visited) {
         if (start.equals(target)) return true;
         if (!visited.add(start)) return false;
         var node = find(rule, start); if (node == null) return false;
+        if(node.get("type").getAsString().equals("CHOICE"))return false;
         for (String port : ports(node)) {var next=find(rule,target(node,port));if(next!=null && !next.get("type").getAsString().equals("ENTRY") && reaches(rule,target(node,port),target,visited))return true;}
         return false;
     }
@@ -95,6 +98,7 @@ public final class ZombiesNpcGraphDraft {
         Map<String, Integer> depth = new HashMap<>();
         var entries = nodes(rule).asList().stream().map(JsonElement::getAsJsonObject).filter(n -> n.get("type").getAsString().equals("ENTRY")).toList();
         if (entries.isEmpty()) return;
+        Set<String> returns=new HashSet<>();layoutReturns(rule,entries.get(0).get("id").getAsString(),new HashMap<>(),returns);
         depth.put(entries.get(0).get("id").getAsString(), 0);
         for (int pass = 0; pass < nodes(rule).size(); pass++) {
             boolean changed = false;
@@ -102,7 +106,7 @@ public final class ZombiesNpcGraphDraft {
                 var node = element.getAsJsonObject(); var d = depth.get(node.get("id").getAsString()); if (d == null) continue;
                 for (String port : ports(node)) {
                     String target = target(node,port);
-                    if (!target.isBlank() && find(rule,target)!=null && !find(rule,target).get("type").getAsString().equals("ENTRY") && depth.getOrDefault(target, -1) < d + 1) { depth.put(target, d + 1); changed = true; }
+                    if (!returns.contains(node.get("id").getAsString()+"/"+port) && !target.isBlank() && find(rule,target)!=null && !find(rule,target).get("type").getAsString().equals("ENTRY") && depth.getOrDefault(target, -1) < d + 1) { depth.put(target, d + 1); changed = true; }
                 }
             }
             if (!changed) break;
@@ -115,6 +119,11 @@ public final class ZombiesNpcGraphDraft {
             rows.put(d,row+height+37);
             node.addProperty("x", 20 + d * 210); node.addProperty("y", 30 + row);
         }
+    }
+    private static void layoutReturns(JsonObject rule,String id,Map<String,Integer> colors,Set<String> returns){
+        if(colors.containsKey(id))return;var node=find(rule,id);if(node==null)return;colors.put(id,1);
+        for(String port:ports(node)){String target=target(node,port);if(colors.getOrDefault(target,0)==1)returns.add(id+"/"+port);else layoutReturns(rule,target,colors,returns);}
+        colors.put(id,2);
     }
     public static List<JsonObject> actions(JsonObject rule) {
         if (rule.has("graph") && !rule.get("graph").isJsonNull()) return nodes(rule).asList().stream().map(JsonElement::getAsJsonObject)
@@ -134,6 +143,7 @@ public final class ZombiesNpcGraphDraft {
         if (!rule.has("graph") || rule.get("graph").isJsonNull()) return;
         for (var element : nodes(rule)) {
             var node = element.getAsJsonObject(); if (node.has("speaker") && !node.get("speaker").getAsString().isBlank()) node.addProperty("speaker",npc.apply(node.get("speaker").getAsString()));
+            if(node.has("segments"))for(var segment:node.getAsJsonArray("segments")){var s=segment.getAsJsonObject();if(s.has("speaker")&&!s.get("speaker").getAsString().isBlank())s.addProperty("speaker",npc.apply(s.get("speaker").getAsString()));}
             for (var c : conditions(node)) for (var value : c.getAsJsonArray("tests")) {
                 var test = value.getAsJsonObject(); String kind = test.get("kind").getAsString();
                 if (kind.equals("NPC_ALIVE")) test.addProperty("reference", npc.apply(test.get("reference").getAsString()));

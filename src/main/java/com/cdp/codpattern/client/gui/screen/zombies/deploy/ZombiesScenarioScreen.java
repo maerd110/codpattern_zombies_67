@@ -23,7 +23,7 @@ public final class ZombiesScenarioScreen extends Screen {
     private UUID pending;
     private long deadline,lastClick;
     private JsonObject lastCard,captureTarget,selectionRegion;
-    private boolean selectingSource;
+    private boolean selectingSource,selectingReward;
     private int page,left,formWidth,bottom;
     private GuiGraphics graphics;
     private List<String> ruleIds=List.of(),mobIds=List.of("minecraft:zombie");
@@ -53,7 +53,7 @@ public final class ZombiesScenarioScreen extends Screen {
     private BlockPos playerPos(){return minecraft.player==null?BlockPos.ZERO:minecraft.player.blockPosition();}
     private BlockPos targetPos(){return minecraft.hitResult instanceof net.minecraft.world.phys.BlockHitResult hit?hit.getBlockPos():playerPos();}
     private Level level(){return navigation.peekLast();}
-    private void root(){navigation.clear();if(data!=null){String[] keys={"waves","speakers","dialogues","events","tasks"};String[] titles={"波次怪物","出场人物","波前对话","地图事件","任务书"};navigation.add(new Level(keys[page],titles[page],list(keys[page])));}lastCard=null;}
+    private void root(){navigation.clear();if(data!=null){String[] keys={"waves","speakers","dialogues","events","tasks","areaRewards"};String[] titles={"波次怪物","出场人物","波前对话","地图事件","任务书","区域道具"};navigation.add(new Level(keys[page],titles[page],list(keys[page])));}lastCard=null;}
     private void request(String op,String body){
         try{ZombiesNpcEditorWire.checkRequest(body);pending=UUID.randomUUID();deadline=System.currentTimeMillis()+20000;ZombiesNpcDialogueNetwork.edit(new ZombiesNpcDialogueNetwork.EditorRequest(pending,map,op,body));message=op.equals("capture")?"正在读取源场景…":"正在读取／保存…";}
         catch(RuntimeException e){pending=null;captureTarget=null;message=detail(e);}
@@ -83,8 +83,8 @@ public final class ZombiesScenarioScreen extends Screen {
         rows.clear();labels.clear();cards.clear();left=12;formWidth=width-24;bottom=height-42;
         if(data!=null&&navigation.isEmpty())root();
         button("收起查看地图",width-122,3,110,()->{suspended=true;minecraft.setScreen(null);},pending==null&&minecraft.player!=null);
-        int w=(width-32)/5;String[] names={"波次怪物","出场人物","波前对话","地图事件","任务书"};
-        for(int i=0;i<5;i++){int j=i;button((page==i?"● ":"")+names[i],12+i*(w+2),27,w,()->{page=j;root();message="";refresh();},pending==null);}
+        int w=(width-34)/6;String[] names={"波次怪物","出场人物","波前对话","地图事件","任务书","区域道具"};
+        for(int i=0;i<6;i++){int j=i;button((page==i?"● ":"")+names[i],12+i*(w+2),27,w,()->{page=j;root();message="";refresh();},pending==null);}
         int bw=(width-28)/3;
         button("保存配置",12,height-27,bw,this::save,canEdit());
         button("重新读取",14+bw,height-27,bw,()->{if(dirty())minecraft.setScreen(new ConfirmScreen(ok->{minecraft.setScreen(this);if(ok)load();},Component.literal("放弃未保存的修改？"),Component.empty()));else load();},pending==null);
@@ -106,7 +106,7 @@ public final class ZombiesScenarioScreen extends Screen {
             for(int i=l.detailScroll;i<Math.min(rows.size(),l.detailScroll+count);i++)rows.get(i).accept(82+(i-l.detailScroll)*26);
         }
     }
-    private static String kindLabel(String kind){return switch(kind){case "waves"->"波次";case "speakers"->"出场人物";case "dialogues"->"波前对话";case "events"->"地图事件";case "tasks"->"任务指引";case "mobs"->"怪物";case "lines"->"台词";default->"区域变化";};}
+    private static String kindLabel(String kind){return switch(kind){case "waves"->"波次";case "speakers"->"出场人物";case "dialogues"->"波前对话";case "events"->"地图事件";case "tasks"->"任务指引";case "areaRewards"->"区域道具";case "rewardItems"->"奖励道具";case "mobs"->"怪物";case "lines"->"台词";default->"区域变化";};}
     private int accent(String kind){return switch(kind){case "waves","mobs"->0xFF72B8E0;case "speakers"->0xFFE9BD70;case "dialogues","lines"->0xFF82D4B3;default->0xFFBAA1E5;};}
     private void buildCards(Level l){
         int cols=Math.max(1,Math.min(4,(width-24)/230)),gap=10,cw=(width-24-gap*(cols-1))/cols,ch=66;
@@ -128,13 +128,15 @@ public final class ZombiesScenarioScreen extends Screen {
             if(chosen)g.fill(x+w-11,y+10,x+w-7,y+14,color);
         }
     }
-    private String cardTitle(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){case "waves","dialogues"->"第 "+str(o,"wave","?")+" 波";case "speakers"->str(o,"name","未命名人物");case "events","tasks"->str(o,"name","未命名条目");case "mobs"->entityName(str(o,"entity","minecraft:zombie"));case "lines"->"台词 "+(i+1)+" · "+speakerName(str(o,"speaker",""));default->"区域 "+(i+1)+" · "+(str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?"场景快照":"方块填充");};}
+    private String cardTitle(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){case "waves","dialogues"->"第 "+str(o,"wave","?")+" 波";case "speakers"->str(o,"name","未命名人物");case "events","tasks","areaRewards"->str(o,"name","未命名条目");case "rewardItems"->"道具 "+(i+1)+" · "+str(o,"item","");case "mobs"->entityName(str(o,"entity","minecraft:zombie"));case "lines"->"台词 "+(i+1)+" · "+speakerName(str(o,"speaker",""));default->"区域 "+(i+1)+" · "+(str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?"场景快照":"方块填充");};}
     private String summary(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){
         case "waves"->o.getAsJsonArray("mobs").size()+" 种怪物 · 存活上限 "+str(o,"maxAlive","默认");
         case "speakers"->str(o,"id","")+" · 名字 "+str(o,"nameColor","white")+" / 正文 "+str(o,"textColor","white");
         case "dialogues"->o.getAsJsonArray("lines").size()+" 句台词 · 开播等待 "+str(o,"delaySeconds","0")+" 秒";
         case "events"->(Boolean.parseBoolean(str(o,"automatic","true"))?"自动 · ≥ "+str(o,"minWave","0")+" 波":"由 NPC 动作触发")+" · "+o.getAsJsonArray("regions").size()+" 处变化";
         case "tasks"->"≥ "+str(o,"minWave","0")+" 波 · "+str(o,"text","");
+        case "areaRewards"->o.getAsJsonArray("items").size()+" 种道具 · 每名玩家每局一次";
+        case "rewardItems"->"数量 "+str(o,"count","1")+" · 保留物品数据";
         case "mobs"->"数量 "+str(o,"count","1")+" · 生命倍率 "+str(o,"healthMultiplier","默认")+" · 击杀积分 "+str(o,"killPoints","默认");
         case "lines"->str(o,"text","").replace('\n',' ')+" · "+str(o,"seconds","1")+" 秒";
         default->str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?(o.has("scene")&&!o.get("scene").isJsonNull()?sceneSummary(o):"尚未读取源场景"):str(o,"block","minecraft:stone");
@@ -155,6 +157,8 @@ public final class ZombiesScenarioScreen extends Screen {
             case "dialogues"->{int n=1;Set<Integer> used=new HashSet<>();l.entries.forEach(e->used.add(e.getAsJsonObject().get("wave").getAsInt()));while(used.contains(n))n++;o.addProperty("wave",n);o.addProperty("delaySeconds",0);o.add("lines",new JsonArray());}
             case "events"->{o.addProperty("id",unique(l.entries,"event_"));o.addProperty("name","新事件");o.addProperty("automatic",true);o.addProperty("minWave",1);o.addProperty("rule","");o.addProperty("weather","CLEAR");o.add("regions",new JsonArray());}
             case "tasks"->{o.addProperty("id",unique(l.entries,"task_"));o.addProperty("name","新任务指引");o.addProperty("automatic",true);o.addProperty("minWave",1);o.addProperty("rule","");o.addProperty("text","前往目标区域");}
+            case "areaRewards"->{o.addProperty("id",unique(l.entries,"area_"));o.addProperty("name","新区域道具");o.addProperty("minWave",0);o.addProperty("rule","");o.add("from",position(playerPos()));o.add("to",position(playerPos()));var items=new JsonArray();var item=new JsonObject();item.addProperty("item","minecraft:emerald");item.addProperty("count",1);items.add(item);o.add("items",items);}
+            case "rewardItems"->{o.addProperty("item","minecraft:emerald");o.addProperty("count",1);}
             case "mobs"->{o.addProperty("entity","minecraft:zombie");o.addProperty("count",1);}
             case "lines"->{o.addProperty("speaker","");o.addProperty("text","新台词");o.addProperty("seconds",1);}
             case "regions"->{o.addProperty("mode","SCENE");o.addProperty("block","minecraft:stone");for(String key:List.of("from","to","sourceFrom","sourceTo"))o.add(key,position(playerPos()));}
@@ -180,6 +184,8 @@ public final class ZombiesScenarioScreen extends Screen {
             case "tasks"->{heading("任务身份");hint("NPC 动作引用编号："+str(o,"id",""));field("任务名称",o,"name","");heading("触发条件");toggle("自动检查触发",o,"automatic",true);field("最低波次（0不限）",o,"minWave","0");var refs=new ArrayList<String>(List.of(""));refs.addAll(ruleIds);select("需要已完成的 NPC 规则",o,"rule",refs,v->v.isBlank()?"不限":v);heading("顶部任务指引");field("更新后的任务文本（留空清除）",o,"text","");hint("自动条件同时满足时更新一次。关闭自动检查后，可由 NPC 的触发地图事件／任务指引动作更新；多次自动更新按条目顺序执行。");}
             case "events"->{heading("事件身份");hint("NPC 动作引用编号："+str(o,"id",""));field("事件名称",o,"name","");heading("自动触发条件");toggle("自动检查触发",o,"automatic",true);field("最低波次（0不限）",o,"minWave","0");var refs=new ArrayList<String>(List.of(""));refs.addAll(ruleIds);select("需要已完成的 NPC 规则",o,"rule",refs,v->v.isBlank()?"不限":v);hint("波次与规则完成条件需同时满足；关闭自动检查后由 NPC 动作触发。");heading("地图变化");row("管理区域变化 · "+o.getAsJsonArray("regions").size()+" 处",()->browse("regions",str(o,"name","事件")+" / 区域变化",o.getAsJsonArray("regions")));select("房间天气",o,"weather",List.of("","CLEAR","RAIN","THUNDER"),v->switch(v){case "CLEAR"->"晴朗";case "RAIN"->"下雨";case "THUNDER"->"雷雨";default->"不改变";});field("房间时间（空为不变）",o,"time","");pair("设为白天",()->{o.addProperty("time",1000);refresh();},"设为夜晚",()->{o.addProperty("time",18000);refresh();});hint("每个事件每局一次；房间天气和时间不改变其他关卡。");}
             case "regions"->regionDetail(o);
+            case "areaRewards"->areaRewardDetail(o);
+            case "rewardItems"->{heading("发放道具");field("物品 ID 或完整物品数据",o,"item","minecraft:emerald");field("数量",o,"count","1");row("从背包读取道具",()->rewardItemPicker(o));hint("保留自定义名字和 NBT；同一区域的所有道具一起检查背包空间，足够时才发放。");}
         }
     }
     private JsonObject preview;
@@ -206,23 +212,38 @@ public final class ZombiesScenarioScreen extends Screen {
             heading("填充内容");field("部署方块及状态",r,"block","minecraft:stone");row("选择部署方块",()->blockPicker(r));row("清空区域为空气",()->{r.addProperty("block","minecraft:air");refresh();});
         }
     }
-    private void beginSelection(JsonObject region,boolean source){selectionRegion=region;selectingSource=source;suspended=true;minecraft.setScreen(null);}
+    private void areaRewardDetail(JsonObject area){
+        heading("区域道具身份");field("名称",area,"name","");
+        heading("进入触发的范围");row("到地图框选触发区域",()->{beginSelection(area,false);selectingReward=true;});
+        positionFields("区域起点",area.getAsJsonObject("from"),()->{});positionFields("区域终点",area.getAsJsonObject("to"),()->{});
+        pair("取准星方块为起点",()->{area.add("from",position(targetPos()));refresh();},"取准星方块为终点",()->{area.add("to",position(targetPos()));refresh();});
+        heading("发放内容");row("管理奖励道具 · "+area.getAsJsonArray("items").size()+" 种",()->browse("rewardItems",str(area,"name","区域")+" / 道具",area.getAsJsonArray("items")));
+        heading("可选前置条件");field("最低波次（0不限）",area,"minWave","0");var refs=new ArrayList<String>(List.of(""));refs.addAll(ruleIds);select("需要已完成的 NPC 规则",area,"rule",refs,v->v.isBlank()?"不限":v);
+        hint("每名存活队员每局领取一次。背包不足时不发放，整理后在区域内自动重试。范围必须在本关卡内。");
+    }
+    private void rewardItemPicker(JsonObject item){
+        if(minecraft.player==null)return;var entries=new ArrayList<ZombiesNpcStackPickerScreen.Entry>();var inventory=minecraft.player.getInventory();
+        for(int i=0;i<inventory.getContainerSize();i++){var stack=inventory.getItem(i);if(!stack.isEmpty())entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(),stack.save(new net.minecraft.nbt.CompoundTag()).toString(),com.cdp.codpattern.client.zombies.ZombiesGunNames.display(stack).getString(),stack.getCount()));}
+        minecraft.setScreen(new ZombiesNpcStackPickerScreen(this,"选择区域奖励道具",entries,chosen->{item.addProperty("item",chosen.value());item.addProperty("count",chosen.count());refresh();}));
+    }
+    private void beginSelection(JsonObject region,boolean source){selectionRegion=region;selectingSource=source;selectingReward=false;suspended=true;minecraft.setScreen(null);}
     public static boolean selecting(){return active!=null&&active.suspended&&active.selectionRegion!=null;}
     /** Client-side corner selection only; capture permission, size and block state are verified by the server. */
     public static boolean selectionInput(boolean attack,boolean use,boolean finish,BlockPos hit){
         if(!selecting()||!attack&&!use)return false;var s=active;
         if(finish){s.selectionRegion=null;s.suspended=false;net.minecraft.client.Minecraft.getInstance().setScreen(s);return true;}
         if(hit==null)return true;
-        if(s.selectingSource){s.selectionRegion.add(attack?"sourceFrom":"sourceTo",position(hit));}
+        if(s.selectingReward){s.selectionRegion.add(attack?"from":"to",position(hit));}
+        else if(s.selectingSource){s.selectionRegion.add(attack?"sourceFrom":"sourceTo",position(hit));}
         else {s.selectionRegion.add("from",position(hit));syncSceneExtent(s.selectionRegion);s.selectionRegion=null;s.suspended=false;net.minecraft.client.Minecraft.getInstance().setScreen(s);}
         return true;
     }
     public static net.minecraft.world.phys.AABB selectionBounds(){
-        if(!selecting())return null;try{var s=active;var r=s.selectionRegion;var a=pos(r.getAsJsonObject(s.selectingSource?"sourceFrom":"from"));var b=pos(r.getAsJsonObject(s.selectingSource?"sourceTo":"to"));
+        if(!selecting())return null;try{var s=active;var r=s.selectionRegion;var a=pos(r.getAsJsonObject(s.selectingSource&&!s.selectingReward?"sourceFrom":"from"));var b=pos(r.getAsJsonObject(s.selectingSource&&!s.selectingReward?"sourceTo":"to"));
             return new net.minecraft.world.phys.AABB(Math.min(a.getX(),b.getX()),Math.min(a.getY(),b.getY()),Math.min(a.getZ(),b.getZ()),Math.max(a.getX(),b.getX())+1.0,Math.max(a.getY(),b.getY())+1.0,Math.max(a.getZ(),b.getZ())+1.0);
         }catch(RuntimeException e){return null;}
     }
-    public static String selectionHint(){return !selecting()?"":active.selectingSource?"框选源场景：左键起点 · 右键终点 · Shift+右键完成":"选择目标位置：点击要放置场景的最小角方块";}
+    public static String selectionHint(){return !selecting()?"":active.selectingReward?"框选道具触发区域：左键起点 · 右键终点 · Shift+右键完成":active.selectingSource?"框选源场景：左键起点 · 右键终点 · Shift+右键完成":"选择目标位置：点击要放置场景的最小角方块";}
     private void ensureSource(JsonObject r){if(!r.has("sourceFrom")||r.get("sourceFrom").isJsonNull())r.add("sourceFrom",r.get("from").deepCopy());if(!r.has("sourceTo")||r.get("sourceTo").isJsonNull())r.add("sourceTo",r.get("to").deepCopy());}
     private void positionFields(String label,JsonObject p,Runnable change){for(String k:List.of("x","y","z"))field(label+" "+k,p,k,"0",change);}
     private static void syncSceneExtent(JsonObject r){if(!r.has("scene")||r.get("scene").isJsonNull())return;var scene=ZombiesNpcRepository.GSON.fromJson(r.get("scene"),ZombiesScenarioConfig.Scene.class);r.add("to",position(scene.endAt(pos(r.getAsJsonObject("from")))));}

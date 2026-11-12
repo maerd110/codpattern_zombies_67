@@ -7,8 +7,18 @@ import net.minecraft.network.chat.*;
 import java.util.*;
 
 /** Map-wide cast, pre-wave dialogue, optional wave overrides and bounded one-shot events. */
-public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Speaker> speakers,List<Dialogue> dialogues,List<MapEvent> events,List<Task> tasks) {
+public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Speaker> speakers,List<Dialogue> dialogues,List<MapEvent> events,List<Task> tasks,List<AreaReward> areaRewards) {
+    public ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Speaker> speakers,List<Dialogue> dialogues,List<MapEvent> events,List<Task> tasks){this(version,waves,speakers,dialogues,events,tasks,List.of());}
     public ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Speaker> speakers,List<Dialogue> dialogues,List<MapEvent> events){this(version,waves,speakers,dialogues,events,List.of());}
+    public record RewardItem(String item,int count){
+        public RewardItem {if(item==null||item.isBlank()||item.length()>16384||count<1||count>2304)throw new IllegalArgumentException("区域奖励需要物品和 1 至 2304 的数量");}
+        public ZombiesNpcConfig.Action action(){return new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.GIVE_ITEM,null,null,null,item,count,null,null,0);}
+    }
+    public record AreaReward(String id,String name,BlockPos from,BlockPos to,List<RewardItem> items,int minWave,String rule){
+        public AreaReward {requireId(id);name=name==null?id:name;rule=rule==null?"":rule;items=List.copyOf(items==null?List.of():items);
+            if(name.length()>128||from==null||to==null||items.isEmpty()||items.size()>16||minWave<0)throw new IllegalArgumentException("区域奖励需设置范围、物品和有效的触发条件");}
+        public boolean contains(net.minecraft.world.phys.Vec3 point){return point.x>=Math.min(from.getX(),to.getX())&&point.x<Math.max(from.getX(),to.getX())+1.0&&point.y>=Math.min(from.getY(),to.getY())&&point.y<Math.max(from.getY(),to.getY())+1.0&&point.z>=Math.min(from.getZ(),to.getZ())&&point.z<Math.max(from.getZ(),to.getZ())+1.0;}
+    }
     public record Task(String id,String name,boolean automatic,int minWave,String rule,String text){
         public Task{requireId(id);name=name==null?id:name;rule=rule==null?"":rule;text=text==null?"":text;if(name.length()>128||text.length()>1024||minWave<0)throw new IllegalArgumentException("任务名称、文本或波次无效");}
     }
@@ -62,6 +72,7 @@ public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Spea
             if(regions.isEmpty()&&weather==null&&time==null)throw new IllegalArgumentException("地图事件至少设置一种变化");}
     }
     public ZombiesScenarioConfig {
+        areaRewards=List.copyOf(areaRewards==null?List.of():areaRewards);if(areaRewards.size()>128||areaRewards.stream().map(AreaReward::id).distinct().count()!=areaRewards.size())throw new IllegalArgumentException("区域奖励过多或编号重复");
         tasks=List.copyOf(tasks==null?List.of():tasks);if(tasks.size()>256||tasks.stream().map(Task::id).distinct().count()!=tasks.size())throw new IllegalArgumentException("任务条目过多或编号重复");
         if(version!=1)throw new IllegalArgumentException("未知关卡剧情版本");
         waves=waves==null?null:waves.stream().map(JsonObject::deepCopy).toList();speakers=List.copyOf(speakers==null?List.of():speakers);dialogues=List.copyOf(dialogues==null?List.of():dialogues);events=List.copyOf(events==null?List.of():events);

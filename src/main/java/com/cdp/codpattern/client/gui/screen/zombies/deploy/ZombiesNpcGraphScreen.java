@@ -24,6 +24,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
     private record History(String data, String npc, String rule, String selected) { }
     private final Deque<History> undo = new ArrayDeque<>(), redo = new ArrayDeque<>();
     private final Map<String, ZombiesNpcSharedCanvas.Ref> index = new LinkedHashMap<>();
+    private final Map<String,Integer> conversationStages=new HashMap<>();
     private final Map<JsonObject, ZombiesNpcSharedCanvas.Ref> contexts = new IdentityHashMap<>();
     private List<ZombiesNpcSharedCanvas.Flow> flows = List.of();
     private String draggingGroup = "";
@@ -218,6 +219,14 @@ public final class ZombiesNpcGraphScreen extends Screen {
         returnDrawRows();
     }
     private void choiceInspector(JsonObject n) {
+        if(!n.has("segments"))n.add("segments",new JsonArray());
+        var segments=n.getAsJsonArray("segments");
+        int stage=conversationStages.getOrDefault(selected,-1);
+        if(stage>=segments.size())stage=-1;
+        var pages=new ArrayList<String>();for(int i=0;i<segments.size();i++)pages.add(Integer.toString(i));pages.add("final");
+        select(tr("conversation.stage"),pages,stage<0?"final":Integer.toString(stage),v->v.equals("final")?tr("conversation.final",segments.size()+1):tr("conversation.stage_number",Integer.parseInt(v)+1),v->{conversationStages.put(selected,v.equals("final")?-1:Integer.parseInt(v));inspectorScroll=0;refresh();});
+        rowButton(tr("conversation.add_stage"),()->mutate(()->{var part=new JsonObject();part.addProperty("text",tr("conversation.new_text"));part.addProperty("reply",tr("conversation.new_reply"));segments.add(part);conversationStages.put(selected,segments.size()-1);inspectorScroll=0;}),editable()&&segments.size()<31);
+        if(stage>=0){segmentInspector(n,segments,stage);return;}
         List<String> speakers=new ArrayList<>(List.of(""));
         for(var npc:owner.graphDraft().npcs())speakers.add(value(npc.getAsJsonObject(),"id",""));
         select(tr("conversation.speaker"),speakers,value(n,"speaker",""),v->v.isBlank()?tr("self"):v,v->mutate(()->n.addProperty("speaker",v)));
@@ -230,17 +239,15 @@ public final class ZombiesNpcGraphScreen extends Screen {
             rowButton(tr("conversation.remove_line",i+1),()->mutate(()->{textLines.remove(j);n.addProperty("text",String.join("\n",textLines));}),editable()&&textLines.size()>1);
         }
         rowButton(tr("add_line"),()->mutate(()->n.addProperty("text",value(n,"text","")+"\n")),editable());
-        rowButton(tr("conversation.preview"),()->{
-            var answers=n.getAsJsonArray("options").asList().stream().map(JsonElement::getAsJsonObject).map(o->new ZombiesNpcDialogueNetwork.Answer(value(o,"id",""),value(o,"text",""))).toList();
-            minecraft.setScreen(new com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen(
-                new ZombiesNpcDialogueNetwork.View(java.util.UUID.randomUUID(),true,-1,Component.literal(tr("conversation.preview_name")),Component.literal(value(n,"text","")),answers),ignored->minecraft.setScreen(this)));
-        },true);
+        rowButton(tr("conversation.preview"),()->previewConversation(n,0),true);
         var options=n.getAsJsonArray("options");
         for(int i=0;i<options.size();i++)line((i+1)+". "+value(options.get(i).getAsJsonObject(),"text",""));
         for(int i=0;i<options.size();i++){
             final int j=i;var o=options.get(i).getAsJsonObject();
             field(tr("conversation.option",i+1),o,"text","");
             line(tr("conversation.route")+" → "+value(o,"next",""));
+            boolean close=Boolean.parseBoolean(value(o,"closeOnSelect","false"));
+            rowButton(tr(close?"conversation.close_wait":"conversation.continue"),()->mutate(()->o.addProperty("closeOnSelect",!close)),editable());
             boolean gated=o.has("condition")&&!o.get("condition").isJsonNull();
             rowButton(tr(gated?"conversation.conditional":"conversation.always"),()->mutate(()->{
                 if(gated)o.remove("condition");else {var c=new JsonObject();c.addProperty("match","ALL");var tests=new JsonArray();tests.add(ZombiesNpcGraphDraft.test());c.add("tests",tests);o.add("condition",c);}
@@ -252,6 +259,21 @@ public final class ZombiesNpcGraphScreen extends Screen {
             int i=1;while(true){String id="choice_"+i;if(options.asList().stream().noneMatch(e->value(e.getAsJsonObject(),"id","").equals(id)))break;i++;}
             options.add(ZombiesNpcGraphDraft.option(i));
         }),editable()&&options.size()<12);
+    }
+    private void segmentInspector(JsonObject node,JsonArray segments,int index){
+        var part=segments.get(index).getAsJsonObject();var speakers=new ArrayList<String>(List.of(""));for(var npc:owner.graphDraft().npcs())speakers.add(value(npc.getAsJsonObject(),"id",""));
+        select(tr("conversation.speaker"),speakers,value(part,"speaker",""),v->v.isBlank()?tr("self"):v,v->mutate(()->part.addProperty("speaker",v)));
+        field(tr("dialogue"),part,"text","");field(tr("conversation.reply"),part,"reply","");
+        rowButton(tr("conversation.stage_up"),()->mutate(()->{var other=segments.get(index-1);segments.set(index-1,part);segments.set(index,other);conversationStages.put(selected,index-1);}),editable()&&index>0);
+        rowButton(tr("conversation.stage_down"),()->mutate(()->{var other=segments.get(index+1);segments.set(index+1,part);segments.set(index,other);conversationStages.put(selected,index+1);}),editable()&&index<segments.size()-1);
+        rowButton(tr("conversation.stage_delete"),()->mutate(()->{segments.remove(index);conversationStages.put(selected,-1);}),editable());
+        rowButton(tr("conversation.preview"),()->previewConversation(node,index),true);
+        line(tr("conversation.stage_hint"));
+    }
+    private void previewConversation(JsonObject node,int stage){
+        var segments=node.getAsJsonArray("segments");boolean prefix=stage<segments.size();var part=prefix?segments.get(stage).getAsJsonObject():node;
+        var answers=prefix?List.of(new ZombiesNpcDialogueNetwork.Answer("next",value(part,"reply",tr("conversation.new_reply")))):node.getAsJsonArray("options").asList().stream().map(JsonElement::getAsJsonObject).map(o->new ZombiesNpcDialogueNetwork.Answer(value(o,"id",""),value(o,"text",""))).toList();
+        minecraft.setScreen(new com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen(new ZombiesNpcDialogueNetwork.View(UUID.randomUUID(),true,-1,Component.literal(tr("conversation.preview_name")),Component.literal(value(part,"text","")),answers),answer->{if(prefix&&!answer.isEmpty())previewConversation(node,stage+1);else minecraft.setScreen(this);}));
     }
     private int nodeHeight(JsonObject n){return value(n,"type","").equals("CHOICE")?Math.max(NH,61+n.getAsJsonArray("options").size()*22):NH;}
     private int portOffset(JsonObject n,String p){return p.startsWith("option:")?43+ZombiesNpcGraphDraft.ports(n).indexOf(p)*22:p.equals("onFalse")?68:43;}

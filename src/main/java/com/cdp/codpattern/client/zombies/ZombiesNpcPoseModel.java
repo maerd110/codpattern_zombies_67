@@ -10,7 +10,8 @@ import com.mojang.blaze3d.vertex.*;
 public final class ZombiesNpcPoseModel extends PlayerModel<ZombiesNpcEntity> {
     private final ModelPart legs;
     private boolean bent;
-    public ZombiesNpcPoseModel(ModelPart root){super(root,false);
+    public ZombiesNpcPoseModel(ModelPart root){this(root,false);}
+    public ZombiesNpcPoseModel(ModelPart root,boolean slim){super(root,slim);
         var mesh=new MeshDefinition();var definition=mesh.getRoot();
         for(String side:new String[]{"left","right"}){
             var thigh=definition.addOrReplaceChild(side,CubeListBuilder.create().texOffs(side.equals("left")?16:0,side.equals("left")?48:16).addBox(-2,0,-2,4,6,4),PartPose.offset(side.equals("left")?1.9F:-1.9F,12,0));

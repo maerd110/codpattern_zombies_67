@@ -103,7 +103,7 @@ public final class ZombiesNpcCommands {
                         case "remove" -> npcs.remove(index);
                         case "move" -> {
                             var a = previous.appearance();
-                            npcs.set(index, new ZombiesNpcConfig.Npc(id, new ZombiesNpcConfig.Appearance(a.name(), a.skin(), a.pose(), a.alive(), playerPosition(context, room), a.invulnerable(), a.chatName(), a.nameColor(), a.textColor()), previous.dialogue(), previous.rules(), previous.dialogueIntervalSeconds()));
+                            npcs.set(index, new ZombiesNpcConfig.Npc(id, new ZombiesNpcConfig.Appearance(a.name(), a.skin(), a.pose(), a.alive(), playerPosition(context, room), a.invulnerable(), a.chatName(), a.nameColor(), a.textColor(), a.combat(), a.playerSkin()), previous.dialogue(), previous.rules(), previous.dialogueIntervalSeconds()));
                         }
                         case "set" -> {
                             JsonObject merged = ZombiesNpcRepository.GSON.toJsonTree(previous).getAsJsonObject();

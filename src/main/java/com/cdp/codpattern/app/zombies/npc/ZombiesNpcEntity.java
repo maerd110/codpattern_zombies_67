@@ -92,7 +92,8 @@ public final class ZombiesNpcEntity extends PathfinderMob {
             setCustomName(net.minecraft.network.chat.Component.literal(appearance.name()));
             setCustomNameVisible(!appearance.name().isEmpty());
         }
-        if (appearance.skin() != null) entityData.set(SKIN, appearance.skin());
+        if (appearance.playerSkin() != null) entityData.set(SKIN, appearance.playerSkin().synced());
+        else if (appearance.skin() != null) entityData.set(SKIN, appearance.skin());
         if (appearance.pose() != null) {guardPose(-1);combat.resetStance();entityData.set(POSTURE, appearance.pose().ordinal());}
         if (appearance.alive() != null) {
             entityData.set(STORY_ALIVE, appearance.alive());
