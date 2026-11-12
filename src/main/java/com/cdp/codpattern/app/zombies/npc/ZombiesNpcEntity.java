@@ -37,6 +37,11 @@ public final class ZombiesNpcEntity extends PathfinderMob {
         refreshDimensions();
     }
 
+    @Override public void refreshDimensions(){
+        if(!storyDataReady){super.refreshDimensions();return;}
+        var anchor=position();boolean collision=noPhysics;noPhysics=true;
+        try{super.refreshDimensions();setPos(anchor.x,anchor.y,anchor.z);setBoundingBox(makeBoundingBox());}finally{noPhysics=collision;}
+    }
     @Override protected void defineSynchedData() {
         super.defineSynchedData();
         entityData.define(SKIN, "minecraft:textures/entity/player/wide/steve.png");
@@ -70,7 +75,10 @@ public final class ZombiesNpcEntity extends PathfinderMob {
         if (storyDataReady && (POSTURE.equals(key) || STORY_ALIVE.equals(key))) refreshDimensions();
     }
     @Override public void tick() {
+        if(!storyAlive())setNoGravity(true);
+        if(!storyAlive()||posture()!=0)setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
         super.tick();
+        if(!storyAlive()){setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);setNoGravity(true);}
         if (lying()) setBoundingBox(makeBoundingBox());
         if(!level().isClientSide)combat.tick();
     }
@@ -107,7 +115,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     @Override protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
         if (!level().isClientSide && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer && owner != null) {
-            if(combat.active()&&(serverPlayer.isShiftKeyDown()||combat.calledFor(serverPlayer))){ZombiesCoopNetwork.openNpc(serverPlayer,this);return InteractionResult.CONSUME;}
+            if(combat.active()&&combat.calledFor(serverPlayer)){ZombiesCoopNetwork.openNpc(serverPlayer,this);return InteractionResult.CONSUME;}
             combat.follow=serverPlayer.getUUID();
             owner.interact(serverPlayer, npcId, this);
         }
@@ -129,6 +137,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
             if (getHealth() <= 0) setHealth(1);
             return;
         }
+        setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);setNoGravity(true);fallDistance=0;
         entityData.set(STORY_ALIVE, false);
         entityData.set(POSTURE, ZombiesNpcConfig.Pose.LYING.ordinal());
     }

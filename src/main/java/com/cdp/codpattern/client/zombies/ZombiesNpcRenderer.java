@@ -26,14 +26,14 @@ public final class ZombiesNpcRenderer extends MobRenderer<ZombiesNpcEntity, Play
     }
     @Override public ResourceLocation getTextureLocation(ZombiesNpcEntity npc) { return ResourceLocation.tryParse(npc.skin()); }
     @Override protected void setupRotations(ZombiesNpcEntity npc, PoseStack stack, float age, float yaw, float partialTick) {
-        super.setupRotations(npc, stack, age, yaw, partialTick);
+        if(npc.lying())stack.mulPose(Axis.YP.rotationDegrees(180-yaw));else super.setupRotations(npc,stack,age,yaw,partialTick);
         if (npc.posture()==4) {
             stack.translate(0,.26,-1);stack.mulPose(Axis.XP.rotationDegrees(90));
         } else if (!npc.storyAlive() || npc.posture() == 2) {
             // Centre the sideways model above its position, inside the matching horizontal hit box.
             stack.translate(.9, .26, 0);
             stack.mulPose(Axis.ZP.rotationDegrees(90));
-        } else if(npc.posture()==3){stack.translate(0,-.54,0);
+        } else if(npc.posture()==3){stack.translate(0,-.38,0);
         } else if (npc.posture() == 1) {
             stack.translate(0, -0.55, 0);
         }

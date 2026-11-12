@@ -35,7 +35,7 @@ final class ZombiesNpcCombat {
         npc.setDropChance(EquipmentSlot.MAINHAND,0);
     }
     boolean active(){return config!=null&&config.mode()!=ZombiesNpcConfig.CombatMode.OFF;}
-    private void stop(){npc.setTarget(null);npc.getNavigation().stop();if(drawn)IGunOperator.fromLivingEntity(npc).aim(false);npc.setNoAi(true);npc.setNoGravity(true);}
+    private void stop(){npc.setDeltaMovement(Vec3.ZERO);npc.setTarget(null);npc.getNavigation().stop();if(drawn)IGunOperator.fromLivingEntity(npc).aim(false);npc.setNoAi(true);npc.setNoGravity(true);}
     void tick(){
         var owner=npc.owner();
         if(!active()||owner==null||!owner.combatAllowed()||!npc.storyAlive()||npc.posture()!=0){stop();return;}

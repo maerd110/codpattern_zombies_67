@@ -605,8 +605,8 @@
     "gui.codpattern.zombies.npc.conversation.close": "暂时离开",
     "gui.codpattern.zombies.npc.conversation.none": "目前没有可用的对话选项，请稍后再来。",
     "gui.codpattern.zombies.npc.conversation.portrait": "NPC",
-    "gui.codpattern.zombies.npc.kind.MAP_EVENT": "触发地图事件",
-    "gui.codpattern.zombies.npc.map_event": "地图事件编号",
+    "gui.codpattern.zombies.npc.kind.MAP_EVENT": "触发地图事件／任务指引",
+    "gui.codpattern.zombies.npc.map_event": "地图事件／任务指引",
     "gui.codpattern.zombies.npc.conversation.remove_line": "删除对话行 %s",
     "gui.codpattern.zombies.npc.pose.GROUND_SITTING": "坐地（屈膝）",
     "gui.codpattern.zombies.npc.pose.SUPINE": "平躺",
@@ -620,5 +620,6 @@
     "gui.codpattern.zombies.npc.combat.none": "未选择",
     "key.codpattern.zombies.bank": "打开共享银行",
     "key.codpattern.zombies.call_npc": "呼叫附近作战 NPC",
-    "key.categories.codpattern.zombies": "僵尸模式"
+    "key.categories.codpattern.zombies": "僵尸模式",
+    "key.codpattern.zombies.ping": "标记位置或掉落枪械"
 }

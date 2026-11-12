@@ -605,8 +605,8 @@
     "gui.codpattern.zombies.npc.conversation.close": "Leave for now",
     "gui.codpattern.zombies.npc.conversation.none": "No dialogue options are available yet.",
     "gui.codpattern.zombies.npc.conversation.portrait": "NPC",
-    "gui.codpattern.zombies.npc.kind.MAP_EVENT": "Trigger map event",
-    "gui.codpattern.zombies.npc.map_event": "Map event",
+    "gui.codpattern.zombies.npc.kind.MAP_EVENT": "Trigger map event / objective",
+    "gui.codpattern.zombies.npc.map_event": "Map event / objective",
     "gui.codpattern.zombies.npc.conversation.remove_line": "Delete dialogue line %s",
     "gui.codpattern.zombies.npc.pose.GROUND_SITTING": "Ground sitting",
     "gui.codpattern.zombies.npc.pose.SUPINE": "Lying on back",
@@ -620,5 +620,6 @@
     "gui.codpattern.zombies.npc.combat.none": "Not selected",
     "key.codpattern.zombies.bank": "Open team bank",
     "key.codpattern.zombies.call_npc": "Call nearby support NPC",
-    "key.categories.codpattern.zombies": "Zombies"
+    "key.categories.codpattern.zombies": "Zombies",
+    "key.codpattern.zombies.ping": "Ping position or dropped gun"
 }

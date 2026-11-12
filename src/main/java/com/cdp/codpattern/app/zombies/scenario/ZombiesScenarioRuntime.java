@@ -14,6 +14,9 @@ public final class ZombiesScenarioRuntime {
     private final ZombiesMap map;
     private ZombiesScenarioConfig config=ZombiesScenarioConfig.empty();
     private final Set<String> completed=new HashSet<>();
+    private final Set<String> taskDone=new HashSet<>();
+    private String taskText="";
+    public String taskText(){return taskText;}
     private final Set<String> failed=new HashSet<>();
     private final Map<UUID,ServerPlayer> environmentPlayers=new HashMap<>();
     private ZombiesScenarioConfig.Weather weather;
@@ -28,6 +31,7 @@ public final class ZombiesScenarioRuntime {
             if(!e.rule().isBlank()&&!keys.contains(e.rule()))throw new IllegalArgumentException("事件引用未知 NPC 规则："+e.rule());
             map.npcRuntime().validateMapBlocks(e.regions().stream().flatMap(r->r.placements().stream()).toList());
         }
+        for(var task:candidate.tasks())if(!task.rule().isBlank()&&!keys.contains(task.rule()))throw new IllegalArgumentException("任务引用未知 NPC 规则："+task.rule());
         if(candidate.waves()!=null){var loaded=new com.cdp.codpattern.app.zombies.service.ZombiesWaveConfigRepository(ZombiesConfigPaths.zombiesMapWaves(map.getServerLevel().getServer(),map.getMapName())).loadConfigured(candidate.waves());
             if(!loaded.isValid())throw new IllegalArgumentException(loaded.getIssues().toString());}
     }
@@ -47,6 +51,7 @@ public final class ZombiesScenarioRuntime {
     private void cancelDialogue(){lines=List.of();index=remaining=0;}
     public void tick(){
         if(!active||!map.currentPhase().isRoundRunning())return;
+        for(var task:config.tasks())if(task.automatic()&&!taskDone.contains(task.id())&&map.npcWave()>=task.minWave()&&(task.rule().isBlank()||map.npcRuntime().isRuleComplete(task.rule())))trigger(task.id());
         if(dialogueActive()&&--remaining<=0)advanceDialogue();
         for(var e:config.events())if(e.automatic()&&!completed.contains(e.id())&&!failed.contains(e.id())&&map.npcWave()>=e.minWave()&&(e.rule().isBlank()||map.npcRuntime().isRuleComplete(e.rule())))trigger(e.id());
         if(map.getServerLevel().getGameTime()%5==0){
@@ -54,10 +59,11 @@ public final class ZombiesScenarioRuntime {
             for(var id:List.copyOf(environmentPlayers.keySet()))if(!ids.contains(id)){sendEnvironment(environmentPlayers.remove(id),true);}
         }
     }
-    public List<String> eventIds(){return config.events().stream().map(ZombiesScenarioConfig.MapEvent::id).toList();}
-    public void requireEvent(String id){var source=active?config:ZombiesScenarioRepository.load(ZombiesScenarioRepository.path(map.getServerLevel().getServer(),map.getMapName()));if(source.events().stream().noneMatch(e->e.id().equals(id)))throw new IllegalArgumentException("未知地图事件："+id);}
+    public List<String> eventIds(){return java.util.stream.Stream.concat(config.events().stream().map(ZombiesScenarioConfig.MapEvent::id),config.tasks().stream().map(ZombiesScenarioConfig.Task::id)).toList();}
+    public void requireEvent(String id){var source=active?config:ZombiesScenarioRepository.load(ZombiesScenarioRepository.path(map.getServerLevel().getServer(),map.getMapName()));if(source.events().stream().noneMatch(e->e.id().equals(id))&&source.tasks().stream().noneMatch(t->t.id().equals(id)))throw new IllegalArgumentException("未知地图事件："+id);}
     public void trigger(String id){
         if(!active||!map.currentPhase().isRoundRunning())throw new IllegalArgumentException("地图事件只能在对局中执行");
+        var task=config.tasks().stream().filter(t->t.id().equals(id)).findFirst().orElse(null);if(task!=null){taskText=task.text();taskDone.add(id);return;}
         var event=config.events().stream().filter(e->e.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("未知地图事件："+id));
         if(completed.contains(id)||failed.contains(id))return;
         try {
@@ -78,6 +84,6 @@ public final class ZombiesScenarioRuntime {
             player.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,strength));player.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,thunder));}
         if(time!=null)player.connection.send(new ClientboundSetTimePacket(level.getGameTime(),restore?level.getDayTime():time,restore&&level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DAYLIGHT)));
     }
-    public void reset(){if(active)ZombiesNpcBlockJournal.get(map.getServerLevel()).restore(map.getServerLevel(),map.getMapName());for(var player:environmentPlayers.values())sendEnvironment(player,true);environmentPlayers.clear();weather=null;time=null;completed.clear();failed.clear();cancelDialogue();config=ZombiesScenarioConfig.empty();active=false;ACTIVE.remove(this);}
+    public void reset(){if(active)ZombiesNpcBlockJournal.get(map.getServerLevel()).restore(map.getServerLevel(),map.getMapName());for(var player:environmentPlayers.values())sendEnvironment(player,true);environmentPlayers.clear();weather=null;time=null;completed.clear();failed.clear();taskDone.clear();taskText="";cancelDialogue();config=ZombiesScenarioConfig.empty();active=false;ACTIVE.remove(this);}
     public static void cleanupDetached(net.minecraft.server.MinecraftServer server,boolean stopping){var rooms=stopping?List.of():com.cdp.codpattern.compat.fpsmatch.map.FpsMatchMapRegistry.listMaps(com.cdp.codpattern.app.match.BuiltInGameModes.ZOMBIES);for(var r:List.copyOf(ACTIVE))if(r.map.getServerLevel().getServer()==server&&(stopping||rooms.stream().noneMatch(m->m==r.map))){ZombiesNpcBlockJournal.get(r.map.getServerLevel()).restore(r.map.getServerLevel(),r.map.getMapName());r.reset();}}
 }

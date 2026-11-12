@@ -44,7 +44,7 @@ public final class ZombiesNpcDialogueNetwork {
     public static void edit(EditorRequest request){channel.sendToServer(request);}
     public static void install() {
         if(channel!=null)return;
-        channel=NetworkRegistry.newSimpleChannel(new ResourceLocation(ZombiesAddonConstants.MOD_ID,"npc_dialogue"),()->"6","6"::equals,"6"::equals);
+        channel=NetworkRegistry.newSimpleChannel(new ResourceLocation(ZombiesAddonConstants.MOD_ID,"npc_dialogue"),()->"7","7"::equals,"7"::equals);
         channel.messageBuilder(View.class,0,NetworkDirection.PLAY_TO_CLIENT).encoder(View::encode).decoder(View::decode)
                 .consumerMainThread((packet,ctx)->{ModeClientActionHandlers.dispatch(CLIENT_ACTION,packet);ctx.get().setPacketHandled(true);}).add();
         channel.messageBuilder(Selection.class,1,NetworkDirection.PLAY_TO_SERVER).encoder(Selection::encode).decoder(Selection::decode)

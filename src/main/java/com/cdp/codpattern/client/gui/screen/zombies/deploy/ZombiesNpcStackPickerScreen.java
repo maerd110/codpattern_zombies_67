@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /** Icon-based inventory and building-block selection with search. */
-final class ZombiesNpcStackPickerScreen extends Screen {
-    record Entry(ItemStack stack, String value, String caption, int count) { }
+public final class ZombiesNpcStackPickerScreen extends Screen {
+    public record Entry(ItemStack stack, String value, String caption, int count) { }
     private record Tile(Entry entry, int x, int y, int width) { }
     private final Screen parent;
     private final List<Entry> entries;
@@ -22,7 +22,7 @@ final class ZombiesNpcStackPickerScreen extends Screen {
     private final List<Tile> tiles = new ArrayList<>();
     private String search = "";
     private int scroll;
-    ZombiesNpcStackPickerScreen(Screen parent, String title, List<Entry> entries, Consumer<Entry> choose) {
+    public ZombiesNpcStackPickerScreen(Screen parent, String title, List<Entry> entries, Consumer<Entry> choose) {
         super(Component.literal(title)); this.parent = parent; this.entries = List.copyOf(entries); this.choose = choose;
     }
     @Override protected void init() {

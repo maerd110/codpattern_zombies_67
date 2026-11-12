@@ -29,10 +29,10 @@ public final class ZombiesNpcPoseModel extends PlayerModel<ZombiesNpcEntity> {
         if(!alive&&posture!=4)posture=2;
         bent=posture==3||posture==2;
         leftLeg.visible=rightLeg.visible=leftPants.visible=rightPants.visible=!bent;
-        for(String side:new String[]{"left","right"}){var leg=legs.getChild(side);leg.xRot=posture==3?-1.9F:-.75F;leg.yRot=side.equals("left")?.15F:-.15F;leg.zRot=0;leg.getChild("shin").xRot=posture==3?2.1F:1.3F;}
+        for(String side:new String[]{"left","right"}){var leg=legs.getChild(side);leg.xRot=posture==3?-1.6F:-.75F;leg.yRot=side.equals("left")?-.28F:.28F;leg.zRot=0;leg.getChild("shin").xRot=posture==3?2.2F:1.3F;}
         if(posture==3){body.xRot=.13F;head.xRot=.22F;rightArm.xRot=leftArm.xRot=-.75F;rightArm.zRot=.10F;leftArm.zRot=-.10F;}
-        else if(posture==2){head.zRot=0;leftArm.x=2;rightArm.xRot=-1.05F;leftArm.xRot=-1.3F;rightArm.zRot=-.40F;leftArm.zRot=.30F;}
-        else if(posture==4){leftArm.xRot=rightArm.xRot=0;leftArm.zRot=-.08F;rightArm.zRot=.08F;leftLeg.xRot=rightLeg.xRot=0;body.z=leftArm.z=rightArm.z=leftLeg.z=rightLeg.z=2;}
+        else if(posture==2){head.xRot=head.yRot=head.zRot=0;leftArm.x=2;rightArm.xRot=-1.05F;leftArm.xRot=-1.3F;rightArm.zRot=-.40F;leftArm.zRot=.30F;}
+        else if(posture==4){head.xRot=head.yRot=head.zRot=0;leftArm.xRot=rightArm.xRot=0;leftArm.zRot=-.08F;rightArm.zRot=.08F;leftLeg.xRot=rightLeg.xRot=0;body.z=leftArm.z=rightArm.z=leftLeg.z=rightLeg.z=2;}
         hat.copyFrom(head);jacket.copyFrom(body);leftSleeve.copyFrom(leftArm);rightSleeve.copyFrom(rightArm);leftPants.copyFrom(leftLeg);rightPants.copyFrom(rightLeg);
     }
     @Override public void renderToBuffer(PoseStack stack,VertexConsumer vertices,int light,int overlay,float r,float g,float b,float a){

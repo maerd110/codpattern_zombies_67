@@ -7,7 +7,11 @@ import net.minecraft.network.chat.*;
 import java.util.*;
 
 /** Map-wide cast, pre-wave dialogue, optional wave overrides and bounded one-shot events. */
-public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Speaker> speakers,List<Dialogue> dialogues,List<MapEvent> events) {
+public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Speaker> speakers,List<Dialogue> dialogues,List<MapEvent> events,List<Task> tasks) {
+    public ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Speaker> speakers,List<Dialogue> dialogues,List<MapEvent> events){this(version,waves,speakers,dialogues,events,List.of());}
+    public record Task(String id,String name,boolean automatic,int minWave,String rule,String text){
+        public Task{requireId(id);name=name==null?id:name;rule=rule==null?"":rule;text=text==null?"":text;if(name.length()>128||text.length()>1024||minWave<0)throw new IllegalArgumentException("任务名称、文本或波次无效");}
+    }
     public record Speaker(String id,String name,String nameColor,String textColor,boolean bold,boolean italic) {
         public Speaker { requireId(id);if(name==null||name.isBlank()||name.length()>128)throw new IllegalArgumentException("人物名字需要 1 至 128 字");
             nameColor=color(nameColor);textColor=color(textColor); }
@@ -58,10 +62,12 @@ public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Spea
             if(regions.isEmpty()&&weather==null&&time==null)throw new IllegalArgumentException("地图事件至少设置一种变化");}
     }
     public ZombiesScenarioConfig {
+        tasks=List.copyOf(tasks==null?List.of():tasks);if(tasks.size()>256||tasks.stream().map(Task::id).distinct().count()!=tasks.size())throw new IllegalArgumentException("任务条目过多或编号重复");
         if(version!=1)throw new IllegalArgumentException("未知关卡剧情版本");
         waves=waves==null?null:waves.stream().map(JsonObject::deepCopy).toList();speakers=List.copyOf(speakers==null?List.of():speakers);dialogues=List.copyOf(dialogues==null?List.of():dialogues);events=List.copyOf(events==null?List.of():events);
         if(waves!=null&&waves.size()>512||speakers.size()>128||dialogues.size()>512||events.size()>128)throw new IllegalArgumentException("关卡配置条目过多");
         if(speakers.stream().map(Speaker::id).distinct().count()!=speakers.size()||dialogues.stream().map(Dialogue::wave).distinct().count()!=dialogues.size()||events.stream().map(MapEvent::id).distinct().count()!=events.size())throw new IllegalArgumentException("人物、波次台词或事件编号重复");
+        var eventIds=new HashSet<String>();events.forEach(e->eventIds.add(e.id()));if(tasks.stream().anyMatch(t->eventIds.contains(t.id())))throw new IllegalArgumentException("任务与地图事件编号不能重复");
         var ids=new HashSet<String>();speakers.forEach(s->ids.add(s.id()));for(var d:dialogues)for(var l:d.lines())if(!l.speaker().isBlank()&&!ids.contains(l.speaker()))throw new IllegalArgumentException("台词引用未知人物："+l.speaker());
     }
     public static ZombiesScenarioConfig empty(){return new ZombiesScenarioConfig(1,null,List.of(),List.of(),List.of());}

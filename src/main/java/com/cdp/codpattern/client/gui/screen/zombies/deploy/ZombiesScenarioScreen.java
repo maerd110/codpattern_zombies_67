@@ -53,7 +53,7 @@ public final class ZombiesScenarioScreen extends Screen {
     private BlockPos playerPos(){return minecraft.player==null?BlockPos.ZERO:minecraft.player.blockPosition();}
     private BlockPos targetPos(){return minecraft.hitResult instanceof net.minecraft.world.phys.BlockHitResult hit?hit.getBlockPos():playerPos();}
     private Level level(){return navigation.peekLast();}
-    private void root(){navigation.clear();if(data!=null){String[] keys={"waves","speakers","dialogues","events"};String[] titles={"波次怪物","出场人物","波前对话","地图事件"};navigation.add(new Level(keys[page],titles[page],list(keys[page])));}lastCard=null;}
+    private void root(){navigation.clear();if(data!=null){String[] keys={"waves","speakers","dialogues","events","tasks"};String[] titles={"波次怪物","出场人物","波前对话","地图事件","任务书"};navigation.add(new Level(keys[page],titles[page],list(keys[page])));}lastCard=null;}
     private void request(String op,String body){
         try{ZombiesNpcEditorWire.checkRequest(body);pending=UUID.randomUUID();deadline=System.currentTimeMillis()+20000;ZombiesNpcDialogueNetwork.edit(new ZombiesNpcDialogueNetwork.EditorRequest(pending,map,op,body));message=op.equals("capture")?"正在读取源场景…":"正在读取／保存…";}
         catch(RuntimeException e){pending=null;captureTarget=null;message=detail(e);}
@@ -83,8 +83,8 @@ public final class ZombiesScenarioScreen extends Screen {
         rows.clear();labels.clear();cards.clear();left=12;formWidth=width-24;bottom=height-42;
         if(data!=null&&navigation.isEmpty())root();
         button("收起查看地图",width-122,3,110,()->{suspended=true;minecraft.setScreen(null);},pending==null&&minecraft.player!=null);
-        int w=(width-30)/4;String[] names={"波次怪物","出场人物","波前对话","地图事件"};
-        for(int i=0;i<4;i++){int j=i;button((page==i?"● ":"")+names[i],12+i*(w+2),27,w,()->{page=j;root();message="";refresh();},pending==null);}
+        int w=(width-32)/5;String[] names={"波次怪物","出场人物","波前对话","地图事件","任务书"};
+        for(int i=0;i<5;i++){int j=i;button((page==i?"● ":"")+names[i],12+i*(w+2),27,w,()->{page=j;root();message="";refresh();},pending==null);}
         int bw=(width-28)/3;
         button("保存配置",12,height-27,bw,this::save,canEdit());
         button("重新读取",14+bw,height-27,bw,()->{if(dirty())minecraft.setScreen(new ConfirmScreen(ok->{minecraft.setScreen(this);if(ok)load();},Component.literal("放弃未保存的修改？"),Component.empty()));else load();},pending==null);
@@ -106,7 +106,7 @@ public final class ZombiesScenarioScreen extends Screen {
             for(int i=l.detailScroll;i<Math.min(rows.size(),l.detailScroll+count);i++)rows.get(i).accept(82+(i-l.detailScroll)*26);
         }
     }
-    private static String kindLabel(String kind){return switch(kind){case "waves"->"波次";case "speakers"->"出场人物";case "dialogues"->"波前对话";case "events"->"地图事件";case "mobs"->"怪物";case "lines"->"台词";default->"区域变化";};}
+    private static String kindLabel(String kind){return switch(kind){case "waves"->"波次";case "speakers"->"出场人物";case "dialogues"->"波前对话";case "events"->"地图事件";case "tasks"->"任务指引";case "mobs"->"怪物";case "lines"->"台词";default->"区域变化";};}
     private int accent(String kind){return switch(kind){case "waves","mobs"->0xFF72B8E0;case "speakers"->0xFFE9BD70;case "dialogues","lines"->0xFF82D4B3;default->0xFFBAA1E5;};}
     private void buildCards(Level l){
         int cols=Math.max(1,Math.min(4,(width-24)/230)),gap=10,cw=(width-24-gap*(cols-1))/cols,ch=66;
@@ -128,12 +128,13 @@ public final class ZombiesScenarioScreen extends Screen {
             if(chosen)g.fill(x+w-11,y+10,x+w-7,y+14,color);
         }
     }
-    private String cardTitle(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){case "waves","dialogues"->"第 "+str(o,"wave","?")+" 波";case "speakers"->str(o,"name","未命名人物");case "events"->str(o,"name","未命名事件");case "mobs"->entityName(str(o,"entity","minecraft:zombie"));case "lines"->"台词 "+(i+1)+" · "+speakerName(str(o,"speaker",""));default->"区域 "+(i+1)+" · "+(str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?"场景快照":"方块填充");};}
+    private String cardTitle(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){case "waves","dialogues"->"第 "+str(o,"wave","?")+" 波";case "speakers"->str(o,"name","未命名人物");case "events","tasks"->str(o,"name","未命名条目");case "mobs"->entityName(str(o,"entity","minecraft:zombie"));case "lines"->"台词 "+(i+1)+" · "+speakerName(str(o,"speaker",""));default->"区域 "+(i+1)+" · "+(str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?"场景快照":"方块填充");};}
     private String summary(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){
         case "waves"->o.getAsJsonArray("mobs").size()+" 种怪物 · 存活上限 "+str(o,"maxAlive","默认");
         case "speakers"->str(o,"id","")+" · 名字 "+str(o,"nameColor","white")+" / 正文 "+str(o,"textColor","white");
         case "dialogues"->o.getAsJsonArray("lines").size()+" 句台词 · 开播等待 "+str(o,"delaySeconds","0")+" 秒";
         case "events"->(Boolean.parseBoolean(str(o,"automatic","true"))?"自动 · ≥ "+str(o,"minWave","0")+" 波":"由 NPC 动作触发")+" · "+o.getAsJsonArray("regions").size()+" 处变化";
+        case "tasks"->"≥ "+str(o,"minWave","0")+" 波 · "+str(o,"text","");
         case "mobs"->"数量 "+str(o,"count","1")+" · 生命倍率 "+str(o,"healthMultiplier","默认")+" · 击杀积分 "+str(o,"killPoints","默认");
         case "lines"->str(o,"text","").replace('\n',' ')+" · "+str(o,"seconds","1")+" 秒";
         default->str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?(o.has("scene")&&!o.get("scene").isJsonNull()?sceneSummary(o):"尚未读取源场景"):str(o,"block","minecraft:stone");
@@ -153,6 +154,7 @@ public final class ZombiesScenarioScreen extends Screen {
             case "speakers"->{o.addProperty("id",unique(l.entries,"speaker_"));o.addProperty("name","新人物");o.addProperty("nameColor","white");o.addProperty("textColor","white");}
             case "dialogues"->{int n=1;Set<Integer> used=new HashSet<>();l.entries.forEach(e->used.add(e.getAsJsonObject().get("wave").getAsInt()));while(used.contains(n))n++;o.addProperty("wave",n);o.addProperty("delaySeconds",0);o.add("lines",new JsonArray());}
             case "events"->{o.addProperty("id",unique(l.entries,"event_"));o.addProperty("name","新事件");o.addProperty("automatic",true);o.addProperty("minWave",1);o.addProperty("rule","");o.addProperty("weather","CLEAR");o.add("regions",new JsonArray());}
+            case "tasks"->{o.addProperty("id",unique(l.entries,"task_"));o.addProperty("name","新任务指引");o.addProperty("automatic",true);o.addProperty("minWave",1);o.addProperty("rule","");o.addProperty("text","前往目标区域");}
             case "mobs"->{o.addProperty("entity","minecraft:zombie");o.addProperty("count",1);}
             case "lines"->{o.addProperty("speaker","");o.addProperty("text","新台词");o.addProperty("seconds",1);}
             case "regions"->{o.addProperty("mode","SCENE");o.addProperty("block","minecraft:stone");for(String key:List.of("from","to","sourceFrom","sourceTo"))o.add(key,position(playerPos()));}
@@ -175,6 +177,7 @@ public final class ZombiesScenarioScreen extends Screen {
             case "speakers"->{heading("人物身份");hint("稳定编号："+str(o,"id",""));field("显示名字",o,"name","");heading("显示格式");field("名字颜色",o,"nameColor","white");field("正文颜色",o,"textColor","white");colorPicker(o,"nameColor");colorPicker(o,"textColor");toggle("粗体",o,"bold",false);toggle("斜体",o,"italic",false);}
             case "dialogues"->{heading("播放设置");field("播放波次",o,"wave","1");field("开播前等待（秒）",o,"delaySeconds","0");row("管理台词 · "+o.getAsJsonArray("lines").size()+" 句",()->browse("lines",cardTitle(l,l.selected)+" / 台词",o.getAsJsonArray("lines")));hint("台词按卡片顺序播放，最后一句停留结束后才刷怪。");row("在界面预览本波台词",()->{preview=preview==o?null:o;refresh();});if(preview==o){heading("台词预览");for(var e:o.getAsJsonArray("lines")){var line=e.getAsJsonObject();try{var speaker=list("speakers").asList().stream().map(JsonElement::getAsJsonObject).filter(s->str(s,"id","").equals(str(line,"speaker",""))).findFirst().orElse(null);var c=speaker==null?Component.literal(str(line,"text","")):ZombiesNpcRepository.GSON.fromJson(speaker,ZombiesScenarioConfig.Speaker.class).say(str(line,"text",""));for(var v:font.split(c,formWidth-10))rows.add(y->labels.add(()->graphics.drawString(font,v,left+5,y+6,0xFFFFFFFF,false)));}catch(RuntimeException e0){hint(detail(e0));}}}}
             case "lines"->{heading("台词内容");var ids=new ArrayList<String>(List.of(""));list("speakers").forEach(e->ids.add(e.getAsJsonObject().get("id").getAsString()));select("出场人物",o,"speaker",ids,this::speakerName);field("台词正文",o,"text","");field("本句停留（秒）",o,"seconds","1");heading("播放顺序");pair("上移台词",()->move(-1),"下移台词",()->move(1));}
+            case "tasks"->{heading("任务身份");hint("NPC 动作引用编号："+str(o,"id",""));field("任务名称",o,"name","");heading("触发条件");toggle("自动检查触发",o,"automatic",true);field("最低波次（0不限）",o,"minWave","0");var refs=new ArrayList<String>(List.of(""));refs.addAll(ruleIds);select("需要已完成的 NPC 规则",o,"rule",refs,v->v.isBlank()?"不限":v);heading("顶部任务指引");field("更新后的任务文本（留空清除）",o,"text","");hint("自动条件同时满足时更新一次。关闭自动检查后，可由 NPC 的触发地图事件／任务指引动作更新；多次自动更新按条目顺序执行。");}
             case "events"->{heading("事件身份");hint("NPC 动作引用编号："+str(o,"id",""));field("事件名称",o,"name","");heading("自动触发条件");toggle("自动检查触发",o,"automatic",true);field("最低波次（0不限）",o,"minWave","0");var refs=new ArrayList<String>(List.of(""));refs.addAll(ruleIds);select("需要已完成的 NPC 规则",o,"rule",refs,v->v.isBlank()?"不限":v);hint("波次与规则完成条件需同时满足；关闭自动检查后由 NPC 动作触发。");heading("地图变化");row("管理区域变化 · "+o.getAsJsonArray("regions").size()+" 处",()->browse("regions",str(o,"name","事件")+" / 区域变化",o.getAsJsonArray("regions")));select("房间天气",o,"weather",List.of("","CLEAR","RAIN","THUNDER"),v->switch(v){case "CLEAR"->"晴朗";case "RAIN"->"下雨";case "THUNDER"->"雷雨";default->"不改变";});field("房间时间（空为不变）",o,"time","");pair("设为白天",()->{o.addProperty("time",1000);refresh();},"设为夜晚",()->{o.addProperty("time",18000);refresh();});hint("每个事件每局一次；房间天气和时间不改变其他关卡。");}
             case "regions"->regionDetail(o);
         }

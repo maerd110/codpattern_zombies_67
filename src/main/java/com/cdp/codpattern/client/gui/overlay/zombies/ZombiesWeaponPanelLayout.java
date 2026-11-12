@@ -3,7 +3,7 @@ package com.cdp.codpattern.client.gui.overlay.zombies;
 import java.util.Optional;
 
 /** Reference-space layout for doc/zom.svg, independent of the game renderer. */
-final class ZombiesWeaponPanelLayout {
+public final class ZombiesWeaponPanelLayout {
     static final float SVG_SCALE = 240.0F / 586.0F;
     // Compact default; 2.5% extra width accommodates the existing font.
     static final float WIDTH = 246.0F;
@@ -37,6 +37,7 @@ final class ZombiesWeaponPanelLayout {
     // Only remove the final spacing column; internal character spacing stays intact.
     private static final float DIGIT_TRAILING_SPACE = 1.0F;
 
+    public static int reservedTop(int width,int height,float referenceScale,int lineHeight,int digitAdvance){return create(width,height,referenceScale,lineHeight,digitAdvance,3,4).map(p->(int)p.top()).orElse(height-76);}
     private ZombiesWeaponPanelLayout() {
     }
 

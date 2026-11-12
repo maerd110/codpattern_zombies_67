@@ -70,9 +70,10 @@ public final class ZombiesNpcEditorService {
     private static Snapshot snapshot(ZombiesMap map, ZombiesNpcConfig config, String status, String error) {
         return new Snapshot(map.getMapName(), revision(config), config,
                 map.barriers().stream().map(barrier -> barrier.group()).distinct().sorted().toList(),
-                map.currentPhase() == ZombiesGamePhase.WAITING, status, error,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(map.getServerLevel().getServer(),map.getMapName())).events().stream().map(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent::id).toList());
+                map.currentPhase() == ZombiesGamePhase.WAITING, status, error,scenarioActionIds(map));
     }
 
+    private static List<String> scenarioActionIds(ZombiesMap map){var config=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(map.getServerLevel().getServer(),map.getMapName()));return java.util.stream.Stream.concat(config.events().stream().map(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent::id),config.tasks().stream().map(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Task::id)).toList();}
     public static String revision(ZombiesNpcConfig config) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")

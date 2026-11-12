@@ -66,7 +66,7 @@ public final class ZombiesScenarioEditorService {
         var dialogues=current.dialogues();if(!Files.exists(path)){var texts=new ZombiesWaveTextRepository(ZombiesConfigPaths.zombiesMapWaveText(server,map)).load();if(!texts.issues().isEmpty())throw new IllegalArgumentException(texts.issues().toString());
             dialogues=texts.definitions().stream().map(d->{var lines=new ArrayList<ZombiesScenarioConfig.Line>();
                 for(int i=0;i<d.messages().size();i++){var m=d.messages().get(i);double seconds=i+1<d.messages().size()?d.messages().get(i+1).delayTicks()/20.0:1;lines.add(new ZombiesScenarioConfig.Line("",m.text(),seconds));}return new ZombiesScenarioConfig.Dialogue(d.wave(),lines,d.messages().isEmpty()?0:d.messages().get(0).delayTicks()/20.0);}).toList();}
-        return new ZombiesScenarioConfig(1,waves,current.speakers(),dialogues,current.events());
+        return new ZombiesScenarioConfig(1,waves,current.speakers(),dialogues,current.events(),current.tasks());
     }
     private static Snapshot snapshot(String name,ZombiesScenarioConfig config,ZombiesNpcConfig npcs,boolean editable){var rules=new ArrayList<String>();for(var n:npcs.npcs())for(var r:n.rules())rules.add(n.id()+"."+r.id());return new Snapshot(name,revision(config),config,rules,ZombiesWaveValidator.supportedEntityIds(),editable,"");}
     public static String revision(ZombiesScenarioConfig c){try{return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(ZombiesNpcRepository.GSON.toJson(c).getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
