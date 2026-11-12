@@ -4,6 +4,7 @@ import com.cdp.codpattern.app.zombies.model.ZombiesPlayerRuntimeState;
 public final class ZombiesSharedBank {
     private long balance;
     public synchronized long balance(){return balance;}
+    public synchronized void creditReward(double amount){if(Double.isFinite(amount)&&amount>0)balance=Math.min(Integer.MAX_VALUE,balance+(long)Math.min(Integer.MAX_VALUE,Math.floor(amount)));}
     public synchronized void reset(){balance=0;}
     public synchronized void transfer(ZombiesPlayerRuntimeState player,int amount,boolean deposit){
         if(player==null||amount<=0)throw new IllegalArgumentException("请输入正整数点数");

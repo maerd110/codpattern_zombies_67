@@ -392,7 +392,8 @@ public final class ZombiesObjectLabelWorldRenderer {
             return new ObjectLabel("墙枪", "暂无可购买武器", DISABLED_COLOR);
         }
         ZombiesRarityDisplay.Entry rarity = ZombiesRarityDisplay.fromRarityId(rarityId).orElse(null);
-        String title = rarity == null ? gunId : rarity.label() + " " + gunId;
+        String gunName = com.cdp.codpattern.client.zombies.ZombiesGunNames.displayId(gunId).getString();
+        String title = rarity == null ? gunName : rarity.label() + " " + gunName;
         int titleColor = rarity == null ? TITLE_COLOR : rarity.color();
         return pricedLabel(title, "购买", payload, payload.getBoolean(ZombiesObjectStateKeys.PAYLOAD_ENABLED), titleColor);
     }

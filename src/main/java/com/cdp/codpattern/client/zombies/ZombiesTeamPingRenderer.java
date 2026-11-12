@@ -27,7 +27,7 @@ public final class ZombiesTeamPingRenderer {
         for(var raw:pings){var p=(CompoundTag)raw;var at=new Vec3(p.getDouble("x"),p.getDouble("y"),p.getDouble("z"));var clip=matrix.transform(new Vector4f((float)(at.x-eye.x),(float)(at.y-eye.y+.35),(float)(at.z-eye.z),1));
             if(!Float.isFinite(clip.w)||clip.w<=0)continue;float x=clip.x/clip.w,y=clip.y/clip.w,z=clip.z/clip.w;
             if(!Float.isFinite(x)||!Float.isFinite(y)||z< -1||z>1||Math.abs(x)>1||Math.abs(y)>1)continue;
-            labels.add(new Label((x+1)/2,(1-y)/2,Math.round(eye.distanceTo(at)),p.getString("text"),p.getBoolean("gun"),p.getString("rarity"),p.getInt("level"),p.getInt("upgrade")));
+            labels.add(new Label((x+1)/2,(1-y)/2,Math.round(eye.distanceTo(at)),p.contains("weapon",Tag.TAG_COMPOUND)?p.getString("sender")+" · "+ZombiesGunNames.display(net.minecraft.world.item.ItemStack.of(p.getCompound("weapon"))).getString():p.getString("text"),p.getBoolean("gun"),p.getString("rarity"),p.getInt("level"),p.getInt("upgrade")));
         }return List.copyOf(labels);
     }
     @SubscribeEvent public static void hud(net.minecraftforge.client.event.RenderGuiEvent.Post event){var mc=Minecraft.getInstance();if(!ZombiesCoopClient.active()||mc.options.hideGui||mc.screen!=null)return;render(event.getGuiGraphics(),mc.getWindow().getGuiScaledWidth(),mc.getWindow().getGuiScaledHeight(),frame);}

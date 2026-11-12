@@ -12,8 +12,8 @@ public final class ZombiesHudOverlayStaticContractCompatTest {
     }
 
     public static void main(String[] args) throws IOException {
-        String overlay = Files.readString(OVERLAY);
-        String suppressor = Files.readString(TACZ_SUPPRESSOR);
+        String overlay = Files.readString(OVERLAY).replace("\r\n", "\n");
+        String suppressor = Files.readString(TACZ_SUPPRESSOR).replace("\r\n", "\n");
 
         requireAbsent(overlay, "hud.codpattern.zombies.combat", "zombies overlay must not render combat K/A/D text");
         requireAbsent(overlay, "renderHeldWeaponRarity", "zombies overlay must not render a separate rarity label");

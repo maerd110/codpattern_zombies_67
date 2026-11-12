@@ -161,7 +161,9 @@ public class ZombiesEntityCombatEventAdapter implements ModeEntityCombatEventPor
 
         UUID entityId = entity.getUUID();
         ServerPlayer killer = context.killer().orElse(null);
-        if (killer != null && playerStateService.get(killer.getUUID()).isPresent()) {
+        if(context.source()!=null&&context.source().getEntity() instanceof com.cdp.codpattern.app.zombies.npc.ZombiesNpcEntity npc){
+            com.cdp.codpattern.app.zombies.npc.ZombiesCoopRuntime.awardNpcKill(npc,roomId,rewardResolver.killPoints(entity));
+        }else if (killer != null && playerStateService.get(killer.getUUID()).isPresent()) {
             Set<UUID> contributors = new LinkedHashSet<>(
                     contributorsByEntity.getOrDefault(entityId, Set.of()));
             contributors.add(killer.getUUID());

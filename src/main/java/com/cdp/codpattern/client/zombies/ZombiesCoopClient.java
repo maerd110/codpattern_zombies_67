@@ -21,7 +21,7 @@ public final class ZombiesCoopClient {
     @SubscribeEvent public static void keys(net.minecraftforge.client.event.RegisterKeyMappingsEvent e){e.register(BANK);e.register(CALL);e.register(PING);e.register(DROP_GUN);}
     public static CompoundTag state(){return state;}
     public static boolean active(){return state.getBoolean("active")&&System.currentTimeMillis()-updated<2500;}
-    public static Component gun(CompoundTag npc){try{var c=Component.Serializer.fromJson(npc.getString("gun"));return c==null?Component.literal("未持枪"):c;}catch(Exception ignored){return Component.literal("未持枪");}}
+    public static Component gun(CompoundTag npc){if(npc.contains("weapon",Tag.TAG_COMPOUND))return ZombiesGunNames.display(net.minecraft.world.item.ItemStack.of(npc.getCompound("weapon")));try{var c=Component.Serializer.fromJson(npc.getString("gun"));return c==null?Component.literal("未持枪"):c;}catch(Exception ignored){return Component.literal("未持枪");}}
     public static String quality(CompoundTag npc){return ZombiesRarityDisplay.fromRarityId(npc.getString("rarity")).map(ZombiesRarityDisplay.Entry::label).orElse("预设")+" · Lv"+npc.getInt("level")+" +"+npc.getInt("upgrade");}
     public static void accept(ZombiesCoopNetwork.State packet){var mc=Minecraft.getInstance();var next=packet.data();
         if(mc.screen instanceof com.cdp.codpattern.client.gui.screen.zombies.ZombiesCoopWheelScreen wheel&&(!next.getBoolean("active")||!next.hasUUID("session")||!wheel.session.equals(next.getUUID("session"))))mc.setScreen(null);

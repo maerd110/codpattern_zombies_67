@@ -347,7 +347,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
             var inventory = minecraft.player.getInventory();
             for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
                 var stack = inventory.getItem(slot);
-                if (!stack.isEmpty()) entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(), stack.save(new CompoundTag()).toString(), stack.getHoverName().getString(), stack.getCount()));
+                if (!stack.isEmpty()) entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(), stack.save(new CompoundTag()).toString(), com.cdp.codpattern.client.zombies.ZombiesGunNames.display(stack).getString(), stack.getCount()));
             }
             minecraft.setScreen(new ZombiesNpcStackPickerScreen(this, tr("inventory_picker"), entries, selected -> {
                 target.addProperty(itemKey, selected.value()); target.addProperty(countKey, selected.count()); rebuildWidgets();
@@ -435,7 +435,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         rowButton("combat.read",()->{
             if(minecraft.player==null)return;
             var entries=new ArrayList<ZombiesNpcStackPickerScreen.Entry>();var inv=minecraft.player.getInventory();
-            for(int i=0;i<inv.getContainerSize();i++){var stack=inv.getItem(i);if(com.tacz.guns.api.item.IGun.getIGunOrNull(stack)!=null)entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(),stack.save(new CompoundTag()).toString(),stack.getHoverName().getString(),1));}
+            for(int i=0;i<inv.getContainerSize();i++){var stack=inv.getItem(i);if(com.tacz.guns.api.item.IGun.getIGunOrNull(stack)!=null)entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(),stack.save(new CompoundTag()).toString(),com.cdp.codpattern.client.zombies.ZombiesGunNames.display(stack).getString(),1));}
             minecraft.setScreen(new ZombiesNpcStackPickerScreen(this,tr("combat.read"),entries,chosenGun->{config.addProperty("gun",chosenGun.value());rebuildWidgets();}));
         });
         if(value(config,"mode","OFF").equals("FOLLOW"))rowButton("combat.clear",()->{config.addProperty("gun","");rebuildWidgets();});

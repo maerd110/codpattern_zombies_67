@@ -706,8 +706,7 @@ public final class ZombiesHudOverlay implements IGuiOverlay {
 
     private static String mysteryGunName(String gunId) {
         if (gunId == null || gunId.isBlank()) return "随机武器";
-        ItemStack stack = ZombiesWeaponInventoryService.createDefaultTaczGunStackForRules(gunId);
-        return stack == null || stack.isEmpty() || !TaczClientApi.isGun(stack) ? gunId : stack.getHoverName().getString();
+        return com.cdp.codpattern.client.zombies.ZombiesGunNames.displayId(gunId).getString();
     }
     private static Optional<InteractionPromptLine> weaponWallPrompt(CompoundTag payload, boolean taczInteractKey) {
         String gunId = payload.getString("gunId");
@@ -1227,7 +1226,7 @@ public final class ZombiesHudOverlay implements IGuiOverlay {
 
     private static String displayRarityGun(String rarityId, String gunId) {
         String rarity = rarityId == null || rarityId.isBlank() ? "" : rarityId.trim() + " ";
-        return rarity + gunId;
+        return rarity + com.cdp.codpattern.client.zombies.ZombiesGunNames.displayId(gunId).getString();
     }
 
     private static String useKeyLabel(Minecraft minecraft) {

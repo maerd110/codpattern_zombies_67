@@ -69,7 +69,7 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
                 graphics.renderItem(tile.entry.stack(),tile.x+8,tile.y+6);
                 graphics.renderItemDecorations(font,tile.entry.stack(),tile.x+8,tile.y+6);
             }
-            graphics.drawString(font,font.plainSubstrByWidth(tile.entry.stack().getHoverName().getString(),tile.width-8),tile.x+4,tile.y+30,stats==null?0xFFFFFFFF:color,false);
+            graphics.drawString(font,font.plainSubstrByWidth(com.cdp.codpattern.client.zombies.ZombiesGunNames.display(tile.entry.stack()).getString(),tile.width-8),tile.x+4,tile.y+30,stats==null?0xFFFFFFFF:color,false);
             if(stats!=null){String upgrade="+"+stats.upgradeLevel();graphics.drawString(font,upgrade,tile.x+tile.width-font.width(upgrade)-6,tile.y+9,0xFFFFE2A1,false);graphics.drawString(font,font.plainSubstrByWidth(rarity.map(com.cdp.codpattern.client.zombies.ZombiesRarityDisplay.Entry::label).orElse("预设")+" · Lv"+stats.weaponLevel(),tile.width-8),tile.x+4,tile.y+45,color,false);}
             else graphics.drawString(font,font.plainSubstrByWidth(tile.entry.caption(),tile.width-8),tile.x+4,tile.y+45,0xFF9CB6C6,false);
         }
