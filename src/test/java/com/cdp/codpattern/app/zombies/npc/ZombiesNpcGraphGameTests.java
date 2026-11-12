@@ -509,6 +509,59 @@ public final class ZombiesNpcGraphGameTests {
         level.setBlock(other,Blocks.QUARTZ_BLOCK.defaultBlockState(),18);rt.tick();h.assertTrue(!rt.completed("scene"),"failed event stays disabled until next round");
         rt.reset();rt.start(cfg);rt.tick();h.assertTrue(rt.completed("scene"),"new round clears event failure state");
     }finally{f.map.scenarioRuntime().reset();f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=400)
+    public static void supportNpcShootsRealTaczBulletsAndIsolatesRooms(GameTestHelper h){
+        var f=new Fixture(h);f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"end"),node("end",Type.END,""))));
+        var npc=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin).inflate(1)).stream().filter(n->n.getName().getString().equals("guide")).findFirst().orElseThrow();
+        var gun=com.tacz.guns.api.item.builder.GunItemBuilder.create().setId(net.minecraft.resources.ResourceLocation.tryParse("tacz:ak47")).setAmmoCount(0).setAmmoInBarrel(false).build();
+        h.assertTrue(!gun.isEmpty(),"real AK47 pack is loaded");
+        var own=net.minecraft.world.entity.EntityType.HUSK.create(h.getLevel());var foreign=net.minecraft.world.entity.EntityType.HUSK.create(h.getLevel());
+        own.setNoAi(true);foreign.setNoAi(true);own.setNoGravity(true);foreign.setNoGravity(true);own.setHealth(20);foreign.setHealth(20);
+        own.moveTo(f.origin.getX()+.5,f.origin.getY(),f.origin.getZ()+6.5);foreign.moveTo(f.origin.getX()+2.5,f.origin.getY(),f.origin.getZ()+3.5);h.getLevel().addFreshEntity(own);h.getLevel().addFreshEntity(foreign);
+        var registry=com.cdp.codpattern.app.match.runtime.ModeEntityOwnershipRegistry.instance();registry.register(new com.cdp.codpattern.app.match.model.RoomId(f.map.getGameType(),f.map.getMapName()),own);registry.register(new com.cdp.codpattern.app.match.model.RoomId(f.map.getGameType(),"foreign-"+UUID.randomUUID().toString().substring(0,8)),foreign);
+        var hits=new java.util.concurrent.atomic.AtomicInteger();var shots=new java.util.concurrent.atomic.AtomicInteger();
+        var listener=new Object(){
+            @net.minecraftforge.eventbus.api.SubscribeEvent public void shot(com.tacz.guns.api.event.common.GunShootEvent e){if(e.getShooter()==npc)shots.incrementAndGet();}
+            @net.minecraftforge.eventbus.api.SubscribeEvent public void hit(com.tacz.guns.api.event.common.EntityHurtByGunEvent.Pre e){if(e.getAttacker()==npc&&e.getHurtEntity()==own)hits.incrementAndGet();}
+        };net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(listener);
+        var spec=gun.save(new net.minecraft.nbt.CompoundTag()).toString();npc.apply(new ZombiesNpcConfig.Appearance(null,null,null,null,null,null,null,null,null,new ZombiesNpcConfig.Combat(ZombiesNpcConfig.CombatMode.GUARD,spec,24)));
+        // Keep the fake room flat and remove the observer from the firing lane.
+        for(int x=-1;x<8;x++)for(int z=-1;z<8;z++)h.getLevel().setBlock(f.origin.offset(x,-1,z),Blocks.STONE.defaultBlockState(),18);
+        f.actor.moveTo(f.origin.getX()+4.5,f.origin.getY(),f.origin.getZ()+.5);
+        // GameTest fast-forwards server ticks; TaCZ uses milliseconds. Advance only this
+        // test shooter's clock by one 20 TPS tick so draw/reload/bolt timers are exercised.
+        for(int tick=1;tick<390;tick++)h.runAfterDelay(tick,()->{if(!npc.isRemoved()){var data=com.tacz.guns.api.entity.IGunOperator.fromLivingEntity(npc).getDataHolder();data.baseTimestamp-=50;if(data.drawTimestamp>=0)data.drawTimestamp-=50;if(data.reloadTimestamp>=0)data.reloadTimestamp-=50;if(data.boltTimestamp>=0)data.boltTimestamp-=50;}});
+        h.succeedWhen(()->{
+            h.assertTrue(own.getHealth()<20&&shots.get()>0&&hits.get()>0,"actual TaCZ shot and bullet hit must damage the owned wave monster: shots="+shots.get()+" hits="+hits.get()+" hp="+own.getHealth()+" target="+npc.getTarget()+" ammo="+com.tacz.guns.api.item.IGun.getIGunOrNull(npc.getMainHandItem()).getCurrentAmmoCount(npc.getMainHandItem())+" result="+npc.combat.lastResult+" reload="+com.tacz.guns.api.entity.IGunOperator.fromLivingEntity(npc).getSynReloadState().getStateType()+" removed="+npc.isRemoved());
+            h.assertTrue(foreign.getHealth()==20,"foreign room monster is not attacked");
+            var damage=new net.minecraftforge.event.entity.living.LivingAttackEvent(f.actor,h.getLevel().damageSources().mobAttack(npc),5);ZombiesNpcEvents.supportDamage(damage);h.assertTrue(damage.isCanceled(),"support fire cannot hurt players");
+            npc.apply(new ZombiesNpcConfig.Appearance(null,null,null,null,null,null,null,null,null,new ZombiesNpcConfig.Combat(ZombiesNpcConfig.CombatMode.OFF,"",24)));h.assertTrue(npc.getMainHandItem().isEmpty(),"disable combat unequips gun");
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.unregister(listener);registry.unregister(own);registry.unregister(foreign);own.discard();foreign.discard();f.close();
+        });
+    }
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void extraPosesRemainInteractiveAndCombatJsonIsCompatible(GameTestHelper h){var f=new Fixture(h);try{
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"end"),node("end",Type.END,""))));
+        var npc=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin).inflate(1)).stream().filter(n->n.getName().getString().equals("guide")).findFirst().orElseThrow();
+        for(var pose:ZombiesNpcConfig.Pose.values()){npc.apply(new ZombiesNpcConfig.Appearance(null,null,pose,true,null));h.assertTrue(npc.isPickable(),"every living pose is pickable");if(pose==ZombiesNpcConfig.Pose.SUPINE)h.assertTrue(npc.getBoundingBox().getZsize()>2&&npc.getBoundingBox().getYsize()<1,"supine body uses horizontal length along facing");}
+        var old=ZombiesNpcRepository.GSON.fromJson("{\"name\":\"old\",\"pose\":\"LYING\"}",ZombiesNpcConfig.Appearance.class);h.assertTrue(old.pose()==ZombiesNpcConfig.Pose.LYING&&old.combat()==null,"old appearance remains compatible without combat");
+        rejects(()->new ZombiesNpcConfig.Combat(ZombiesNpcConfig.CombatMode.GUARD,"",24));rejects(()->new ZombiesNpcConfig.Combat(ZombiesNpcConfig.CombatMode.FOLLOW,"gun",Double.NaN));
+    }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=200)
+    public static void supportNpcFollowsRoomPlayerAndStopsWhenSitting(GameTestHelper h){var f=new Fixture(h);
+        f.start(ZombiesNpcConfig.Trigger.INTERACT,new ZombiesNpcGraph(List.of(node("entry",Type.ENTRY,"end"),node("end",Type.END,""))));
+        var npc=h.getLevel().getEntitiesOfClass(ZombiesNpcEntity.class,new AABB(f.origin).inflate(1)).stream().filter(n->n.getName().getString().equals("guide")).findFirst().orElseThrow();
+        for(int x=-1;x<8;x++)for(int z=-1;z<8;z++)h.getLevel().setBlock(f.origin.offset(x,-1,z),Blocks.STONE.defaultBlockState(),18);
+        var gun=com.tacz.guns.api.item.builder.GunItemBuilder.create().setId(net.minecraft.resources.ResourceLocation.tryParse("tacz:ak47")).setAmmoCount(30).build();
+        var combat=new ZombiesNpcConfig.Combat(ZombiesNpcConfig.CombatMode.FOLLOW,gun.save(new net.minecraft.nbt.CompoundTag()).toString(),24);
+        npc.apply(new ZombiesNpcConfig.Appearance(null,null,null,null,null,null,null,null,null,combat));f.actor.moveTo(f.origin.getX()+6.5,f.origin.getY(),f.origin.getZ()+5.5);
+        var beginning=npc.position();h.succeedWhen(()->{
+            h.assertTrue(npc.position().distanceToSqr(beginning)>4&&npc.distanceToSqr(f.actor)<20,"follow mode must physically navigate toward an alive room teammate");
+            h.assertTrue(f.map.npcRuntime().insideCombatArea(npc.position()),"follower remains in map");
+            npc.apply(new ZombiesNpcConfig.Appearance(null,null,ZombiesNpcConfig.Pose.GROUND_SITTING,true,null));npc.combat.tick();h.assertTrue(npc.isNoAi()&&npc.getTarget()==null,"non-standing poses stop combat movement");
+            f.close();
+        });
+    }
     private static Node choice(List<Option> options){return new Node("choose",Type.CHOICE,0,0,null,null,0,"","",true,"What will you do?","",options);}
     private static Node node(String id,Type type,String next){return new Node(id,type,0,0,null,null,0,next,"");}
     private static Node action(String id,ZombiesNpcConfig.Action a,String next){return new Node(id,Type.ACTION,0,0,a,null,0,next,"");}

@@ -1,6 +1,6 @@
 # COD Pattern Zombies
 
-0.2.23b 修复场景框选随视角漂移的问题；保存及开局时提前检查目标区域方块，错误指出方块种类和坐标。地图事件失败仅停用本局的该事件，不再直接判负，详细信息记录到日志，并在 NPC 调试模式中提示管理员。
+0.2.24b 新增 NPC TaCZ 持枪驻守与跟随队友作战；仅瞄准本房间波次怪物，使用实际枪弹、射速、上膛和换弹。姿态加入屈膝坐地、平躺，并调整贴地侧躺模型与交互范围。客户端和服务端都需更新。使用方式见 [NPC 说明](docs/NPCS.md)，多人副本与连续战役的设计讨论见 [方案](docs/多人副本与战役存档方案.md)。
 
 COD Pattern 的僵尸模式附属模组，独立维护、构建和发布。主模组作为已发布的二进制依赖加载；构建本仓库不需要主模组源码，也不需要同级的 `codPattern` 目录。
 
@@ -11,7 +11,7 @@ COD Pattern 的僵尸模式附属模组，独立维护、构建和发布。主�
 | Minecraft | 1.20.1 |
 | Forge | 构建使用 47.4.0 |
 | Java | JDK 17 |
-| 附属模组 | 0.2.23b，模组 ID 为 `codpattern_zombies` |
+| 附属模组 | 0.2.24b，模组 ID 为 `codpattern_zombies` |
 | COD Pattern | 构建固定使用 [0.8.8b](https://modrinth.com/mod/cod-pattern/version/zh5dnopt) |
 | TaCZ | 1.1.6 或以上；构建使用已固定的 Curse Maven 文件 |
 | LR Tactical | 可选；编译兼容依赖为 0.3.0 |
@@ -34,7 +34,7 @@ Windows PowerShell：
 .\gradlew.bat clean build
 ```
 
-正式构建产物位于 `build/libs/codpattern-zombies-0.2.23b.jar`。运行 `./gradlew buildSnapshot`（Windows 使用 `.\gradlew.bat buildSnapshot`）会额外生成带本地日期的 `-SNAPSHOT-yyyyMMdd.jar`；快照文件名不会改变模组内部版本。
+正式构建产物位于 `build/libs/codpattern-zombies-0.2.24b.jar`。运行 `./gradlew buildSnapshot`（Windows 使用 `.\gradlew.bat buildSnapshot`）会额外生成带本地日期的 `-SNAPSHOT-yyyyMMdd.jar`；快照文件名不会改变模组内部版本。
 
 附属模组 JAR 只包含本仓库的代码和资源，不会内嵌 COD Pattern、TaCZ 或其他前置模组。发布附属模组时需另外声明运行依赖。
 
@@ -44,7 +44,7 @@ Windows PowerShell：
 
 1. [COD Pattern 0.8.8b](https://modrinth.com/mod/cod-pattern/version/zh5dnopt)。
 2. TaCZ 1.1.6 或以上的兼容版本。
-3. 本仓库构建的 `codpattern-zombies-0.2.23b.jar`。
+3. 本仓库构建的 `codpattern-zombies-0.2.24b.jar`。
 
 客户端与服务器都必须安装附属模组，且附属模组版本必须完全一致。LR Tactical 属于可选扩展，使用对应内容时需另行安装。不要同时放入正式版和快照版附属模组，否则会出现重复模组 ID。
 

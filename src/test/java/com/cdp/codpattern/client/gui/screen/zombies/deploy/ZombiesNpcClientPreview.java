@@ -160,6 +160,21 @@ public final class ZombiesNpcClientPreview {
                 };
                 render(boxPreview,320,240,output.resolve("world-box-"+angle+".png"));
             }
+            for(int posture:new int[]{0,1,2,3,4}){
+                Screen posePreview=new Screen(net.minecraft.network.chat.Component.literal("NPC posture")){
+                    @Override public void render(GuiGraphics g,int mx,int my,float partial){
+                        g.fill(0,0,width,height,0xFF606873);g.fill(15,200,width-15,202,0xFFA0A7B0);g.flush();
+                        var model=new com.cdp.codpattern.client.zombies.ZombiesNpcPoseModel(client.getEntityModels().bakeLayer(net.minecraft.client.model.geom.ModelLayers.PLAYER));model.young=false;model.applyPose(posture,true);
+                        var ps=g.pose();ps.pushPose();ps.translate(160,200,250);ps.scale(95,-95,95);ps.mulPose(com.mojang.math.Axis.YP.rotationDegrees(145));
+                        if(posture==2){ps.translate(.9,.26,0);ps.mulPose(com.mojang.math.Axis.ZP.rotationDegrees(90));}
+                        else if(posture==4){ps.translate(0,.26,-1);ps.mulPose(com.mojang.math.Axis.XP.rotationDegrees(90));}
+                        else if(posture==3)ps.translate(0,-.54,0);
+                        else if(posture==1)ps.translate(0,-.55,0);
+                        ps.scale(-1,-1,1);ps.translate(0,-1.501,0);
+                        var buffers=client.renderBuffers().bufferSource();model.renderToBuffer(ps,buffers.getBuffer(net.minecraft.client.renderer.RenderType.entityCutoutNoCull(net.minecraft.resources.ResourceLocation.tryParse("minecraft:textures/entity/player/wide/steve.png"))),15728880,net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY,1,1,1,1);buffers.endBatch();ps.popPose();
+                    }
+                };render(posePreview,320,240,output.resolve("npc-pose-"+posture+".png"));
+            }
             scenarioChecks(screen,client,output);
             Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
         } catch (Throwable failure) {

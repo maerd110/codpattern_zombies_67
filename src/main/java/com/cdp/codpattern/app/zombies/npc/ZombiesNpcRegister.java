@@ -21,6 +21,6 @@ public final class ZombiesNpcRegister {
         bus.addListener(ZombiesNpcRegister::attributes);
     }
     private static void attributes(EntityAttributeCreationEvent event) {
-        event.put(NPC.get(), Mob.createMobAttributes().build());
+        event.put(NPC.get(), Mob.createMobAttributes().add(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED,.27).add(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE,64).build());
     }
 }

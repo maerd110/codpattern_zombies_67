@@ -36,6 +36,14 @@ public final class ZombiesNpcRuntime {
             net.minecraft.server.level.TicketType.create("zombies-story-npc", String::compareTo);
 
     public ZombiesNpcRuntime(ZombiesMap map) { this.map = map; }
+    boolean combatAllowed(){return !preview&&map.currentPhase().isRoundRunning();}
+    boolean combatTarget(net.minecraft.world.entity.Entity entity){
+        return entity instanceof net.minecraft.world.entity.LivingEntity living&&living.isAlive()&&entity.level()==level()
+            && com.cdp.codpattern.app.match.runtime.ModeEntityOwnershipRegistry.instance().entryOf(living)
+                .map(e->e.roomId().mapName().equals(map.getMapName())&&com.cdp.codpattern.app.match.GameModeRegistry.canonicalize(e.roomId().gameType()).equals(com.cdp.codpattern.app.match.BuiltInGameModes.ZOMBIES)).orElse(false);
+    }
+    List<ServerPlayer> combatPlayers(){return map.npcPlayers().stream().filter(p->p.isAlive()&&!p.isSpectator()&&p.serverLevel()==level()&&map.isAliveSurvivor(p.getUUID())).toList();}
+    boolean insideCombatArea(net.minecraft.world.phys.Vec3 point){return inBox(BlockPos.containing(point),map.getMapArea().pos1(),map.getMapArea().pos2());}
     private ServerLevel level() { return map.getServerLevel(); }
 
     public void validate(ZombiesNpcConfig candidate) {
@@ -91,6 +99,7 @@ public final class ZombiesNpcRuntime {
     }
 
     private void validateAppearance(ZombiesNpcConfig.Appearance appearance) {
+        if(appearance.combat()!=null&&appearance.combat().mode()!=ZombiesNpcConfig.CombatMode.OFF)ZombiesNpcCombat.gun(appearance.combat().gun());
         if (appearance.skin() != null && (ResourceLocation.tryParse(appearance.skin()) == null || !appearance.skin().endsWith(".png"))) {
             throw new IllegalArgumentException("Skin must be a resource location ending in .png");
         }

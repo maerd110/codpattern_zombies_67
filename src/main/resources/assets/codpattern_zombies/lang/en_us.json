@@ -402,8 +402,8 @@
     "gui.codpattern.zombies.npc.skin": "Skin resource",
     "gui.codpattern.zombies.npc.pose": "Posture",
     "gui.codpattern.zombies.npc.pose.STANDING": "Standing",
-    "gui.codpattern.zombies.npc.pose.SITTING": "Sitting",
-    "gui.codpattern.zombies.npc.pose.LYING": "Lying",
+    "gui.codpattern.zombies.npc.pose.SITTING": "Chair sitting",
+    "gui.codpattern.zombies.npc.pose.LYING": "Curled side lying",
     "gui.codpattern.zombies.npc.alive": "Alive",
     "gui.codpattern.zombies.npc.bool.true": "Yes",
     "gui.codpattern.zombies.npc.bool.false": "No",
@@ -607,5 +607,15 @@
     "gui.codpattern.zombies.npc.conversation.portrait": "NPC",
     "gui.codpattern.zombies.npc.kind.MAP_EVENT": "Trigger map event",
     "gui.codpattern.zombies.npc.map_event": "Map event",
-    "gui.codpattern.zombies.npc.conversation.remove_line": "Delete dialogue line %s"
+    "gui.codpattern.zombies.npc.conversation.remove_line": "Delete dialogue line %s",
+    "gui.codpattern.zombies.npc.pose.GROUND_SITTING": "Ground sitting",
+    "gui.codpattern.zombies.npc.pose.SUPINE": "Lying on back",
+    "gui.codpattern.zombies.npc.combat": "Combat mode",
+    "gui.codpattern.zombies.npc.combat.OFF": "Disabled",
+    "gui.codpattern.zombies.npc.combat.GUARD": "Guard position",
+    "gui.codpattern.zombies.npc.combat.FOLLOW": "Follow teammate",
+    "gui.codpattern.zombies.npc.combat.range": "Range (4–64 blocks)",
+    "gui.codpattern.zombies.npc.combat.gun": "Gun: %s",
+    "gui.codpattern.zombies.npc.combat.read": "Select TaCZ gun from inventory",
+    "gui.codpattern.zombies.npc.combat.none": "Not selected"
 }

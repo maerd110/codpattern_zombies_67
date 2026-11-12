@@ -24,6 +24,8 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     private String nameColor = "#FFFFFF";
     private String textColor = "#FFFFFF";
     private boolean storyDataReady;
+    final ZombiesNpcCombat combat = new ZombiesNpcCombat(this);
+    ZombiesNpcRuntime owner(){return owner;}
 
     public ZombiesNpcEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -50,18 +52,18 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     public String nameColor() { return nameColor; }
     public String textColor() { return textColor; }
 
-    public boolean lying() { return storyDataReady && (!storyAlive() || posture() == ZombiesNpcConfig.Pose.LYING.ordinal()); }
+    public boolean lying() { return storyDataReady && (!storyAlive() || posture() == ZombiesNpcConfig.Pose.LYING.ordinal() || posture() == ZombiesNpcConfig.Pose.SUPINE.ordinal()); }
     @Override public net.minecraft.world.entity.EntityDimensions getDimensions(net.minecraft.world.entity.Pose pose) {
-        return lying() ? net.minecraft.world.entity.EntityDimensions.scalable(2.1F, 1.0F) : super.getDimensions(pose);
+        return lying() ? net.minecraft.world.entity.EntityDimensions.scalable(2.1F, .8F) : posture()==3 ? net.minecraft.world.entity.EntityDimensions.scalable(.9F,1.65F) : super.getDimensions(pose);
     }
     @Override protected net.minecraft.world.phys.AABB makeBoundingBox() {
         if (!lying()) return super.makeBoundingBox();
         double yaw = Math.toRadians(getYRot()), c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
-        double x = c * 1.05 + s * .35, z = s * 1.05 + c * .35;
-        return new net.minecraft.world.phys.AABB(getX()-x,getY(),getZ()-z,getX()+x,getY()+1,getZ()+z);
+        double x = posture()==4 ? c*.4+s*1.05 : c*1.05+s*.4, z = posture()==4 ? s*.4+c*1.05 : s*1.05+c*.4;
+        return new net.minecraft.world.phys.AABB(getX()-x,getY(),getZ()-z,getX()+x,getY()+.8,getZ()+z);
     }
     @Override protected float getStandingEyeHeight(net.minecraft.world.entity.Pose pose, net.minecraft.world.entity.EntityDimensions dimensions) {
-        return lying() ? .5F : super.getStandingEyeHeight(pose, dimensions);
+        return lying() ? .35F : posture()==3 ? 1.4F : super.getStandingEyeHeight(pose, dimensions);
     }
     @Override public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
         super.onSyncedDataUpdated(key);
@@ -70,6 +72,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     @Override public void tick() {
         super.tick();
         if (lying()) setBoundingBox(makeBoundingBox());
+        if(!level().isClientSide)combat.tick();
     }
 
     void apply(ZombiesNpcConfig.Appearance appearance) {
@@ -96,12 +99,15 @@ public final class ZombiesNpcEntity extends PathfinderMob {
             setYHeadRot(p.yaw());
             setYBodyRot(p.yaw());
         }
+        if(appearance.combat()!=null)combat.configure(appearance.combat());
+        if(appearance.position()!=null)combat.anchor=position();
         refreshDimensions();
     }
 
     @Override protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
         if (!level().isClientSide && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer && owner != null) {
+            combat.follow=serverPlayer.getUUID();
             owner.interact(serverPlayer, npcId, this);
         }
         return InteractionResult.sidedSuccess(level().isClientSide);

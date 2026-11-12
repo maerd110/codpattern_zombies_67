@@ -11,6 +11,14 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = ZombiesAddonConstants.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ZombiesNpcEvents {
     private ZombiesNpcEvents() { }
+    @SubscribeEvent(priority=EventPriority.HIGHEST) public static void supportDamage(net.minecraftforge.event.entity.living.LivingAttackEvent e){
+        if(e.getEntity().level().isClientSide)return;
+        if(e.getSource().getEntity() instanceof ZombiesNpcEntity npc&&(npc.owner()==null||!npc.owner().combatTarget(e.getEntity())))e.setCanceled(true);
+    }
+    @SubscribeEvent(priority=EventPriority.HIGHEST) public static void supportBullet(com.tacz.guns.api.event.common.EntityHurtByGunEvent.Pre e){
+        if(e.getLogicalSide()!=net.minecraftforge.fml.LogicalSide.SERVER)return;
+        if(e.getAttacker() instanceof ZombiesNpcEntity npc&&(npc.owner()==null||!npc.owner().combatTarget(e.getHurtEntity())))e.setBaseAmount(0);
+    }
     @SubscribeEvent public static void commands(RegisterCommandsEvent event) { ZombiesNpcCommands.register(event.getDispatcher()); }
     @SubscribeEvent public static void loaded(EntityJoinLevelEvent event) {
         if (!event.getLevel().isClientSide && event.loadedFromDisk() && event.getEntity() instanceof ZombiesNpcEntity) {

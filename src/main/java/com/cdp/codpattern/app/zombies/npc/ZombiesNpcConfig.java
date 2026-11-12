@@ -60,7 +60,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
         if (id == null || !id.matches("[a-zA-Z0-9_-]{1,64}")) throw new IllegalArgumentException("IDs use letters, digits, _ and - (1-64 characters)");
     }
 
-    public enum Pose { STANDING, SITTING, LYING }
+    public enum Pose { STANDING, SITTING, LYING, GROUND_SITTING, SUPINE }
     public enum Trigger { INTERACT, AUTO }
     public enum Kind { NPC, DIALOGUE, TAKE_ITEM, GIVE_ITEM, SET_BLOCK, OPEN_BARRIER, MAP_EVENT }
 
@@ -72,8 +72,16 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
         }
     }
 
+    public enum CombatMode { OFF, GUARD, FOLLOW }
+    public record Combat(CombatMode mode,String gun,double range){
+        public Combat { mode=mode==null?CombatMode.OFF:mode;gun=gun==null?"":gun;
+            if(!Double.isFinite(range)||range<4||range>64)throw new IllegalArgumentException("作战射程为 4 至 64 格");
+            if(mode!=CombatMode.OFF&&gun.isBlank())throw new IllegalArgumentException("请先读取 NPC 使用的 TaCZ 枪械");
+        }
+    }
     public record Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable,
-                             String chatName, String nameColor, String textColor) {
+                             String chatName, String nameColor, String textColor, Combat combat) {
+        public Appearance(String name,String skin,Pose pose,Boolean alive,Position position,Boolean invulnerable,String chatName,String nameColor,String textColor){this(name,skin,pose,alive,position,invulnerable,chatName,nameColor,textColor,null);}
         public Appearance(String name, String skin, Pose pose, Boolean alive, Position position, Boolean invulnerable) {
             this(name, skin, pose, alive, position, invulnerable, null, null, null);
         }

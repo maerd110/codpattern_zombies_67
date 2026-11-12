@@ -184,9 +184,10 @@ public final class ZombiesNpcDeployScreen extends Screen {
         color("name_color", appearance, "nameColor");
         color("text_color", appearance, "textColor");
         text("skin", appearance, "skin", "minecraft:textures/entity/player/wide/steve.png");
-        choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
+        choice("pose", appearance, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE"), "STANDING", "pose.");
         bool("alive", appearance, "alive", true);
         bool("invulnerable", appearance, "invulnerable", true);
+        combat(appearance);
         bool("debug.mode",draft.options(),"debug",false);
         text("dialogue_interval", npc, "dialogueIntervalSeconds", "1");
         position(appearance, "position");
@@ -411,15 +412,33 @@ public final class ZombiesNpcDeployScreen extends Screen {
         optional(patch, "skin", "skin", new JsonPrimitive("minecraft:textures/entity/player/wide/steve.png"));
         if (patch.has("skin")) text("skin", patch, "skin", "");
         optional(patch, "pose", "pose", new JsonPrimitive("STANDING"));
-        if (patch.has("pose")) choice("pose", patch, "pose", List.of("STANDING", "SITTING", "LYING"), "STANDING", "pose.");
+        if (patch.has("pose")) choice("pose", patch, "pose", List.of("STANDING", "SITTING", "LYING", "GROUND_SITTING", "SUPINE"), "STANDING", "pose.");
         optional(patch, "alive", "alive", new JsonPrimitive(true));
         if (patch.has("alive")) bool("alive", patch, "alive", true);
         optional(patch, "invulnerable", "invulnerable", new JsonPrimitive(true));
         if (patch.has("invulnerable")) bool("invulnerable", patch, "invulnerable", true);
+        optional(patch,"combat","combat",com.google.gson.JsonParser.parseString("{\"mode\":\"OFF\",\"gun\":\"\",\"range\":24}"));
+        if(patch.has("combat"))combat(patch);
         optional(patch, "position", "position", ZombiesNpcEditorDraft.position(currentPosition()));
         if (patch.has("position")) position(patch, "position");
     }
 
+    private void combat(JsonObject appearance){
+        if(!appearance.has("combat"))appearance.add("combat",com.google.gson.JsonParser.parseString("{\"mode\":\"OFF\",\"gun\":\"\",\"range\":24}"));
+        var config=appearance.getAsJsonObject("combat");
+        choice("combat",config,"mode",List.of("OFF","GUARD","FOLLOW"),"OFF","combat.");
+        text("combat.range",config,"range","24");
+        String selected=tr("combat.none");
+        try{selected=net.minecraft.world.item.ItemStack.of(net.minecraft.nbt.TagParser.parseTag(value(config,"gun",""))).getHoverName().getString();}catch(Exception ignored){}
+        final String caption=selected;
+        rows.add((x,y,w)->labels.add(new Label(tr("combat.gun",caption),x,y+6,w)));
+        rowButton("combat.read",()->{
+            if(minecraft.player==null)return;
+            var entries=new ArrayList<ZombiesNpcStackPickerScreen.Entry>();var inv=minecraft.player.getInventory();
+            for(int i=0;i<inv.getContainerSize();i++){var stack=inv.getItem(i);if(com.tacz.guns.api.item.IGun.getIGunOrNull(stack)!=null)entries.add(new ZombiesNpcStackPickerScreen.Entry(stack.copy(),stack.save(new CompoundTag()).toString(),stack.getHoverName().getString(),1));}
+            minecraft.setScreen(new ZombiesNpcStackPickerScreen(this,tr("combat.read"),entries,chosenGun->{config.addProperty("gun",chosenGun.value());rebuildWidgets();}));
+        });
+    }
     private void optional(JsonObject object, String key, String label, JsonElement defaultValue) {
         rows.add((x, y, w) -> button(tr(object.has(key) ? "change" : "keep", tr(label)), x, y, w, () -> {
             if (object.has(key)) object.remove(key); else object.add(key, defaultValue.deepCopy());

@@ -402,8 +402,8 @@
     "gui.codpattern.zombies.npc.skin": "皮肤资源位置",
     "gui.codpattern.zombies.npc.pose": "姿态",
     "gui.codpattern.zombies.npc.pose.STANDING": "站立",
-    "gui.codpattern.zombies.npc.pose.SITTING": "坐着",
-    "gui.codpattern.zombies.npc.pose.LYING": "躺下",
+    "gui.codpattern.zombies.npc.pose.SITTING": "椅坐",
+    "gui.codpattern.zombies.npc.pose.LYING": "侧躺（蜷腿）",
     "gui.codpattern.zombies.npc.alive": "存活",
     "gui.codpattern.zombies.npc.bool.true": "是",
     "gui.codpattern.zombies.npc.bool.false": "否",
@@ -607,5 +607,15 @@
     "gui.codpattern.zombies.npc.conversation.portrait": "NPC",
     "gui.codpattern.zombies.npc.kind.MAP_EVENT": "触发地图事件",
     "gui.codpattern.zombies.npc.map_event": "地图事件编号",
-    "gui.codpattern.zombies.npc.conversation.remove_line": "删除对话行 %s"
+    "gui.codpattern.zombies.npc.conversation.remove_line": "删除对话行 %s",
+    "gui.codpattern.zombies.npc.pose.GROUND_SITTING": "坐地（屈膝）",
+    "gui.codpattern.zombies.npc.pose.SUPINE": "平躺",
+    "gui.codpattern.zombies.npc.combat": "作战方式",
+    "gui.codpattern.zombies.npc.combat.OFF": "不作战",
+    "gui.codpattern.zombies.npc.combat.GUARD": "原地驻守",
+    "gui.codpattern.zombies.npc.combat.FOLLOW": "跟随队友",
+    "gui.codpattern.zombies.npc.combat.range": "射程（4–64 格）",
+    "gui.codpattern.zombies.npc.combat.gun": "枪械：%s",
+    "gui.codpattern.zombies.npc.combat.read": "从背包选择 TaCZ 枪械",
+    "gui.codpattern.zombies.npc.combat.none": "未选择"
 }
