@@ -619,6 +619,7 @@
     "gui.codpattern.zombies.npc.combat.clear": "Clear gun, follow without firing",
     "gui.codpattern.zombies.npc.combat.read": "Select TaCZ gun from inventory",
     "gui.codpattern.zombies.npc.combat.none": "Not selected",
+    "key.codpattern.zombies.drop_gun": "Drop current gun (Zombies)",
     "key.codpattern.zombies.bank": "Open team command wheel",
     "key.codpattern.zombies.call_npc": "Call nearby support NPC",
     "key.categories.codpattern.zombies": "Zombies",

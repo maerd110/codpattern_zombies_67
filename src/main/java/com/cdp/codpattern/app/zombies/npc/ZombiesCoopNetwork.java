@@ -14,7 +14,7 @@ public final class ZombiesCoopNetwork {
         static Action decode(FriendlyByteBuf b){return new Action(b.readUtf(16),b.readUUID(),b.readUUID(),b.readVarInt(),b.readVarInt());}
     }
     public record State(CompoundTag data){void encode(FriendlyByteBuf b){b.writeNbt(data);}static State decode(FriendlyByteBuf b){var d=b.readNbt();return new State(d==null?new CompoundTag():d);}}
-    public static void install(){if(channel!=null)return;channel=NetworkRegistry.newSimpleChannel(new net.minecraft.resources.ResourceLocation(ZombiesAddonConstants.MOD_ID,"coop"),()->"3","3"::equals,"3"::equals);
+    public static void install(){if(channel!=null)return;channel=NetworkRegistry.newSimpleChannel(new net.minecraft.resources.ResourceLocation(ZombiesAddonConstants.MOD_ID,"coop"),()->"4","4"::equals,"4"::equals);
         channel.messageBuilder(Action.class,0,NetworkDirection.PLAY_TO_SERVER).encoder(Action::encode).decoder(Action::decode).consumerMainThread((p,c)->{var sender=c.get().getSender();if(sender!=null)handle(sender,p);c.get().setPacketHandled(true);}).add();
         channel.messageBuilder(State.class,1,NetworkDirection.PLAY_TO_CLIENT).encoder(State::encode).decoder(State::decode).consumerMainThread((p,c)->{com.cdp.codpattern.client.runtime.ModeClientActionHandlers.dispatch("codpattern:zombies_coop",p);c.get().setPacketHandled(true);}).add();
     }
@@ -27,6 +27,9 @@ public final class ZombiesCoopNetwork {
             switch(request.operation()){
                 case "open"->page="bank";
                 case "deposit","withdraw"->{runtime.transfer(player,request.amount(),request.operation().equals("deposit"));notice=(request.operation().equals("deposit")?"已存入 ":"已取出 ")+request.amount()+" 点";}
+                case "close_npc"->{runtime.closeManagement(player,request.token());return;}
+                case "keep_npc"->{runtime.keepManagement(player,request.token());return;}
+                case "drop_gun"->{long now=player.level().getGameTime();var d=player.getPersistentData();if(d.contains("coop.drop.tick")&&now-d.getLong("coop.drop.tick")<4)return;d.putLong("coop.drop.tick",now);runtime.dropGun(player);}
                 case "swap"->{runtime.exchange(player,request.token(),request.amount());notice="NPC 枪械已更换";page="npc";token=runtime.offer(player,focus);}
                 case "interact"->{runtime.interact(player,focus);return;}
                 case "dialogue"->{runtime.dialogue(player,focus);return;}

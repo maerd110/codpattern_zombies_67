@@ -37,6 +37,7 @@ public final class ZombiesNpcRuntime {
 
     public ZombiesNpcRuntime(ZombiesMap map) { this.map = map; }
     public List<ZombiesNpcEntity> supportNpcs(){return entities.values().stream().filter(n->n.storyAlive()&&n.combat.active()).toList();}
+    boolean managementPaused(ZombiesNpcEntity npc){return map.coopRuntime().managementPaused(npc);}
     boolean combatAllowed(){return !preview&&map.currentPhase().isRoundRunning();}
     boolean combatTarget(net.minecraft.world.entity.Entity entity){
         return entity instanceof net.minecraft.world.entity.LivingEntity living&&living.isAlive()&&entity.level()==level()

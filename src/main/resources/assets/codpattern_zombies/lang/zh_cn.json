@@ -619,6 +619,7 @@
     "gui.codpattern.zombies.npc.combat.clear": "清空枪械，仅跟随",
     "gui.codpattern.zombies.npc.combat.read": "从背包选择 TaCZ 枪械",
     "gui.codpattern.zombies.npc.combat.none": "未选择",
+    "key.codpattern.zombies.drop_gun": "丢出当前枪械（僵尸模式）",
     "key.codpattern.zombies.bank": "打开队伍协作轮盘",
     "key.codpattern.zombies.call_npc": "呼叫附近作战 NPC",
     "key.categories.codpattern.zombies": "僵尸模式",

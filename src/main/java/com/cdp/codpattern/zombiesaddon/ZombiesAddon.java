@@ -11,6 +11,7 @@ public final class ZombiesAddon {
         var loadingContext = ModLoadingContext.get();
         var modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         var localVersion = loadingContext.getActiveContainer().getModInfo().getVersion().toString();
+        loadingContext.registerConfig(net.minecraftforge.fml.config.ModConfig.Type.CLIENT,ZombiesClientConfig.SPEC);
         ZombiesAddonCompatibility.install(localVersion);
         ZombiesBootstrap.install(modEventBus);
     }

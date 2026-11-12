@@ -22,6 +22,7 @@ final class ZombiesNpcCombat {
     ItemStack loan=ItemStack.EMPTY;
     boolean calledFor(net.minecraft.world.entity.player.Player p){return p!=null&&p.getUUID().equals(calledBy)&&npc.tickCount<callUntil;}
     void call(net.minecraft.server.level.ServerPlayer player){calledBy=player.getUUID();callUntil=npc.tickCount+1200;}
+    void finishCall(UUID player){if(player.equals(calledBy)){calledBy=null;callUntil=0;npc.getNavigation().stop();}}
     void resume(){calledBy=null;callUntil=0;orderMode=null;orderAnchor=null;orderFollow=null;}
     void equipLoan(ItemStack stack){loan=stack.copy();loan.setCount(1);npc.setItemSlot(EquipmentSlot.MAINHAND,loan.copy());drawn=false;weaponRevision=UUID.randomUUID();}
 
@@ -44,6 +45,7 @@ final class ZombiesNpcCombat {
         var owner=npc.owner();
         if(!active()||owner==null||!owner.combatAllowed()||!npc.storyAlive()||npc.posture()!=0){stop();return;}
         npc.setNoAi(false);npc.setNoGravity(false);
+        if(owner.managementPaused(npc)){npc.setTarget(null);npc.getNavigation().stop();npc.setDeltaMovement(Vec3.ZERO);if(drawn)IGunOperator.fromLivingEntity(npc).aim(false);return;}
         if(anchor==null)anchor=npc.position();
         if(npc.tickCount%10==0){
             Vec3 destination=orderAnchor==null?anchor:orderAnchor;
@@ -66,7 +68,6 @@ final class ZombiesNpcCombat {
         // Infinite reserve, finite magazine: TaCZ still performs its actual reload/bolt sequence.
         gun.setMaxDummyAmmoAmount(stack,32767);if(gun.getDummyAmmoAmount(stack)<1024)gun.setDummyAmmoAmount(stack,32767);
         if(!drawn){operator.initialData();operator.draw(npc::getMainHandItem);drawn=true;}
-        if(owner.combatPlayers().stream().anyMatch(p->calledFor(p)&&npc.distanceToSqr(p)<12)){operator.aim(false);npc.setTarget(null);return;}
         target=npc.getTarget();operator.aim(target!=null);if(target==null)return;
         Vec3 delta=target.getBoundingBox().getCenter().subtract(npc.getEyePosition());
         float yaw=(float)(Math.toDegrees(Math.atan2(delta.z,delta.x))-90),pitch=(float)-Math.toDegrees(Math.atan2(delta.y,Math.sqrt(delta.x*delta.x+delta.z*delta.z)));

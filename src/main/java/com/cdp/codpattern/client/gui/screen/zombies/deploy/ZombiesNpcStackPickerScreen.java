@@ -20,6 +20,8 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
     private final Consumer<Entry> choose;
     private final List<Button> buttons = new ArrayList<>();
     private final List<Tile> tiles = new ArrayList<>();
+    private boolean returning;
+    public Screen parentScreen(){return parent;}
     private String search = "";
     private int scroll;
     public ZombiesNpcStackPickerScreen(Screen parent, String title, List<Entry> entries, Consumer<Entry> choose) {
@@ -44,14 +46,15 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
             Entry entry = filtered.get(i);
             int x = 16 + (i % columns) * cell, y = 62 + (i / columns - scroll) * 64;
             Button button = addRenderableWidget(Button.builder(Component.empty(), ignored -> {
-                minecraft.setScreen(parent); choose.accept(entry);
+                returning=true;minecraft.setScreen(parent); choose.accept(entry);
             }).bounds(x, y, cell - 4, 60).build());
             button.setTooltip(Tooltip.create(Component.literal(entry.caption() + " × " + entry.count() + "\n" + entry.value())));
             buttons.add(button); tiles.add(new Tile(entry, x, y, cell - 4));
         }
     }
     @Override public boolean mouseScrolled(double x, double y, double delta) { scroll += delta > 0 ? -1 : 1; buildTiles(); return true; }
-    @Override public void onClose() { minecraft.setScreen(parent); }
+    @Override public void onClose() { returning=true;minecraft.setScreen(parent); }
+    @Override public void removed(){if(!returning&&parent instanceof com.cdp.codpattern.client.gui.screen.zombies.ZombiesCoopScreen owner)owner.closeManagement();}
     @Override public boolean isPauseScreen() { return false; }
     @Override public void render(GuiGraphics graphics, int x, int y, float partialTick) {
         graphics.fill(0, 0, width, height, 0xF012191D);
