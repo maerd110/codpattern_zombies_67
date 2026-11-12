@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.cdp.codpattern.zombiesaddon.mixin.client",
+  "compatibilityLevel": "JAVA_17",
+  "client": ["ZombiesCrawlGuardMixin"],
+  "injectors": { "defaultRequire": 1 }
+}
