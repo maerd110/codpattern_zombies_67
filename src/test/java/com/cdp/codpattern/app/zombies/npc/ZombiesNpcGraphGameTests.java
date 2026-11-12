@@ -491,6 +491,24 @@ public final class ZombiesNpcGraphGameTests {
             npc.apply(new ZombiesNpcConfig.Appearance(null,null,ZombiesNpcConfig.Pose.STANDING,true,null));h.assertTrue(npc.getBoundingBox().getYsize()>1.7&&npc.getBoundingBox().getXsize()<.7,"standing after revival restores upright dimensions");
         }
     }finally{f.close();}h.succeed();}
+    @GameTest(template="empty",batch="npc_graph",timeoutTicks=100)
+    public static void sceneFailureDoesNotEndRoundAndPreflightReportsTarget(GameTestHelper h){var f=new Fixture(h);try{
+        var at=f.origin.offset(2,0,2);var other=at.east();var level=h.getLevel();
+        var scene=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Scene(2,2,2,List.of("minecraft:dirt"),java.util.Collections.nCopies(8,0));
+        var region=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.Region(at,scene.endAt(at),null,com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.RegionMode.SCENE,scene,null,null);
+        var e=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.MapEvent("scene","scene",true,3,"",List.of(region),null,null);
+        var cfg=new com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig(1,null,List.of(),List.of(),List.of(e));var rt=f.map.scenarioRuntime();
+        for(var pos:BlockPos.betweenClosed(at,scene.endAt(at)))level.setBlock(pos,Blocks.QUARTZ_BLOCK.defaultBlockState(),18);
+        rt.validate(cfg,ZombiesNpcConfig.empty());rt.start(cfg);f.map.wave=2;rt.tick();h.assertTrue(!rt.completed("scene"),"snapshot waits for wave 3");
+        f.map.wave=3;rt.tick();h.assertTrue(rt.completed("scene")&&level.getBlockState(at).is(Blocks.DIRT)&&f.map.failures==0,"2x2x2 dirt snapshot at wave 3 does not end round");
+        rt.reset();h.assertTrue(level.getBlockState(at).is(Blocks.QUARTZ_BLOCK),"snapshot restores original terrain");
+        level.setBlock(other,Blocks.CHEST.defaultBlockState(),18);
+        try{rt.validate(cfg,ZombiesNpcConfig.empty());throw new AssertionError("unsupported target accepted");}catch(IllegalArgumentException invalid){h.assertTrue(invalid.getMessage().contains("minecraft:chest")&&invalid.getMessage().contains(other.toShortString()),"preflight names target block and coordinates");}
+        level.setBlock(other,Blocks.QUARTZ_BLOCK.defaultBlockState(),18);rt.validate(cfg,ZombiesNpcConfig.empty());rt.start(cfg);
+        level.setBlock(other,Blocks.CHEST.defaultBlockState(),18);rt.tick();rt.tick();h.assertTrue(!rt.completed("scene")&&f.map.failures==0&&level.getBlockState(at).is(Blocks.QUARTZ_BLOCK),"changed target aborts event before any writes without failing or repeating the round");
+        level.setBlock(other,Blocks.QUARTZ_BLOCK.defaultBlockState(),18);rt.tick();h.assertTrue(!rt.completed("scene"),"failed event stays disabled until next round");
+        rt.reset();rt.start(cfg);rt.tick();h.assertTrue(rt.completed("scene"),"new round clears event failure state");
+    }finally{f.map.scenarioRuntime().reset();f.close();}h.succeed();}
     private static Node choice(List<Option> options){return new Node("choose",Type.CHOICE,0,0,null,null,0,"","",true,"What will you do?","",options);}
     private static Node node(String id,Type type,String next){return new Node(id,type,0,0,null,null,0,next,"");}
     private static Node action(String id,ZombiesNpcConfig.Action a,String next){return new Node(id,Type.ACTION,0,0,a,null,0,next,"");}
@@ -516,10 +534,11 @@ public final class ZombiesNpcGraphGameTests {
         void close(){map.npcRuntime().reset();FPSMCore.getInstance().unregisterMap(map);}
     }
     private static final class TestMap extends ZombiesMap{
-        final List<ServerPlayer> actors=new ArrayList<>();final List<String> lines=new ArrayList<>();final List<Long> times=new ArrayList<>();final List<Component> notices=new ArrayList<>();int wave=1;boolean barrierOpen,admin=true;ZombiesGamePhase phase=ZombiesGamePhase.WAVE_ACTIVE;
+        final List<ServerPlayer> actors=new ArrayList<>();final List<String> lines=new ArrayList<>();final List<Long> times=new ArrayList<>();final List<Component> notices=new ArrayList<>();int failures;int wave=1;boolean barrierOpen,admin=true;ZombiesGamePhase phase=ZombiesGamePhase.WAVE_ACTIVE;
         TestMap(net.minecraft.server.level.ServerLevel l,String n,AreaData a){super(l,n,a);}
         @Override public ZombiesGamePhase currentPhase(){return phase;}
         @Override public boolean npcBarrierOpen(int group){return barrierOpen;}
+        @Override public void failNpcRound(){failures++;}
         @Override public int npcWave(){return wave;}
         @Override public boolean isAliveSurvivor(UUID id){return actors.stream().anyMatch(p->p.getUUID().equals(id));}
         @Override public List<ServerPlayer> npcPlayers(){return List.copyOf(actors);}

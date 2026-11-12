@@ -28,8 +28,15 @@ public final class ZombiesScenarioSelection {
     @SubscribeEvent public static void world(RenderLevelStageEvent event){
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES||Minecraft.getInstance().screen!=null)return;
         var bounds=ZombiesScenarioScreen.selectionBounds();if(bounds==null)return;var camera=event.getCamera().getPosition();
-        var pose=event.getPoseStack();pose.pushPose();pose.translate(-camera.x,-camera.y,-camera.z);
-        var buffers=Minecraft.getInstance().renderBuffers().bufferSource();LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),bounds,0.35f,0.95f,0.8f,1f);buffers.endBatch(RenderType.lines());pose.popPose();
+        renderSelectionBox(event.getPoseStack(),camera,bounds);
+    }
+    public static void renderSelectionBox(com.mojang.blaze3d.vertex.PoseStack pose,net.minecraft.world.phys.Vec3 camera,net.minecraft.world.phys.AABB bounds){
+        pose.pushPose();pose.translate(-camera.x,-camera.y,-camera.z);
+        // AFTER_PARTICLES already installs the camera view in RenderSystem. The event pose
+        // also contains it: neutralise the global matrix while drawing so it is applied once.
+        var modelView=com.mojang.blaze3d.systems.RenderSystem.getModelViewStack();modelView.pushPose();modelView.setIdentity();com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();
+        try {var buffers=net.minecraft.client.renderer.MultiBufferSource.immediate(new com.mojang.blaze3d.vertex.BufferBuilder(256));LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),bounds,0.35f,0.95f,0.8f,1f);buffers.endBatch(RenderType.lines());}
+        finally {modelView.popPose();com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();pose.popPose();}
     }
     @SubscribeEvent public static void hud(RenderGuiEvent.Post event){
         var mc=Minecraft.getInstance();if(mc.screen!=null||!ZombiesScenarioScreen.selecting())return;renderSelectionOverlay(event.getGuiGraphics(),mc.getWindow().getGuiScaledWidth(),mc.getWindow().getGuiScaledHeight());

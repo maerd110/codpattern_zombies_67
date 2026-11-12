@@ -148,6 +148,18 @@ public final class ZombiesNpcClientPreview {
             graphChecks(screen, working, client, output);
             sharedGraphChecks(screen,client,output);
             dialogueChecks(screen,client,output);
+            for(int angle:new int[]{0,45,110}){
+                Screen boxPreview=new Screen(net.minecraft.network.chat.Component.literal("world box")){
+                    @Override public void render(GuiGraphics g,int mx,int my,float partial){
+                        var view=new com.mojang.blaze3d.vertex.PoseStack();view.translate(160,120,-2000);view.scale(45,45,45);view.mulPose(com.mojang.math.Axis.XP.rotationDegrees(25));view.mulPose(com.mojang.math.Axis.YP.rotationDegrees(angle));
+                        var camera=new net.minecraft.world.phys.Vec3(4,-52,-44);var global=RenderSystem.getModelViewStack();global.pushPose();global.mulPoseMatrix(view.last().pose());RenderSystem.applyModelViewMatrix();var before=new Matrix4f(global.last().pose());var localBefore=new Matrix4f(view.last().pose());
+                        try{com.cdp.codpattern.event.client.zombies.ZombiesScenarioSelection.renderSelectionBox(view,camera,new net.minecraft.world.phys.AABB(4,-52,-44,5,-51,-43));
+                            if(!global.last().pose().equals(before)||!view.last().pose().equals(localBefore))throw new AssertionError("selection box leaked view matrix");
+                        }finally{global.popPose();RenderSystem.applyModelViewMatrix();}
+                    }
+                };
+                render(boxPreview,320,240,output.resolve("world-box-"+angle+".png"));
+            }
             scenarioChecks(screen,client,output);
             Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
         } catch (Throwable failure) {
@@ -489,6 +501,14 @@ public final class ZombiesNpcClientPreview {
                 }
                 if(file.getFileName().toString().equals("zoom-20-1280.png")){
                     for(int x=128;x<136;x++)for(int y=125;y<135;y++){int pixel=image.getPixelRGBA(x,y);if(((pixel>>8)&255)>180&&(pixel&255)>50&&((pixel>>16)&255)>130)throw new AssertionError("Forward wires at 20% must not detour into oversized loops");}
+                }
+                if(file.getFileName().toString().startsWith("world-box-")){
+                    int visible=0;
+                    for(int x=0;x<width;x++)for(int y=0;y<height;y++){
+                        int pixel=image.getPixelRGBA(x,y);if((pixel&0xFFFFFF)==0)continue;
+                        visible++;if(x<85||x>240||y<60||y>210)throw new AssertionError("Selection box drifted with duplicated camera matrix");
+                    }
+                    if(visible<40)throw new AssertionError("Selection box did not render");
                 }
                 image.writeToFile(file);renderCount++;
             }

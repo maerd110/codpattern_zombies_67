@@ -493,15 +493,21 @@ public final class ZombiesNpcRuntime {
             var action=new ZombiesNpcConfig.Action(ZombiesNpcConfig.Kind.SET_BLOCK,null,null,null,null,0,null,null,0,null,null,null,batch);
             var npc=new ZombiesNpcConfig.Npc("event_validation",new ZombiesNpcConfig.Appearance("",null,null,true,batch.get(0).position()),"",List.of(new ZombiesNpcConfig.Rule("event",ZombiesNpcConfig.Trigger.AUTO,0,List.of(),false,List.of(),List.of(action))));
             validate(new ZombiesNpcConfig(1,List.of(npc)));
+            for(var cell:batch){var pos=blockPos(cell.position());requireReplaceableStoryCell(pos);}
         }
     }
+    private void requireReplaceableStoryCell(BlockPos pos){
+        try {requireStableBlock(level().getBlockState(pos));}
+        catch(IllegalArgumentException e){throw new IllegalArgumentException("目标区域含暂不支持替换的方块 " + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(level().getBlockState(pos).getBlock()) + "，位置 " + pos.toShortString(),e);}
+    }
+    public boolean debugEnabled(){return config.debug();}
     public void applyMapBlocks(List<ZombiesNpcConfig.BlockPlacement> placements){validateMapBlocks(placements);placeBlocks(placements);}
     private void placeBlocks(List<ZombiesNpcConfig.BlockPlacement> placements) {
         Map<BlockPos, BlockState> changes = new LinkedHashMap<>();
         for (var placement : placements) {
             BlockPos pos = blockPos(placement.position());
             level().getChunk(pos);
-            requireStableBlock(level().getBlockState(pos));
+            requireReplaceableStoryCell(pos);
             changes.put(pos, parseBlock(placement.block()));
         }
         Map<BlockPos, BlockState> before = new LinkedHashMap<>();
