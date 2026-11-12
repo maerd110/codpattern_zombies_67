@@ -465,7 +465,7 @@ public final class ZombiesNpcRuntime {
             var node=s.graphNodes.get(s.cursor);
             if(s.segment<node.segments().size()){
                 if(!option.equals("segment_next")||s.view.options().stream().noneMatch(o->o.id().equals(option)))return false;
-                runtime.closeDialogue(s);s.segment++;runtime.openDialogue(s,node);return true;
+                s.segment++;runtime.openDialogue(s,node);return true;
             }
             var selected=node.options().stream().filter(o->o.id().equals(option)).findFirst().orElse(null);
             // The option must have been offered AND still be eligible; old or forged packets cannot run a branch.
@@ -490,7 +490,7 @@ public final class ZombiesNpcRuntime {
             case TAKE_ITEM, GIVE_ITEM -> {
                 if (actor == null) throw new IllegalStateException("Item action has no interaction owner");
                 ZombiesNpcInventory.commit(actor, ZombiesNpcInventory.plan(actor, List.of(action)));
-                actor.sendSystemMessage(Component.translatable(action.kind()==ZombiesNpcConfig.Kind.GIVE_ITEM?"npc.item.received":"npc.item.delivered",ZombiesNpcInventory.parse(action.item()).getHoverName(),action.count()));
+                actor.sendSystemMessage(action.kind()==ZombiesNpcConfig.Kind.GIVE_ITEM?ZombiesNpcInventory.receivedMessage(action.item(),action.count()):Component.translatable("npc.item.delivered",ZombiesNpcInventory.parse(action.item()).getHoverName(),action.count()));
             }
             case NPC -> {
                 if (action.appearance() != null) entities.get(target).apply(action.appearance());

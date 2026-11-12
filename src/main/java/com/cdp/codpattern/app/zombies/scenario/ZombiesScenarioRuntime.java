@@ -74,7 +74,7 @@ public final class ZombiesScenarioRuntime {
                 UUID id=player.getUUID();if(player.level()!=map.getServerLevel()||!player.isAlive()||player.isSpectator()||!map.isAliveSurvivor(id))continue;
                 if(!area.contains(player.position())){blocked.remove(id);continue;}if(claimed.contains(id))continue;
                 try{ZombiesNpcInventory.grant(player,area.items().stream().map(ZombiesScenarioConfig.RewardItem::action).toList());claimed.add(id);blocked.remove(id);
-                    player.sendSystemMessage(Component.literal("已领取区域道具："+area.name()));
+                    for(var item:area.items())player.sendSystemMessage(ZombiesNpcInventory.receivedMessage(item.item(),item.count()));
                 }catch(IllegalArgumentException full){if(blocked.add(id))player.sendSystemMessage(Component.literal("区域道具暂未领取："+full.getMessage()+"；整理背包后在区域内自动重试"));}
             }
         }

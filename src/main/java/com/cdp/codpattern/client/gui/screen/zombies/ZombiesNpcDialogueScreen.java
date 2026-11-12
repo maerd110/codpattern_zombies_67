@@ -28,7 +28,11 @@ public final class ZombiesNpcDialogueScreen extends Screen {
     }
     public static void handle(ZombiesNpcDialogueNetwork.View view) {
         var client=Minecraft.getInstance();
-        if(view.open())client.setScreen(new ZombiesNpcDialogueScreen(view));
+        if(view.open()){
+            // A server refresh or next segment replaces the view without cancelling its previous token.
+            if(client.screen instanceof ZombiesNpcDialogueScreen previous)previous.submitted=true;
+            client.setScreen(new ZombiesNpcDialogueScreen(view));
+        }
         else if(client.screen instanceof ZombiesNpcDialogueScreen screen && screen.view.token().equals(view.token())) {
             screen.submitted=true;client.setScreen(null);
         }

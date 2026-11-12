@@ -10,6 +10,7 @@ import java.util.List;
 /** Plans every transfer against copies before committing any inventory slot. */
 public final class ZombiesNpcInventory {
     private ZombiesNpcInventory() { }
+    public static net.minecraft.network.chat.Component receivedMessage(String item,int count){return net.minecraft.network.chat.Component.translatable("npc.item.received",parse(item).getHoverName(),count);}
     public static void grant(ServerPlayer player,List<ZombiesNpcConfig.Action> actions){commit(player,plan(player,actions));}
     static boolean contains(ServerPlayer player, String specification, int count) {
         ItemStack required = parse(specification);

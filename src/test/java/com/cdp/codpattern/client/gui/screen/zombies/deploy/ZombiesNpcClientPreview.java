@@ -183,6 +183,7 @@ public final class ZombiesNpcClientPreview {
             coopChecks(client,output);
             scenarioChecks(screen,client,output);
             playerSkinChecks(screen,client,output);
+            cursorChecks(client);
             Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
@@ -496,6 +497,26 @@ public final class ZombiesNpcClientPreview {
         set(screen,"selectionRegion",region);set(screen,"suspended",true);if(!ZombiesScenarioScreen.selecting())throw new AssertionError("Selection context remains active until explicitly ended");
         com.cdp.codpattern.event.client.zombies.ZombiesScenarioSelection.loggedOut(null);if(ZombiesScenarioScreen.selecting())throw new AssertionError("Disconnect clears world selection before another server is joined");
         ZombiesScenarioScreen.disconnected();
+    }
+    private static void cursorChecks(Minecraft client)throws Exception{
+        var parent=client.screen;var mouse=client.mouseHandler;var window=client.getWindow();boolean active=client.isWindowActive(),grabbed=mouse.isMouseGrabbed();double oldX=mouse.xpos(),oldY=mouse.ypos();double[] nativeX={0},nativeY={0};GLFW.glfwGetCursorPos(window.getWindow(),nativeX,nativeY);
+        double x=window.getScreenWidth()*.23,y=window.getScreenHeight()*.82;
+        // The preview window is hidden and unfocused, so GLFW deliberately refuses physical cursor warps.
+        // Record the platform request while exercising Minecraft's actual screen and mouse-release paths.
+        var mover=com.cdp.codpattern.event.client.zombies.ZombiesScreenCursor.class.getDeclaredField("moveCursor");mover.setAccessible(true);var oldMover=mover.get(null);double[] actualX={Double.NaN},actualY={Double.NaN};var moves=new java.util.concurrent.atomic.AtomicInteger();mover.set(null,(java.util.function.BiConsumer<Double,Double>)(px,py)->{actualX[0]=px;actualY[0]=py;moves.incrementAndGet();});
+        try{
+            client.setWindowActive(true);var first=new Screen(net.minecraft.network.chat.Component.literal("cursor before gameplay")){};client.setScreen(first);set(mouse,"xpos",x);set(mouse,"ypos",y);
+            // Save the real closing event, then emulate vanilla's gameplay capture without loading a world.
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.post(new net.minecraftforge.client.event.ScreenEvent.Closing(first));client.screen=null;set(mouse,"xpos",window.getScreenWidth()/2.0);set(mouse,"ypos",window.getScreenHeight()/2.0);set(mouse,"mouseGrabbed",true);
+            client.setScreen(new Screen(net.minecraft.network.chat.Component.literal("unrelated GUI")){});
+            if(moves.get()==0||Math.abs(actualX[0]-x)>1||Math.abs(actualY[0]-y)>1)throw new AssertionError("Opening any GUI after gameplay must restore its cursor instead of centering: "+actualX[0]+","+actualY[0]);
+            var cancelled=new java.util.concurrent.atomic.AtomicInteger();var view=new ZombiesNpcDialogueNetwork.View(java.util.UUID.randomUUID(),true,-1,net.minecraft.network.chat.Component.literal("NPC"),net.minecraft.network.chat.Component.literal("第一段"),List.of(new ZombiesNpcDialogueNetwork.Answer("next","继续说。")));
+            client.setScreen(new ZombiesNpcDialogueScreen(view,ignored->cancelled.incrementAndGet()));set(mouse,"xpos",x);set(mouse,"ypos",y);
+            var next=new ZombiesNpcDialogueNetwork.View(java.util.UUID.randomUUID(),true,-1,view.name(),net.minecraft.network.chat.Component.literal("第二段"),view.options());ZombiesNpcDialogueScreen.handle(next);
+            if(cancelled.get()!=0||Math.abs(actualX[0]-x)>1||Math.abs(actualY[0]-y)>1)throw new AssertionError("Replacing a dialogue page must keep the cursor and must not submit a spurious close request");
+            ZombiesNpcDialogueScreen.handle(new ZombiesNpcDialogueNetwork.View(next.token(),false,-1,next.name(),next.text(),List.of()));
+            int before=moves.get();client.setWindowActive(false);client.setScreen(new Screen(net.minecraft.network.chat.Component.literal("background GUI")){});if(moves.get()!=before)throw new AssertionError("Background GUI opens must not move the desktop cursor");
+        }finally{if(client.screen instanceof ZombiesNpcDialogueScreen screen)set(screen,"submitted",true);client.setWindowActive(active);client.setScreen(parent);mover.set(null,oldMover);GLFW.glfwSetCursorPos(window.getWindow(),nativeX[0],nativeY[0]);set(mouse,"xpos",oldX);set(mouse,"ypos",oldY);set(mouse,"mouseGrabbed",grabbed);}
     }
     private static void playerSkinChecks(Screen parent,Minecraft client,Path output)throws Exception{
         if(!com.cdp.codpattern.client.zombies.ZombiesNpcSkins.lookup("not a player name").isCompletedExceptionally())throw new AssertionError("Invalid profile queries fail before network access");
