@@ -50,7 +50,17 @@ public final class ZombiesCoopRuntime {
     public boolean managementPaused(ZombiesNpcEntity npc){expireOffers();return offers.values().stream().anyMatch(o->o.npc().equals(npc.getUUID()));}
     public void closeManagement(ServerPlayer player,UUID token){var offer=offers.get(player.getUUID());if(offer!=null&&offer.token().equals(token)){offers.remove(player.getUUID());releaseOffer(player.getUUID(),offer);}}
     public void keepManagement(ServerPlayer player,UUID token){expireOffers();var offer=offers.get(player.getUUID());if(offer!=null&&offer.token().equals(token))offers.put(player.getUUID(),new Offer(offer.token(),offer.npc(),offer.weapon(),offer.guns(),player.level().getGameTime()+600));}
-    public void dropGun(ServerPlayer player){if(!allowed(player)||!roomGun(player.getMainHandItem()))throw new IllegalArgumentException("请手持本局枪械后再丢出");if(!player.drop(false))throw new IllegalArgumentException("当前无法丢出枪械");syncInventory(player);}
+    public void dropGun(ServerPlayer player){
+        if(!allowed(player)||!roomGun(player.getMainHandItem()))throw new IllegalArgumentException("请手持本局枪械后再丢出");
+        boolean dropped;
+        try{dropped=player.drop(false);}
+        finally{
+            // Vanilla drop marks its remote slot as updated, assuming client-side prediction.
+            // Our server-driven key has no prediction; a diff-only broadcast leaves a ghost gun.
+            player.getInventory().setChanged();player.inventoryMenu.broadcastFullState();
+        }
+        if(!dropped)throw new IllegalArgumentException("当前无法丢出枪械");
+    }
     public UUID offer(ServerPlayer player,int entity){var npc=npc(player,entity);var token=UUID.randomUUID();var guns=new HashMap<Integer,ItemStack>();for(int i=0;i<36;i++)if(roomGun(player.getInventory().getItem(i)))guns.put(i,player.getInventory().getItem(i).copy());var previous=offers.put(player.getUUID(),new Offer(token,npc.getUUID(),npc.combat.weaponRevision,Map.copyOf(guns),player.level().getGameTime()+600));if(previous!=null&&!previous.npc().equals(npc.getUUID()))releaseOffer(player.getUUID(),previous);return token;}
     public void exchange(ServerPlayer player,UUID token){exchange(player,token,player.getInventory().selected);}
     public void exchange(ServerPlayer player,UUID token,int slot){var offer=offers.get(player.getUUID());if(offer==null||!offer.token().equals(token)||offer.expires()<player.level().getGameTime())throw new IllegalArgumentException("换枪页面已失效，请重新交互");var entity=map.getServerLevel().getEntity(offer.npc());if(!(entity instanceof ZombiesNpcEntity candidate))throw new IllegalArgumentException("NPC 已离开");var npc=npc(player,candidate.getId());var hand=slot>=0&&slot<36?player.getInventory().getItem(slot):ItemStack.EMPTY;var expected=offer.guns().get(slot);if(expected==null||!npc.combat.weaponRevision.equals(offer.weapon())||!ItemStack.matches(hand,expected)||!roomGun(hand))throw new IllegalArgumentException("所选枪械已变化，请重新交互");ZombiesNpcCombat.gun(hand.save(new CompoundTag()).toString());
