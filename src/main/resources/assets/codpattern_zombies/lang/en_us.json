@@ -617,5 +617,8 @@
     "gui.codpattern.zombies.npc.combat.range": "Range (4–64 blocks)",
     "gui.codpattern.zombies.npc.combat.gun": "Gun: %s",
     "gui.codpattern.zombies.npc.combat.read": "Select TaCZ gun from inventory",
-    "gui.codpattern.zombies.npc.combat.none": "Not selected"
+    "gui.codpattern.zombies.npc.combat.none": "Not selected",
+    "key.codpattern.zombies.bank": "Open team bank",
+    "key.codpattern.zombies.call_npc": "Call nearby support NPC",
+    "key.categories.codpattern.zombies": "Zombies"
 }

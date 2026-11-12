@@ -13,6 +13,14 @@ final class ZombiesNpcCombat {
     private ZombiesNpcConfig.Combat config;
     Vec3 anchor; UUID follow;
     private boolean drawn;
+    UUID weaponRevision=UUID.randomUUID(),calledBy;
+    int callUntil;
+    ItemStack loan=ItemStack.EMPTY;
+    boolean calledFor(net.minecraft.world.entity.player.Player p){return p!=null&&p.getUUID().equals(calledBy)&&npc.tickCount<callUntil;}
+    void call(net.minecraft.server.level.ServerPlayer player){calledBy=player.getUUID();callUntil=npc.tickCount+1200;}
+    void resume(){calledBy=null;callUntil=0;}
+    void equipLoan(ItemStack stack){loan=stack.copy();loan.setCount(1);npc.setItemSlot(EquipmentSlot.MAINHAND,loan.copy());drawn=false;weaponRevision=UUID.randomUUID();}
+
     com.tacz.guns.api.entity.ShootResult lastResult;
     private int searchAt;
     ZombiesNpcCombat(ZombiesNpcEntity npc){this.npc=npc;}
@@ -23,7 +31,7 @@ final class ZombiesNpcCombat {
     }
     void configure(ZombiesNpcConfig.Combat next){
         config=next;drawn=false;anchor=npc.position();follow=null;
-        npc.setItemSlot(EquipmentSlot.MAINHAND,next.mode()==ZombiesNpcConfig.CombatMode.OFF?ItemStack.EMPTY:gun(next.gun()));
+        npc.setItemSlot(EquipmentSlot.MAINHAND,next.mode()==ZombiesNpcConfig.CombatMode.OFF?ItemStack.EMPTY:loan.isEmpty()?gun(next.gun()):loan.copy());weaponRevision=UUID.randomUUID();
         npc.setDropChance(EquipmentSlot.MAINHAND,0);
     }
     boolean active(){return config!=null&&config.mode()!=ZombiesNpcConfig.CombatMode.OFF;}
@@ -35,7 +43,9 @@ final class ZombiesNpcCombat {
         if(anchor==null)anchor=npc.position();
         if(npc.tickCount%10==0){
             Vec3 destination=anchor;
-            if(config.mode()==ZombiesNpcConfig.CombatMode.FOLLOW){
+            var caller=owner.combatPlayers().stream().filter(this::calledFor).findFirst().orElse(null);
+            if(caller!=null)destination=caller.position();
+            else if(config.mode()==ZombiesNpcConfig.CombatMode.FOLLOW){
                 var players=owner.combatPlayers();var leader=players.stream().filter(p->p.getUUID().equals(follow)).findFirst().orElseGet(()->players.stream().min(java.util.Comparator.comparingDouble(npc::distanceToSqr)).orElse(null));
                 if(leader!=null){follow=leader.getUUID();destination=leader.position();}
             }
@@ -51,6 +61,7 @@ final class ZombiesNpcCombat {
         // Infinite reserve, finite magazine: TaCZ still performs its actual reload/bolt sequence.
         gun.setMaxDummyAmmoAmount(stack,32767);if(gun.getDummyAmmoAmount(stack)<1024)gun.setDummyAmmoAmount(stack,32767);
         if(!drawn){operator.initialData();operator.draw(npc::getMainHandItem);drawn=true;}
+        if(owner.combatPlayers().stream().anyMatch(p->calledFor(p)&&npc.distanceToSqr(p)<12)){operator.aim(false);npc.setTarget(null);return;}
         target=npc.getTarget();operator.aim(target!=null);if(target==null)return;
         Vec3 delta=target.getBoundingBox().getCenter().subtract(npc.getEyePosition());
         float yaw=(float)(Math.toDegrees(Math.atan2(delta.z,delta.x))-90),pitch=(float)-Math.toDegrees(Math.atan2(delta.y,Math.sqrt(delta.x*delta.x+delta.z*delta.z)));

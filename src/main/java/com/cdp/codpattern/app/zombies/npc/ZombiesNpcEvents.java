@@ -17,7 +17,10 @@ public final class ZombiesNpcEvents {
     }
     @SubscribeEvent(priority=EventPriority.HIGHEST) public static void supportBullet(com.tacz.guns.api.event.common.EntityHurtByGunEvent.Pre e){
         if(e.getLogicalSide()!=net.minecraftforge.fml.LogicalSide.SERVER)return;
-        if(e.getAttacker() instanceof ZombiesNpcEntity npc&&(npc.owner()==null||!npc.owner().combatTarget(e.getHurtEntity())))e.setBaseAmount(0);
+        if(e.getAttacker() instanceof ZombiesNpcEntity npc){
+            if(npc.owner()==null||!npc.owner().combatTarget(e.getHurtEntity()))e.setBaseAmount(0);
+            else if(e.getBullet()!=null){double multiplier=e.getBullet().getPersistentData().contains("coop.npc.damage")?e.getBullet().getPersistentData().getDouble("coop.npc.damage"):1;if(Double.isFinite(multiplier)&&multiplier>0)e.setBaseAmount((float)Math.min(Float.MAX_VALUE,e.getBaseAmount()*multiplier));}
+        }
     }
     @SubscribeEvent public static void commands(RegisterCommandsEvent event) { ZombiesNpcCommands.register(event.getDispatcher()); }
     @SubscribeEvent public static void loaded(EntityJoinLevelEvent event) {

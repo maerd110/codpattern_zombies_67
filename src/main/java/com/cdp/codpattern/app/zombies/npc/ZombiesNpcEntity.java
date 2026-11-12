@@ -107,6 +107,7 @@ public final class ZombiesNpcEntity extends PathfinderMob {
     @Override protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND) return InteractionResult.PASS;
         if (!level().isClientSide && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer && owner != null) {
+            if(combat.active()&&(serverPlayer.isShiftKeyDown()||combat.calledFor(serverPlayer))){ZombiesCoopNetwork.openNpc(serverPlayer,this);return InteractionResult.CONSUME;}
             combat.follow=serverPlayer.getUUID();
             owner.interact(serverPlayer, npcId, this);
         }

@@ -617,5 +617,8 @@
     "gui.codpattern.zombies.npc.combat.range": "射程（4–64 格）",
     "gui.codpattern.zombies.npc.combat.gun": "枪械：%s",
     "gui.codpattern.zombies.npc.combat.read": "从背包选择 TaCZ 枪械",
-    "gui.codpattern.zombies.npc.combat.none": "未选择"
+    "gui.codpattern.zombies.npc.combat.none": "未选择",
+    "key.codpattern.zombies.bank": "打开共享银行",
+    "key.codpattern.zombies.call_npc": "呼叫附近作战 NPC",
+    "key.categories.codpattern.zombies": "僵尸模式"
 }

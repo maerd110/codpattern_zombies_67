@@ -28,12 +28,12 @@ public final class ZombiesAreaProtectionContributor implements ModeAreaProtectio
 
     @Override
     public boolean suppressItemToss(Entity player) {
-        return isInZombiesRoomArea(player == null ? null : player.level(), player);
+        return !com.cdp.codpattern.app.zombies.npc.ZombiesCoopRuntime.tossAllowed(player)&&isInZombiesRoomArea(player == null ? null : player.level(), player);
     }
 
     @Override
     public boolean suppressEntitySpawn(Level level, Entity entity) {
-        return (entity instanceof ItemEntity || entity instanceof ExperienceOrb)
+        return !(entity instanceof ItemEntity item&&com.cdp.codpattern.app.zombies.npc.ZombiesCoopRuntime.dropAllowed(item))&&(entity instanceof ItemEntity || entity instanceof ExperienceOrb)
                 && isInZombiesRoomArea(level, entity);
     }
 

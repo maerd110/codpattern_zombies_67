@@ -175,6 +175,7 @@ public final class ZombiesNpcClientPreview {
                     }
                 };render(posePreview,320,240,output.resolve("npc-pose-"+posture+".png"));
             }
+            coopChecks(client,output);
             scenarioChecks(screen,client,output);
             Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
         } catch (Throwable failure) {
@@ -366,6 +367,18 @@ public final class ZombiesNpcClientPreview {
         render(graph,1280,720,output.resolve("choice-canvas-1280.png"));
         graph.init(client,320,240);set(graph,"selected",owner.graphNpc().get("id").getAsString()+"."+r.get("id").getAsString()+"/"+choice.get("id").getAsString());press(graph,"节点属性");
         render(graph,320,240,output.resolve("choice-inspector-320.png"));
+    }
+    private static void coopChecks(Minecraft client,Path output)throws Exception{
+        var data=new net.minecraft.nbt.CompoundTag();data.putBoolean("active",true);data.putUUID("session",java.util.UUID.randomUUID());data.putLong("bank",3200);data.putDouble("points",1500);data.putString("page","bank");var list=new net.minecraft.nbt.ListTag();
+        for(int i=0;i<3;i++){var npc=new net.minecraft.nbt.CompoundTag();npc.putInt("id",20+i);npc.putString("name",i==0?"焦沃":"支援队员 "+i);npc.putString("gun",net.minecraft.network.chat.Component.Serializer.toJson(net.minecraft.network.chat.Component.literal("AK-47")));npc.putString("rarity",i==0?"epic":"rare");npc.putInt("level",4);npc.putInt("upgrade",2);npc.putFloat("hp",20);npc.putBoolean("called",i==0);list.add(npc);}data.put("npcs",list);
+        com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept(new ZombiesCoopNetwork.State(data));var bank=client.screen;
+        render(bank,320,240,output.resolve("coop-bank-320.png"));var amount=bank.children().stream().filter(w->w instanceof net.minecraft.client.gui.components.EditBox).map(w->(net.minecraft.client.gui.components.EditBox)w).findFirst().orElseThrow();amount.setValue("250");amount.setValue("-1");if(!amount.getValue().equals("250"))throw new AssertionError("bank rejects negative entry");
+        var update=data.copy();update.putString("page","");update.putLong("bank",3450);com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept(new ZombiesCoopNetwork.State(update));if(client.screen!=bank||!amount.getValue().equals("250"))throw new AssertionError("live bank update must preserve typed amount and screen");
+        render(bank,640,360,output.resolve("coop-bank-640.png"));
+        data.putString("page","npc");data.putInt("focus",20);data.putUUID("token",java.util.UUID.randomUUID());com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept(new ZombiesCoopNetwork.State(data));render(client.screen,320,240,output.resolve("coop-npc-320.png"));render(client.screen,640,360,output.resolve("coop-npc-640.png"));
+        data.putString("page","");com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept(new ZombiesCoopNetwork.State(data));Screen hud=new Screen(net.minecraft.network.chat.Component.literal("coop hud")){@Override public void render(GuiGraphics g,int x,int y,float partial){com.cdp.codpattern.client.zombies.ZombiesCoopClient.renderHud(g,width,height);}};
+        render(hud,320,240,output.resolve("coop-hud-320.png"));render(hud,640,360,output.resolve("coop-hud-640.png"));
+        com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept(new ZombiesCoopNetwork.State(new net.minecraft.nbt.CompoundTag()));if(com.cdp.codpattern.client.zombies.ZombiesCoopClient.active())throw new AssertionError("leave room clears coop HUD");
     }
     private static void scenarioChecks(ZombiesNpcDeployScreen previous,Minecraft client,Path output)throws Exception{
         // A player dialogue node exposes deletion next to each prose line.

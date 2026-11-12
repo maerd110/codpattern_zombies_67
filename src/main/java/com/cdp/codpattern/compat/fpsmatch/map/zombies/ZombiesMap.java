@@ -766,6 +766,9 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     }
 
     public com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime scenarioRuntime(){return scenarioRuntime;}
+    private final com.cdp.codpattern.app.zombies.npc.ZombiesCoopRuntime coopRuntime=new com.cdp.codpattern.app.zombies.npc.ZombiesCoopRuntime(this);
+    public com.cdp.codpattern.app.zombies.npc.ZombiesCoopRuntime coopRuntime(){return coopRuntime;}
+    public com.cdp.codpattern.app.zombies.model.ZombiesPlayerRuntimeState coopPlayerState(UUID id){return playerStateService.getOrCreate(id);}
     public ZombiesNpcRuntime npcRuntime() { return npcRuntime; }
 
     public int npcWave() { return runtimeState.waveState().targetWave(); }
@@ -1208,6 +1211,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     }
 
     private void clearFrozenObjectsAndResetRuntime() {
+        coopRuntime.reset();
         scenarioRuntime.reset();
         npcRuntime.reset();
         waveTextScheduler.cancel();

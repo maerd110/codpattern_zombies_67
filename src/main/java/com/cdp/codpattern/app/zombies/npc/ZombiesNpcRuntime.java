@@ -36,6 +36,7 @@ public final class ZombiesNpcRuntime {
             net.minecraft.server.level.TicketType.create("zombies-story-npc", String::compareTo);
 
     public ZombiesNpcRuntime(ZombiesMap map) { this.map = map; }
+    public List<ZombiesNpcEntity> supportNpcs(){return entities.values().stream().filter(n->n.storyAlive()&&n.combat.active()).toList();}
     boolean combatAllowed(){return !preview&&map.currentPhase().isRoundRunning();}
     boolean combatTarget(net.minecraft.world.entity.Entity entity){
         return entity instanceof net.minecraft.world.entity.LivingEntity living&&living.isAlive()&&entity.level()==level()
