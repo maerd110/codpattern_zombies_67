@@ -27,7 +27,7 @@ public final class ZombiesScenarioEditorService {
                 var request=JsonParser.parseString(payload).getAsJsonObject();
                 var from=ZombiesNpcRepository.GSON.fromJson(request.get("from"),net.minecraft.core.BlockPos.class);
                 var to=ZombiesNpcRepository.GSON.fromJson(request.get("to"),net.minecraft.core.BlockPos.class);
-                var scene=captureScene(player,map,from,to,!request.has("includeEntities")||request.get("includeEntities").getAsBoolean());
+                var limits=request.has("limits")?ZombiesNpcRepository.GSON.fromJson(request.get("limits"),ZombiesScenarioConfig.SnapshotLimits.class):effective(player.getServer(),name).snapshotLimits();if(limits==null)throw new IllegalArgumentException("场景容量设置不能为空");var scene=captureScene(player,map,from,to,!request.has("includeEntities")||request.get("includeEntities").getAsBoolean(),limits);
                 var response=new Snapshot(name,"",null,List.of(),List.of(),true,"",scene);
                 ZombiesNpcEditorWire.checkResponse(ZombiesNpcRepository.GSON.toJson(response));return response;
             }
@@ -47,8 +47,11 @@ public final class ZombiesScenarioEditorService {
         return captureScene(player,map,from,to,true);
     }
     static ZombiesScenarioConfig.Scene captureScene(ServerPlayer player,ZombiesMap map,net.minecraft.core.BlockPos from,net.minecraft.core.BlockPos to,boolean includeEntities){
+        return captureScene(player,map,from,to,includeEntities,effective(player.getServer(),map.getMapName()).snapshotLimits());
+    }
+    static ZombiesScenarioConfig.Scene captureScene(ServerPlayer player,ZombiesMap map,net.minecraft.core.BlockPos from,net.minecraft.core.BlockPos to,boolean includeEntities,ZombiesScenarioConfig.SnapshotLimits limits){
         if(from==null||to==null||player.serverLevel()!=map.getServerLevel())throw new IllegalArgumentException("请在关卡所在维度选择场景");
-        var bounds=new ZombiesScenarioConfig.Region(from,to,"minecraft:air"); // Bounds are checked before reading or allocating cells.
+        var bounds=new ZombiesScenarioConfig.Region(from,to,"minecraft:air");limits.checkRegion(bounds.blockCount()); // Reject oversized regions before any world reads or cell allocation.
         var min=new net.minecraft.core.BlockPos(Math.min(from.getX(),to.getX()),Math.min(from.getY(),to.getY()),Math.min(from.getZ(),to.getZ()));
         int sx=Math.abs(from.getX()-to.getX())+1,sy=Math.abs(from.getY()-to.getY())+1,sz=Math.abs(from.getZ()-to.getZ())+1;
 
@@ -66,7 +69,7 @@ public final class ZombiesScenarioEditorService {
         var dialogues=current.dialogues();if(!Files.exists(path)){var texts=new ZombiesWaveTextRepository(ZombiesConfigPaths.zombiesMapWaveText(server,map)).load();if(!texts.issues().isEmpty())throw new IllegalArgumentException(texts.issues().toString());
             dialogues=texts.definitions().stream().map(d->{var lines=new ArrayList<ZombiesScenarioConfig.Line>();
                 for(int i=0;i<d.messages().size();i++){var m=d.messages().get(i);double seconds=i+1<d.messages().size()?d.messages().get(i+1).delayTicks()/20.0:1;lines.add(new ZombiesScenarioConfig.Line("",m.text(),seconds));}return new ZombiesScenarioConfig.Dialogue(d.wave(),lines,d.messages().isEmpty()?0:d.messages().get(0).delayTicks()/20.0);}).toList();}
-        return new ZombiesScenarioConfig(1,waves,current.speakers(),dialogues,current.events(),current.tasks(),current.areaRewards());
+        return new ZombiesScenarioConfig(1,waves,current.speakers(),dialogues,current.events(),current.tasks(),current.areaRewards(),current.snapshotLimits());
     }
     private static Snapshot snapshot(String name,ZombiesScenarioConfig config,ZombiesNpcConfig npcs,boolean editable){var rules=new ArrayList<String>();for(var n:npcs.npcs())for(var r:n.rules())rules.add(n.id()+"."+r.id());return new Snapshot(name,revision(config),config,rules,ZombiesWaveValidator.supportedEntityIds(),editable,"");}
     public static String revision(ZombiesScenarioConfig c){try{return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(ZombiesNpcRepository.GSON.toJson(c).getBytes(java.nio.charset.StandardCharsets.UTF_8)));}catch(java.security.NoSuchAlgorithmException e){throw new IllegalStateException(e);}}

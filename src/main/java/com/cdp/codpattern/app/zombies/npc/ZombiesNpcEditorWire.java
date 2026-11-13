@@ -28,11 +28,20 @@ public final class ZombiesNpcEditorWire {
 
     public static void checkRequest(String text) { compress(text, MAX_REQUEST); }
     public static void checkResponse(String text) { compress(text, MAX_RESPONSE); }
+    public static void checkEditorRequest(String text) { compress(text,MAX_RESPONSE); }
+    public static java.util.List<byte[]> requestParts(String text){
+        byte[] compressed=compress(text,MAX_RESPONSE);var parts=new java.util.ArrayList<byte[]>();
+        for(int i=0;i<compressed.length;i+=MAX_REQUEST)parts.add(java.util.Arrays.copyOfRange(compressed,i,Math.min(i+MAX_REQUEST,compressed.length)));return parts;
+    }
+    public static String readUpload(byte[] bytes){if(bytes.length>MAX_RESPONSE)throw new IllegalArgumentException("编辑数据过大，请拆分场景");return inflate(bytes);}
     public static void write(FriendlyByteBuf buffer, String text, boolean request) {
         buffer.writeByteArray(compress(text, request ? MAX_REQUEST : MAX_RESPONSE));
     }
     public static String read(FriendlyByteBuf buffer, boolean request) {
         byte[] compressed = buffer.readByteArray(request ? MAX_REQUEST : MAX_RESPONSE);
+        return inflate(compressed);
+    }
+    private static String inflate(byte[] compressed){
         try (var gzip = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
             byte[] decoded = gzip.readNBytes(MAX_TEXT + 1);
             if (decoded.length > MAX_TEXT) throw new IllegalArgumentException("NPC editor data exceeds 2 MiB");

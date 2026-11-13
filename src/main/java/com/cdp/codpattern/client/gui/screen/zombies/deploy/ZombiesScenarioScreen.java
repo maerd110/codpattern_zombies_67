@@ -55,7 +55,7 @@ public final class ZombiesScenarioScreen extends Screen {
     private Level level(){return navigation.peekLast();}
     private void root(){navigation.clear();if(data!=null){String[] keys={"waves","speakers","dialogues","events","tasks","areaRewards"};String[] titles={"波次怪物","出场人物","波前对话","地图事件","任务书","区域道具"};navigation.add(new Level(keys[page],titles[page],list(keys[page])));}lastCard=null;}
     private void request(String op,String body){
-        try{ZombiesNpcEditorWire.checkRequest(body);pending=UUID.randomUUID();deadline=System.currentTimeMillis()+20000;ZombiesNpcDialogueNetwork.edit(new ZombiesNpcDialogueNetwork.EditorRequest(pending,map,op,body));message=op.equals("capture")?"正在读取源场景…":"正在读取／保存…";}
+        try{ZombiesNpcEditorWire.checkEditorRequest(body);pending=UUID.randomUUID();deadline=System.currentTimeMillis()+20000;ZombiesNpcDialogueNetwork.edit(new ZombiesNpcDialogueNetwork.EditorRequest(pending,map,op,body));message=op.equals("capture")?"正在读取源场景…":"正在读取／保存…";}
         catch(RuntimeException e){pending=null;captureTarget=null;message=detail(e);}
         refresh();
     }
@@ -91,14 +91,14 @@ public final class ZombiesScenarioScreen extends Screen {
         button("返回部署工具",16+bw*2,height-27,bw,this::exit,pending==null);
         if(data==null)return;
         var l=level();
-        button(l.detail||navigation.size()>1?"‹ 返回上级":"条目列表",12,54,Math.min(100,(width-30)/3),this::back,pending==null&&(l.detail||navigation.size()>1));
+        button(l.detail||navigation.size()>1?"‹ 返回上级":"场景容量设置",12,54,Math.min(100,(width-30)/3),()->{if(l.detail||navigation.size()>1)back();else openLimits();},pending==null);
         int x=16+Math.min(100,(width-30)/3),remaining=width-x-12,cell=(remaining-4)/2;
         if(!l.detail){
             button("新增"+kindLabel(l.kind),x,54,cell,this::add,canEdit());
             button("编辑所选",x+cell+4,54,cell,this::open,pending==null&&l.selected()!=null);
             buildCards(l);
         }else{
-            button("删除此条目",x,54,cell,this::deleteSelected,canEdit());
+            button(l.kind.equals("limits")?"关卡设置":"删除此条目",x,54,cell,this::deleteSelected,canEdit()&&!l.kind.equals("limits"));
             button(l.title,x+cell+4,54,cell,()->{},false);
             left=Math.max(12,(width-620)/2);formWidth=Math.min(width-24,620);
             buildDetail(l,l.selected());
@@ -128,7 +128,7 @@ public final class ZombiesScenarioScreen extends Screen {
             if(chosen)g.fill(x+w-11,y+10,x+w-7,y+14,color);
         }
     }
-    private String cardTitle(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){case "waves","dialogues"->"第 "+str(o,"wave","?")+" 波";case "speakers"->str(o,"name","未命名人物");case "events","tasks","areaRewards"->str(o,"name","未命名条目");case "rewardItems"->"道具 "+(i+1)+" · "+str(o,"item","");case "mobs"->entityName(str(o,"entity","minecraft:zombie"));case "lines"->"台词 "+(i+1)+" · "+speakerName(str(o,"speaker",""));default->"区域 "+(i+1)+" · "+(str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?"场景快照":"方块填充");};}
+    private String cardTitle(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){case "limits"->"场景容量设置";case "waves","dialogues"->"第 "+str(o,"wave","?")+" 波";case "speakers"->str(o,"name","未命名人物");case "events","tasks","areaRewards"->str(o,"name","未命名条目");case "rewardItems"->"道具 "+(i+1)+" · "+str(o,"item","");case "mobs"->entityName(str(o,"entity","minecraft:zombie"));case "lines"->"台词 "+(i+1)+" · "+speakerName(str(o,"speaker",""));default->"区域 "+(i+1)+" · "+(str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?"场景快照":"方块填充");};}
     private String summary(Level l,int i){var o=l.entries.get(i).getAsJsonObject();return switch(l.kind){
         case "waves"->o.getAsJsonArray("mobs").size()+" 种怪物 · 存活上限 "+str(o,"maxAlive","默认");
         case "speakers"->str(o,"id","")+" · 名字 "+str(o,"nameColor","white")+" / 正文 "+str(o,"textColor","white");
@@ -146,9 +146,12 @@ public final class ZombiesScenarioScreen extends Screen {
     private String speakerName(String id){if(id.isBlank())return "旁白";return list("speakers").asList().stream().map(JsonElement::getAsJsonObject).filter(o->str(o,"id","").equals(id)).map(o->str(o,"name",id)).findFirst().orElse(id);}
     private void selectCard(Level l,int i){long now=System.currentTimeMillis();var object=l.entries.get(i).getAsJsonObject();boolean twice=lastCard==object&&now-lastClick<350;lastCard=object;lastClick=now;l.selected=i;if(twice)open();else refresh();}
     private void open(){var l=level();if(l==null||l.selected()==null)return;l.detail=true;l.detailScroll=0;lastCard=null;refresh();}
-    private void back(){var l=level();if(l==null)return;if(l.detail)l.detail=false;else if(navigation.size()>1)navigation.removeLast();lastCard=null;message="";refresh();}
+    private void back(){var l=level();if(l==null)return;if(l.kind.equals("limits")){navigation.removeLast();refresh();return;}if(l.detail)l.detail=false;else if(navigation.size()>1)navigation.removeLast();lastCard=null;message="";refresh();}
+    private JsonObject limits(){if(!data.has("snapshotLimits")||data.get("snapshotLimits").isJsonNull())data.add("snapshotLimits",ZombiesNpcRepository.GSON.toJsonTree(ZombiesScenarioConfig.SnapshotLimits.defaults()));return data.getAsJsonObject("snapshotLimits");}
+    private void openLimits(){var entries=new JsonArray();entries.add(limits());var l=new Level("limits","场景容量设置",entries);l.selected=0;l.detail=true;navigation.addLast(l);refresh();}
+    private String sourceVolume(JsonObject region){try{var bounds=new ZombiesScenarioConfig.Region(pos(region.getAsJsonObject("sourceFrom")),pos(region.getAsJsonObject("sourceTo")),"minecraft:air");return "选区体积："+bounds.blockCount()+" 格 / 上限 "+str(limits(),"maxRegionBlocks","65536")+" 格（含空气）";}catch(RuntimeException e){return "选区体积：请填写有效坐标";}}
     private void browse(String kind,String title,JsonArray entries){navigation.addLast(new Level(kind,title,entries));lastCard=null;refresh();}
-    private void deleteSelected(){var l=level();if(!canEdit()||l.selected()==null)return;String name=cardTitle(l,l.selected);minecraft.setScreen(new ConfirmScreen(ok->{if(ok){l.entries.remove(l.selected);l.selected=-1;l.detail=false;message="条目已从工作副本删除。";}minecraft.setScreen(this);},Component.literal("删除“"+name+"”？"),Component.literal("保存配置后生效")));}
+    private void deleteSelected(){var l=level();if(!canEdit()||l.selected()==null||l.kind.equals("limits"))return;String name=cardTitle(l,l.selected);minecraft.setScreen(new ConfirmScreen(ok->{if(ok){l.entries.remove(l.selected);l.selected=-1;l.detail=false;message="条目已从工作副本删除。";}minecraft.setScreen(this);},Component.literal("删除“"+name+"”？"),Component.literal("保存配置后生效")));}
     private void add(){
         var l=level();var o=new JsonObject();
         switch(l.kind){
@@ -176,6 +179,7 @@ public final class ZombiesScenarioScreen extends Screen {
     private void toggle(String caption,JsonObject o,String key,boolean def){row(caption+"："+(Boolean.parseBoolean(str(o,key,""+def))?"是":"否"),()->{o.addProperty(key,!Boolean.parseBoolean(str(o,key,""+def)));refresh();});}
     private void buildDetail(Level l,JsonObject o){if(o==null){l.detail=false;return;}heading(cardTitle(l,l.selected));
         switch(l.kind){
+            case "limits"->{field("单个区域方块上限",o,"maxRegionBlocks","65536");field("单次事件方块上限",o,"maxEventBlocks","131072");hint("按框选长×宽×高计算，空气也计入；填写 1 至 1,048,576 的整数，不支持 0 或无限制。设置随本关卡保存，其他关卡不受影响。");hint("单次事件上限是全部区域的体积合计。调大后操作耗时和内存也会增加，配置数据量仍需满足传输限制。");}
             case "waves"->{heading("波次参数");field("波次编号",o,"wave","1");toggle("首领入场音效",o,"bossIntro",false);for(String k:List.of("healthMultiplier","damageMultiplier","speedMultiplier","maxAlive","fastestSpawnIntervalTicks","slowestSpawnIntervalTicks"))field(waveLabel(k),o,k,"");row("管理怪物 · "+o.getAsJsonArray("mobs").size()+" 种",()->browse("mobs",cardTitle(l,l.selected)+" / 怪物",o.getAsJsonArray("mobs")));hint("可选倍率留空时继承关卡默认值，20 刻约为 1 秒。");}
             case "mobs"->{heading("种类与数量");select("怪物种类",o,"entity",mobIds,v->entityName(v)+" · "+v);field("数量",o,"count","1");heading("独立倍率与积分");for(String k:List.of("healthMultiplier","damageMultiplier","speedMultiplier","killPoints","assistPoints"))field(waveLabel(k),o,k,"");}
             case "speakers"->{heading("人物身份");hint("稳定编号："+str(o,"id",""));field("显示名字",o,"name","");heading("显示格式");field("名字颜色",o,"nameColor","white");field("正文颜色",o,"textColor","white");colorPicker(o,"nameColor");colorPicker(o,"textColor");toggle("粗体",o,"bold",false);toggle("斜体",o,"italic",false);}
@@ -202,6 +206,8 @@ public final class ZombiesScenarioScreen extends Screen {
             pair("取准星方块为源起点",()->{r.add("sourceFrom",position(targetPos()));refresh();},"取准星方块为源终点",()->{r.add("sourceTo",position(targetPos()));refresh();});
             row("同时保存场景实体："+(captureEntities(r)?"开启":"关闭"),()->{r.addProperty("captureEntities",!captureEntities(r));refresh();});
             hint("保存盔甲架、展示框和普通生物；修改开关后需重新读取。玩家、剧情 NPC、波次怪物与临时掉落不保存。");
+            rows.add(y->labels.add(()->graphics.drawString(font,font.plainSubstrByWidth(sourceVolume(r),formWidth-10),left+5,y+6,0xFF91A9BA,false)));
+            row("调整本关卡场景容量上限",this::openLimits);
             row("读取源区域为目标场景",()->capture(r));
             hint(r.has("scene")&&!r.get("scene").isJsonNull()?"已读取："+sceneSummary(r):"尚未读取场景；读取后请保存配置。");
             heading("放置位置：关卡中要发生变化的区域");positionFields("目标原点",r.getAsJsonObject("from"),()->syncSceneExtent(r));
@@ -250,7 +256,7 @@ public final class ZombiesScenarioScreen extends Screen {
     private void positionFields(String label,JsonObject p,Runnable change){for(String k:List.of("x","y","z"))field(label+" "+k,p,k,"0",change);}
     private static void syncSceneExtent(JsonObject r){if(!r.has("scene")||r.get("scene").isJsonNull())return;var scene=ZombiesNpcRepository.GSON.fromJson(r.get("scene"),ZombiesScenarioConfig.Scene.class);r.add("to",position(scene.endAt(pos(r.getAsJsonObject("from")))));}
     private static boolean captureEntities(JsonObject region){if(region.has("captureEntities"))return region.get("captureEntities").getAsBoolean();if(region.has("scene")&&!region.get("scene").isJsonNull()){var scene=region.getAsJsonObject("scene");return scene.has("includesEntities")&&scene.get("includesEntities").getAsBoolean();}return true;}
-    private void capture(JsonObject r){var request=new JsonObject();request.addProperty("includeEntities",captureEntities(r));request.add("from",r.get("sourceFrom").deepCopy());request.add("to",r.get("sourceTo").deepCopy());captureTarget=r;request("capture",request.toString());}
+    private void capture(JsonObject r){var request=new JsonObject();request.add("limits",ZombiesNpcRepository.GSON.toJsonTree(ZombiesNpcRepository.GSON.fromJson(limits(),ZombiesScenarioConfig.SnapshotLimits.class)));request.addProperty("includeEntities",captureEntities(r));request.add("from",r.get("sourceFrom").deepCopy());request.add("to",r.get("sourceTo").deepCopy());captureTarget=r;request("capture",request.toString());}
     private void blockPicker(JsonObject r){var choices=new ArrayList<ZombiesNpcStackPickerScreen.Entry>();for(var b:net.minecraft.core.registries.BuiltInRegistries.BLOCK)if(ZombiesNpcRuntime.supportsStoryBlock(b.defaultBlockState())){var stack=new net.minecraft.world.item.ItemStack(b);if(!stack.isEmpty())choices.add(new ZombiesNpcStackPickerScreen.Entry(stack,net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).toString(),stack.getHoverName().getString(),1));}minecraft.setScreen(new ZombiesNpcStackPickerScreen(this,"选择部署方块",choices,x->{r.addProperty("block",x.value());refresh();}));}
     private static String unique(JsonArray a,String prefix){int i=1;while(true){String id=prefix+i;if(a.asList().stream().noneMatch(e->str(e.getAsJsonObject(),"id","").equals(id)))return id;i++;}}
     private void normalize(JsonElement e){if(e.isJsonObject()){var o=e.getAsJsonObject();for(var k:List.copyOf(o.keySet())){var v=o.get(k);if(v.isJsonPrimitive()&&v.getAsString().isBlank()&&Set.of("healthMultiplier","damageMultiplier","speedMultiplier","maxAlive","fastestSpawnIntervalTicks","slowestSpawnIntervalTicks","killPoints","assistPoints","time","weather").contains(k))o.remove(k);else normalize(v);}}else if(e.isJsonArray())e.getAsJsonArray().forEach(this::normalize);}

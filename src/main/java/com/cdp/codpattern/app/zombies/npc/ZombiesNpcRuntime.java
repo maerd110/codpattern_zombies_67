@@ -100,6 +100,14 @@ public final class ZombiesNpcRuntime {
         }
     }
 
+    public void validateSceneRegion(BlockPos from,BlockPos to){
+        validatePosition(new ZombiesNpcConfig.Position(from.getX(),from.getY(),from.getZ(),0));validatePosition(new ZombiesNpcConfig.Position(to.getX(),to.getY(),to.getZ(),0));
+        var bounds=new net.minecraft.world.phys.AABB(from).minmax(new net.minecraft.world.phys.AABB(to));
+        for(var barrier:map.barriers())if(bounds.intersects(new net.minecraft.world.phys.AABB(barrier.areaFrom()).minmax(new net.minecraft.world.phys.AABB(barrier.areaTo()))))throw new IllegalArgumentException("NPC block overlaps barrier "+barrier.objectId());
+        var objects=map.objects();var occupied=java.util.stream.Stream.of(objects.weaponWalls().stream().map(v->v.pos()),objects.ammoBoxes().stream().map(v->v.pos()),objects.armorStations().stream().map(v->v.pos()),objects.powerSwitch().stream().map(v->v.pos()),objects.sodaMachines().stream().map(v->v.pos()),objects.ultimateMachines().stream().map(v->v.pos()),objects.mysteryBoxes().stream().map(v->v.pos())).flatMap(v->v).filter(p->inBox(p,from,to)).findFirst();
+        if(occupied.isPresent()||objects.windows().stream().anyMatch(w->bounds.intersects(new net.minecraft.world.phys.AABB(w.areaFrom()).minmax(new net.minecraft.world.phys.AABB(w.areaTo())))))throw new IllegalArgumentException("NPC block overlaps a configured map object "+occupied.orElse(from));
+    }
+
     private void requireBarrier(int group) {
         if (map.barriers().stream().noneMatch(barrier -> barrier.group() == group)) throw new IllegalArgumentException("Unknown barrier group " + group);
     }

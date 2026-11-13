@@ -1,30 +1,24 @@
-# 当前交付：0.2.32b 通用模组方块和实体场景快照
+# 当前交付：0.2.33b 可调场景容量与大配置分段上传
 
-用户要求扩展场景快照，未来新增建筑模组自动支持，并能保存实体。已完成：
+用户询问 4096 格限制，进一步要求能无限制则无限制，否则作为独立参数由部署者调整。已实现为每关卡独立设置，并保留资源保护：
 
-- 新增 ZombiesSceneSnapshots，以注册表解析通用方块状态，保存 BlockEntity 的完整标准 NBT。已安装模组的普通方块不再受旧原版实现类型名单限制；场景保存容器物品、名字等附加数据。
-- Scene 增加 blockEntities、entities、includesEntities；保留原 5 参数构造与旧 JSON（默认仅方块，不删除旧场景目标实体）。SceneBlockEntity 保存相对格子坐标和 SNBT，SceneEntity 保存相对位置的完整实体 SNBT。
-- 新增 UI“同时保存场景实体”开关，默认新快照开启。修改开关需重新读取；已有快照从 includesEntities 回显，旧快照关闭。摘要显示方块数据和实体数量。
-- 保存盔甲架、展示框、普通生物等标准实体数据及装备、骑乘树。复制时生成新 UUID，平移位置、挂墙锚点和坐标形式的拴绳锚点。玩家、剧情 NPC、房间登记波次怪、投射物、经验球、临时掉落不参与。目标区域内普通实体被替换，源场景不变。
-- ZombiesSceneEntityJournal 使用 SavedData 记录被替换的原实体及新实体 UUID。活跃实体 UUID 集合不落盘；对局结束还原原实体，副本即使离开区域仍清理；重启／后续区块加载会拒绝孤立副本。ServerStarted 在方块恢复后恢复实体。
-- ZombiesNpcBlockJournal 提供完整格子快照、两阶段还原及记录检查点；同状态容器替换也能重新创建正确的 BlockEntity。失败回滚恢复本次方块、附加数据、目标实体并退回 journal 检查点，不撤销先前成功事件。
-- 显式逐个检查 EntityJoin 添加结果；原版 tryAddFreshEntityWithPassengers 不传播 Forge 事件拒绝，不能用来判断成功。
-- NPC 的旧 SET_BLOCK 静态限制保留，仅抽出 validateSceneCell 共用地图边界和屏障／交互设备保护。地图事件走新的通用场景引擎。
+- ZombiesScenarioConfig 新增 snapshotLimits（SnapshotLimits），maxRegionBlocks 默认 65536、maxEventBlocks 默认 131072。允许 1..1048576，0／负数／超过保护范围拒绝。旧配置自动补默认值。保留原有 5／6／7 参数构造。
+- 配置构造时检查每区域及每事件合计，报错给出实际体积、设置上限与事件名。空气计入。Scene／Region 原本固定4096验证改为结构完整性和防溢出验证，MapEvent不再为计数生成全部 placements。
+- 部署 UI 任意条目列表左上“场景容量设置”；区域详情“调整本关卡场景容量上限”。设置独立详情页，不能被删除；返回保留工作副本。源场景下方实时显示体积与上限。工作副本容量可直接用于 capture，之后与配置一同保存。
+- ScenarioEditorService.capture 在世界读取／数组分配前检查所提交容量，默认取已保存当前关卡设置；权限及等待阶段限制保留。effective 导入旧波次时保留 snapshotLimits，运行时使用保存并冻结的配置。
+- 场景捕获缓存状态名称；放置计划缓存解析的状态 NBT，区域按格迭代，不先生成 Position/BlockPlacement 对象列表。区域边界与设备交叉保护整区检查一次；仅按区块加载。还原缓存相同 NBT 状态解析。保持失败回滚和原有实体恢复。
+- 编辑网络原 C2S28KB限制会阻止大配置保存。增加 EditorFragment 消息，NPC dialogue 协议 9->10。每片最多28000字节；管理员手持部署工具才能上传；按玩家隔离，只接收有序同token/map/op/total的片段。最多33片／900000压缩字节、解压2MiB、16并发、30秒超时，完整后才调用原保存服务。停服清空缓存。小请求沿用旧消息。Scenario/Rules编辑页面允许检查可分段的大请求。
 
 ## 验证
 
-- build/verification/scenes-032-final.log：build、90 项服务器必需检查、119 项客户端显示交互检查、部署兼容套件全部通过。
-- 新检查使用实际 TaCZ 注册方块，验证容器 NBT、盔甲架装备及新 UUID、源实体不变、目标实体替换与移动副本清理、展示框锚点／物品／旋转、生成拒绝的完整回滚、孤立副本拦截、持久 journal 重建后的恢复。旧权限、远距离、尺寸限制及屏障保护仍有效。
-- 中间构建发现并修复添加实体 helper 忽略 Forge 取消的问题；原“箱子必须拒绝”旧测试已按新要求更新。源实体测试用区块票保持来源加载，避免把正常卸载误判为删除。
-- 已查看 scenario-captured-scene-640.png，实体开关和数据摘要显示正常。
-- 安装包 build/libs/codpattern-zombies-0.2.32b.jar；新生产类、版本、Mixin 路径和测试类排除已核对；SHA256 见 build/verification/release-0.2.32b.json。
-- 客户端和服务器都需更新。旧快照需重新读取并保存才包含新增数据。尚未在用户完整建筑模组整合包中逐一人工复测；依赖外部文件或特殊跨区域联动的模组仍可能需要适配。
-
-## 限额与语义
-
-每场景最多 4096 格、128 个实体（含骑乘），每事件最多 16 区域、8192 格、256 个新实体。附加数据总字符上限 1500000、单对象 262144，沿用编辑网络 2 MiB 解压及请求压缩大小上限。事件区域不可互相重叠。普通生物保留 AI，并设置持续存在，避免自然消失；不会加入波次怪物统计。源场景可以在地图外 256 格内，目标必须位于关卡内。
+- build/verification/limits-033-full.log：完整 build、93 项服务器必需检查、121 项客户端显示交互检查、部署兼容套件全部一次通过。
+- 真正 capture/save/apply/restore 65536 格，包含实际世界标记方块，验证新容量保存与effective读取、低上限提前拒绝、大场景放置与还原。整段测试含存盘耗时3545ms，只作为开发环境证据，不是性能保证；大场景仍同步执行，可能短暂卡顿。
+- 随机180KB不易压缩JSON通过多个实际编码／解码片段重组，检查单包<32767字节、部分数据不执行、内容和请求身份不变、未授权及串token拒绝。
+- 检查旧配置默认值、0/负数/极大值拒绝、单事件合计限制、设置页写入真实参数、返回保留工作副本。已查看 scene-capacity-settings-640.png / 320.png。
+- 安装包 build/libs/codpattern-zombies-0.2.33b.jar。版本、新生产类和测试类排除核对通过；校验值见 build/verification/release-0.2.33b.json。
+- 客户端与服务器都需更新（编辑网络协议变为10）。未在用户完整整合包前台多人环境人工复测。
 
 ## 环境
 
 仓库 main；作者 maerd110 <yyu139301@gmail.com>。JDK D:/，GRADLE_USER_HOME=build/gradle-home。不要运行 clean。GitHub 单次代理：`-c http.proxy=http://127.0.0.1:7890 -c http.version=HTTP/1.1`。
-构建：build runGameTestServer runClient runZombiesDeployCompatSuite -PnpcGameTests -PnpcClientPreview -PgameTestRunDirectory=build/gametest/coop-032 --offline --continue --console=plain。
+构建：build runGameTestServer runClient runZombiesDeployCompatSuite -PnpcGameTests -PnpcClientPreview -PgameTestRunDirectory=build/gametest/coop-033 --offline --continue --console=plain。

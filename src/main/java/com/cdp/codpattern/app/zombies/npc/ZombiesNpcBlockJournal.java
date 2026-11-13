@@ -70,10 +70,11 @@ public final class ZombiesNpcBlockJournal extends SavedData {
         return before;
     }
     public static void restoreCells(ServerLevel level,Map<BlockPos,CompoundTag> cells) {
+        var states=new java.util.HashMap<CompoundTag,BlockState>();
         // Remove old block entities first so replacing containers cannot drop their contents.
         for(var entry:cells.entrySet()){
             var pos=entry.getKey();level.getChunk(pos);level.removeBlockEntity(pos);
-            var state=NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(),entry.getValue().getCompound("state"));
+            var state=states.computeIfAbsent(entry.getValue().getCompound("state"),value->NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(),value));
             if(!level.setBlock(pos,state,18)&&!level.getBlockState(pos).equals(state))throw new IllegalStateException("Cannot restore scene block at "+pos);
         }
         for(var entry:cells.entrySet()){

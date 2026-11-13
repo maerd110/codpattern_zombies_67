@@ -21,9 +21,9 @@ import static com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.*;
 public final class ZombiesSceneSnapshots {
     private ZombiesSceneSnapshots(){}
     public static Scene capture(ServerLevel level,BlockPos min,int sx,int sy,int sz,boolean includeEntities){
-        var palette=new ArrayList<String>();var indexes=new HashMap<String,Integer>();var blocks=new ArrayList<Integer>();var data=new ArrayList<SceneBlockEntity>();
+        if(ZombiesScenarioConfig.volume(sx,sy,sz)>SnapshotLimits.MEMORY_PROTECTION_BLOCKS)throw new IllegalArgumentException("场景超出内存保护范围，请拆分区域");var palette=new ArrayList<String>();var stateNames=new HashMap<BlockState,String>();var indexes=new HashMap<String,Integer>();var blocks=new ArrayList<Integer>();var data=new ArrayList<SceneBlockEntity>();
         for(int y=0;y<sy;y++)for(int z=0;z<sz;z++)for(int x=0;x<sx;x++){
-            var pos=min.offset(x,y,z);var state=level.getBlockState(pos);String spec=BlockStateParser.serialize(state);Integer index=indexes.get(spec);if(index==null){index=palette.size();indexes.put(spec,index);palette.add(spec);}blocks.add(index);
+            var pos=min.offset(x,y,z);var state=level.getBlockState(pos);String spec=stateNames.computeIfAbsent(state,BlockStateParser::serialize);Integer index=indexes.get(spec);if(index==null){index=palette.size();indexes.put(spec,index);palette.add(spec);}blocks.add(index);
             var entity=level.getBlockEntity(pos);if(entity!=null){var tag=entity.saveWithFullMetadata();tag.putInt("x",x);tag.putInt("y",y);tag.putInt("z",z);data.add(new SceneBlockEntity(x,y,z,tag.toString()));}
         }
         var entities=new ArrayList<SceneEntity>();int entityCount=0;if(includeEntities){var bounds=new AABB(min,min.offset(sx,sy,sz));for(var entity:entities(level,bounds,"",true)){
@@ -48,13 +48,14 @@ public final class ZombiesSceneSnapshots {
     private static BlockState state(ServerLevel level,String text){try{return BlockStateParser.parseForBlock(level.holderLookup(Registries.BLOCK),text,false).blockState();}catch(Exception error){throw new IllegalArgumentException("场景方块未加载或状态无效："+text,error);}}
     private record Plan(Map<BlockPos,CompoundTag> cells,List<Entity> removed,List<Entity> spawned){}
     private static Plan plan(ZombiesMap map,List<Region> regions){
-        var level=map.getServerLevel();var cells=new LinkedHashMap<BlockPos,CompoundTag>();var removed=new LinkedHashMap<UUID,Entity>();var spawned=new ArrayList<Entity>();
+        if(regions.stream().mapToLong(Region::blockCount).sum()>SnapshotLimits.MEMORY_PROTECTION_BLOCKS)throw new IllegalArgumentException("事件超出内存保护范围，请拆分区域");
+        var level=map.getServerLevel();var states=new HashMap<String,CompoundTag>();var cells=new LinkedHashMap<BlockPos,CompoundTag>();var removed=new LinkedHashMap<UUID,Entity>();var spawned=new ArrayList<Entity>();
         for(var region:regions){
             var origin=new BlockPos(Math.min(region.from().getX(),region.to().getX()),Math.min(region.from().getY(),region.to().getY()),Math.min(region.from().getZ(),region.to().getZ()));
-            for(var placement:region.placements()){
-                var p=placement.position();var pos=BlockPos.containing(p.x(),p.y(),p.z());map.npcRuntime().validateSceneCell(pos);level.getChunk(pos);
-                var cell=new CompoundTag();cell.put("state",NbtUtils.writeBlockState(state(level,placement.block())));if(cells.putIfAbsent(pos,cell)!=null)throw new IllegalArgumentException("同一地图事件的区域不能互相重叠："+pos.toShortString());
-            }
+            map.npcRuntime().validateSceneRegion(region.from(),region.to());
+            int maxX=Math.max(region.from().getX(),region.to().getX())>>4,maxZ=Math.max(region.from().getZ(),region.to().getZ())>>4;
+            for(int cx=origin.getX()>>4;cx<=maxX;cx++)for(int cz=origin.getZ()>>4;cz<=maxZ;cz++)level.getChunk(cx,cz);
+            region.forEachCell((pos,spec)->{var cell=new CompoundTag();cell.put("state",states.computeIfAbsent(spec,key->NbtUtils.writeBlockState(state(level,key))));if(cells.putIfAbsent(pos,cell)!=null)throw new IllegalArgumentException("同一地图事件的区域不能互相重叠："+pos.toShortString());});
             if(region.mode()!=RegionMode.SCENE)continue;var scene=region.scene();
             for(var value:scene.blockEntities()){
                 var pos=origin.offset(value.x(),value.y(),value.z());var cell=cells.get(pos);var block=NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(),cell.getCompound("state"));var tag=nbt(value.nbt());tag.putInt("x",pos.getX());tag.putInt("y",pos.getY());tag.putInt("z",pos.getZ());

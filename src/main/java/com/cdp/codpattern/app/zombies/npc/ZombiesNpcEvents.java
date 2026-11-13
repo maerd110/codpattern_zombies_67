@@ -42,6 +42,7 @@ public final class ZombiesNpcEvents {
         }
     }
     @SubscribeEvent(priority = EventPriority.LOWEST) public static void stopping(net.minecraftforge.event.server.ServerStoppingEvent event) {
+        ZombiesNpcEditorUpload.clear();
         ZombiesNpcRuntime.cleanupDetached(event.getServer(), true);
         com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime.cleanupDetached(event.getServer(),true);
     }
