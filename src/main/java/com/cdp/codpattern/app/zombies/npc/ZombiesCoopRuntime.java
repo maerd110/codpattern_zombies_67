@@ -79,7 +79,7 @@ public final class ZombiesCoopRuntime {
     }
     public static void syncInventory(ServerPlayer p){p.getInventory().setChanged();p.inventoryMenu.broadcastChanges();}
     public static ListTag raritySnapshot(com.cdp.codpattern.config.zombies.ZombiesWeaponRulesConfig rules){
-        var list=new ListTag();for(var rarity:rules.getRarities()){if(rarity==null)continue;var value=new CompoundTag();value.putString("id",rarity.getId());value.putInt("color",rarity.argbColor());list.add(value);}return list;
+        var list=new ListTag();for(var rarity:rules.getRarities()){if(rarity==null)continue;var value=new CompoundTag();value.putString("id",rarity.getId());value.putString("displayName",rarity.getDisplayName());value.putInt("color",rarity.argbColor());list.add(value);}return list;
     }
     public void reset(){for(var id:drops){var e=map.getServerLevel().getEntity(id);if(e!=null)e.discard();}drops.clear();offers.clear();pings.clear();orders.clear();bank.reset();session=UUID.randomUUID();}
 }

@@ -29,6 +29,9 @@ public final class ZombiesWeaponRulesConfig {
         return switch (normalize(id)) { case "common" -> "#22C55E"; case "rare" -> "#3B82F6"; case "epic" -> "#A855F7"; case "legendary" -> "#FF9800"; default -> "#83D9BA"; };
     }
     public static boolean validColor(String value) { return value != null && value.matches("#[0-9a-fA-F]{6}"); }
+    public static String defaultDisplayName(String id) {
+        return switch (normalize(id)) { case "common" -> "普通"; case "rare" -> "稀有"; case "epic" -> "史诗"; case "legendary" -> "传奇"; default -> Objects.requireNonNullElse(id, "").trim(); };
+    }
 
     public void normalize() {
         schemaVersion = SUPPORTED_SCHEMA_VERSION; getUpgrades().normalize();
@@ -41,10 +44,12 @@ public final class ZombiesWeaponRulesConfig {
     private static String normalize(String value) { return Objects.requireNonNullElse(value, "").trim().toLowerCase(Locale.ROOT); }
 
     public static final class Rarity {
-        private String id; private double damageMultiplier = 1.0; private String color;
+        private String id; private double damageMultiplier = 1.0; private String color; private String displayName;
         public Rarity() { this("common", 1.0); }
         public Rarity(String id, double damageMultiplier) { this.id = id; this.damageMultiplier = damageMultiplier; }
         public String getId() { return id; } public void setId(String value) { id = value; }
+        public String getDisplayName() { return displayName == null || displayName.isBlank() ? defaultDisplayName(id) : displayName.trim(); }
+        public void setDisplayName(String value) { displayName = value; }
         public double getDamageMultiplier() { return damageMultiplier; } public void setDamageMultiplier(double value) { damageMultiplier = value; }
         public String getColor() { return validColor(color) ? color : defaultColor(id); }
         public void setColor(String value) { color = value; }

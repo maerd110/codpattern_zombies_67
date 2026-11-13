@@ -1,23 +1,24 @@
-# 当前交付：0.2.30b 枪包分类、品阶颜色与屏障编辑流程
+# 当前交付：0.2.31b 中文品阶显示名称
 
-本次用户提出的四项修改已完成：
+用户发现品阶只有内部编号，填写“终极”无法保存，要求增加中文名称。现已实现：
 
-- 部署工具“武器池与品阶”内选枪页新增可搜索的枪包分类，按 TaCZ 命名空间分类、读取枪包名称，显示数量；保留全部枪包入口及品阶颜色图标。物品卡片第二行显示枪包，避免重复枪名。
-- 品阶详情增加“品阶颜色”卡片，打开 16 色预设及 #RRGGBB 输入页。颜色保存在 weapon_rules.json 的 rarity.color，非法值阻止保存。旧配置按品阶 ID 使用原有默认颜色。
-- 屏障仍先按原方式框选创建、保存，然后在选中屏障的原物件设置点击“编辑屏障参数”，直接编辑该分组／规则编号的价格、钥匙、开门后的怪物／玩家出生组启停。移除独立新增分组／入口及改号的 UI；规则首页只列已部署屏障。服务器拒绝新增没有几何绑定的组／入口，历史未绑定参数原样保留。
-- 房间协作快照同步服务器武器规则中的颜色。ZombiesRarityDisplay 替换当前房间定义，供抽奖光柱、墙枪文字与提示、右下角枪械渐变、NPC 武器和标记统一使用。换房、退出清理。编辑页使用单独样式草稿，不影响进行中的房间。
+- “品阶与强化”选择品阶后，分别提供“显示名称（支持中文）”与“内部编号”。显示名称最多 64 个字符，存于 weapon_rules.json 的 displayName；编号保留英文数字等稳定绑定。新增品阶自动生成 custom_N 与可编辑的名称。
+- 改显示名称不改 ID，保持武器池、装备的引用、伤害和权重。编辑页使用自己的草稿与服务端返回的品阶定义显示名称，不依赖正在运行房间的名称。
+- 房间协作快照同步 displayName。ZombiesRarityDisplay 读取当前房间名称和颜色，墙枪／交互提示、NPC 支援与选枪、枪械标记等统一显示中文。
+- 旧配置或旧快照没有名称时，内置品阶保持原中文名，自定义品阶显示内部编号。
+- 编号格式错误和重复分别报错，格式错误说明中文应该填显示名称，并列出允许字符；名称输入框与内部编号增加说明。
 
 ## 验证
 
-- build/verification/rules-030-full.log：86 项服务器必需测试全部通过，部署兼容套件全部通过。首轮客户端失败是新增预览检查在主菜单误用需要玩家对象的卡片数据方法；随后调整为调用实际卡片渐变并检查像素，按半透明输出校准检查范围。
-- build/verification/rules-030-client-final.log：最终构建和客户端通过。
-- build/verification/npc-client/result.txt：118 项客户端显示及交互检查通过；包含枪包筛选、颜色页、屏障编辑、自定义颜色快照、抽奖光柱与墙枪颜色、实际 HUD 渐变像素验证、换房清理。
-- 服务器检查还覆盖颜色存盘及旧配置回退、无几何屏障规则拒绝、原有回归。
-- 安装包 build/libs/codpattern-zombies-0.2.30b.jar。META-INF 版本、新增类、Mixin 路径和 src/test 预览／测试类排除已核对；校验值见 build/verification/release-0.2.30b.json。
-- 尚未在用户完整枪包的前台多人服务器中人工复测。客户端、服务端都需更新，颜色修改在下次开局读取。
+- build/verification/rarity-name-031.log：完整 build、87 项服务器必需检查、客户端和部署兼容套件一次通过。
+- build/verification/npc-client/result.txt：119 项客户端显示及交互检查通过。
+- 检查覆盖中文名称编辑且 ID 不变、存盘／重读／房间快照、客户端墙枪文字与颜色、NPC 品阶文字、旧快照回退、无效编号和重复编号不同报错，以及原有回归。
+- 已查看 custom-rarity-640.png 与 rarity-display-name-320.png，名称与编号分开显示，控件未溢出。
+- 安装包 build/libs/codpattern-zombies-0.2.31b.jar，元数据与 src/test 预览／测试类排除已核对；校验值见 build/verification/release-0.2.31b.json。
+- 尚未在用户完整整合包的前台多人环境人工复测。客户端、服务端都需更新，名称修改保存后在下次开局读取。
 
 ## 环境
 
 仓库分支 main；作者 maerd110 <yyu139301@gmail.com>。JDK 位于 D:/，GRADLE_USER_HOME 使用 build/gradle-home。不要执行 gradlew clean（缓存位于 build 中）。GitHub 单次代理参数：`-c http.proxy=http://127.0.0.1:7890 -c http.version=HTTP/1.1`。
 
-构建：build runGameTestServer runClient runZombiesDeployCompatSuite -PnpcGameTests -PnpcClientPreview -PgameTestRunDirectory=build/gametest/coop-030 --offline --continue --console=plain。服务器通过后仅预览检查调整，最终 build runClient 再通过。
+构建：build runGameTestServer runClient runZombiesDeployCompatSuite -PnpcGameTests -PnpcClientPreview -PgameTestRunDirectory=build/gametest/coop-031 --offline --continue --console=plain。

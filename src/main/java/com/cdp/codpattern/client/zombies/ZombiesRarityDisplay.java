@@ -12,12 +12,13 @@ public final class ZombiesRarityDisplay {
         var entries = new java.util.HashMap<String, Entry>();
         for (int i = 0; i < Math.min(64, rarities.size()); i++) {
             var value = rarities.getCompound(i); String id = normalize(value.getString("id"));
-            if (!id.isBlank()) entries.put(id, new Entry(id, defaultLabel(id), value.getInt("color") | 0xFF000000));
+            String name = value.getString("displayName").trim();
+            if (!id.isBlank()) entries.put(id, new Entry(id, name.isBlank() ? defaultLabel(id) : name, value.getInt("color") | 0xFF000000));
         }
         roomEntries = java.util.Map.copyOf(entries);
     }
     public static void clear() { roomEntries = java.util.Map.of(); }
-    public static String defaultLabel(String id) { return switch(normalize(id)) { case "common" -> "普通"; case "rare" -> "稀有"; case "epic" -> "史诗"; case "legendary" -> "传奇"; default -> id; }; }
+    public static String defaultLabel(String id) { return com.cdp.codpattern.config.zombies.ZombiesWeaponRulesConfig.defaultDisplayName(id); }
     private static final int COMMON_COLOR = 0xFF22C55E;
     private static final int RARE_COLOR = 0xFF3B82F6;
     private static final int EPIC_COLOR = 0xFFA855F7;
