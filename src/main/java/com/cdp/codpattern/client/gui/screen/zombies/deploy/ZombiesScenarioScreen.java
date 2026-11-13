@@ -141,7 +141,7 @@ public final class ZombiesScenarioScreen extends Screen {
         case "lines"->str(o,"text","").replace('\n',' ')+" · "+str(o,"seconds","1")+" 秒";
         default->str(o,"mode",o.has("scene")?"SCENE":"FILL").equals("SCENE")?(o.has("scene")&&!o.get("scene").isJsonNull()?sceneSummary(o):"尚未读取源场景"):str(o,"block","minecraft:stone");
     };}
-    private String sceneSummary(JsonObject region){var s=region.getAsJsonObject("scene");return str(s,"sizeX","?")+" × "+str(s,"sizeY","?")+" × "+str(s,"sizeZ","?")+" · "+s.getAsJsonArray("palette").size()+" 种方块状态";}
+    private String sceneSummary(JsonObject region){var s=region.getAsJsonObject("scene");return str(s,"sizeX","?")+" × "+str(s,"sizeY","?")+" × "+str(s,"sizeZ","?")+" · "+s.getAsJsonArray("palette").size()+" 种方块状态 · "+(s.has("blockEntities")?s.getAsJsonArray("blockEntities").size():0)+" 个方块数据 · "+(s.has("entities")?s.getAsJsonArray("entities").size():0)+" 个实体";}
     private String entityName(String id){var location=net.minecraft.resources.ResourceLocation.tryParse(id);if(location==null)return id;return net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.get(location).getDescription().getString();}
     private String speakerName(String id){if(id.isBlank())return "旁白";return list("speakers").asList().stream().map(JsonElement::getAsJsonObject).filter(o->str(o,"id","").equals(id)).map(o->str(o,"name",id)).findFirst().orElse(id);}
     private void selectCard(Level l,int i){long now=System.currentTimeMillis();var object=l.entries.get(i).getAsJsonObject();boolean twice=lastCard==object&&now-lastClick<350;lastCard=object;lastClick=now;l.selected=i;if(twice)open();else refresh();}
@@ -196,10 +196,12 @@ public final class ZombiesScenarioScreen extends Screen {
         heading("变化方式");String mode=str(r,"mode",r.has("scene")?"SCENE":"FILL");
         row("变化方式："+(mode.equals("SCENE")?"场景快照":"方块填充")+" ▾",()->minecraft.setScreen(new ZombiesNpcChoiceScreen(this,"变化方式",List.of("SCENE","FILL"),mode,v->v.equals("SCENE")?"场景快照":"方块填充",v->{r.addProperty("mode",v);if(v.equals("SCENE")){ensureSource(r);if(r.has("scene"))syncSceneExtent(r);}refresh();})));
         if(mode.equals("SCENE")){
-            ensureSource(r);heading("源场景：你搭建好的变化后场景");hint("在源场景选择两个角，再读取。空气、建筑材料和方块朝向会一起保存。");
+            ensureSource(r);heading("源场景：你搭建好的变化后场景");hint("在源场景选择两个角，再读取。保存空气、模组方块、朝向和容器等附加数据。");
             row("到地图框选源场景",()->beginSelection(r,true));
             positionFields("源起点",r.getAsJsonObject("sourceFrom"),()->{});positionFields("源终点",r.getAsJsonObject("sourceTo"),()->{});
             pair("取准星方块为源起点",()->{r.add("sourceFrom",position(targetPos()));refresh();},"取准星方块为源终点",()->{r.add("sourceTo",position(targetPos()));refresh();});
+            row("同时保存场景实体："+(captureEntities(r)?"开启":"关闭"),()->{r.addProperty("captureEntities",!captureEntities(r));refresh();});
+            hint("保存盔甲架、展示框和普通生物；修改开关后需重新读取。玩家、剧情 NPC、波次怪物与临时掉落不保存。");
             row("读取源区域为目标场景",()->capture(r));
             hint(r.has("scene")&&!r.get("scene").isJsonNull()?"已读取："+sceneSummary(r):"尚未读取场景；读取后请保存配置。");
             heading("放置位置：关卡中要发生变化的区域");positionFields("目标原点",r.getAsJsonObject("from"),()->syncSceneExtent(r));
@@ -247,7 +249,8 @@ public final class ZombiesScenarioScreen extends Screen {
     private void ensureSource(JsonObject r){if(!r.has("sourceFrom")||r.get("sourceFrom").isJsonNull())r.add("sourceFrom",r.get("from").deepCopy());if(!r.has("sourceTo")||r.get("sourceTo").isJsonNull())r.add("sourceTo",r.get("to").deepCopy());}
     private void positionFields(String label,JsonObject p,Runnable change){for(String k:List.of("x","y","z"))field(label+" "+k,p,k,"0",change);}
     private static void syncSceneExtent(JsonObject r){if(!r.has("scene")||r.get("scene").isJsonNull())return;var scene=ZombiesNpcRepository.GSON.fromJson(r.get("scene"),ZombiesScenarioConfig.Scene.class);r.add("to",position(scene.endAt(pos(r.getAsJsonObject("from")))));}
-    private void capture(JsonObject r){var request=new JsonObject();request.add("from",r.get("sourceFrom").deepCopy());request.add("to",r.get("sourceTo").deepCopy());captureTarget=r;request("capture",request.toString());}
+    private static boolean captureEntities(JsonObject region){if(region.has("captureEntities"))return region.get("captureEntities").getAsBoolean();if(region.has("scene")&&!region.get("scene").isJsonNull()){var scene=region.getAsJsonObject("scene");return scene.has("includesEntities")&&scene.get("includesEntities").getAsBoolean();}return true;}
+    private void capture(JsonObject r){var request=new JsonObject();request.addProperty("includeEntities",captureEntities(r));request.add("from",r.get("sourceFrom").deepCopy());request.add("to",r.get("sourceTo").deepCopy());captureTarget=r;request("capture",request.toString());}
     private void blockPicker(JsonObject r){var choices=new ArrayList<ZombiesNpcStackPickerScreen.Entry>();for(var b:net.minecraft.core.registries.BuiltInRegistries.BLOCK)if(ZombiesNpcRuntime.supportsStoryBlock(b.defaultBlockState())){var stack=new net.minecraft.world.item.ItemStack(b);if(!stack.isEmpty())choices.add(new ZombiesNpcStackPickerScreen.Entry(stack,net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).toString(),stack.getHoverName().getString(),1));}minecraft.setScreen(new ZombiesNpcStackPickerScreen(this,"选择部署方块",choices,x->{r.addProperty("block",x.value());refresh();}));}
     private static String unique(JsonArray a,String prefix){int i=1;while(true){String id=prefix+i;if(a.asList().stream().noneMatch(e->str(e.getAsJsonObject(),"id","").equals(id)))return id;i++;}}
     private void normalize(JsonElement e){if(e.isJsonObject()){var o=e.getAsJsonObject();for(var k:List.copyOf(o.keySet())){var v=o.get(k);if(v.isJsonPrimitive()&&v.getAsString().isBlank()&&Set.of("healthMultiplier","damageMultiplier","speedMultiplier","maxAlive","fastestSpawnIntervalTicks","slowestSpawnIntervalTicks","killPoints","assistPoints","time","weather").contains(k))o.remove(k);else normalize(v);}}else if(e.isJsonArray())e.getAsJsonArray().forEach(this::normalize);}

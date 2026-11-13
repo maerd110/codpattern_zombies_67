@@ -54,36 +54,44 @@ public final class ZombiesNpcBlockJournal extends SavedData {
     private void captureCell(ServerLevel level, String room, BlockPos pos) {
         Map<BlockPos, CompoundTag> cells = rooms.computeIfAbsent(room, ignored -> new LinkedHashMap<>());
         if (cells.containsKey(pos)) return;
-        CompoundTag before = new CompoundTag();
-        before.put("state", NbtUtils.writeBlockState(level.getBlockState(pos)));
-        BlockEntity entity = level.getBlockEntity(pos);
-        if (entity != null) before.put("entity", entity.saveWithFullMetadata());
+        CompoundTag before = snapshotCell(level,pos);
         cells.put(pos.immutable(), before);
         setDirty();
         // Persist undo information before changing a chunk, including block-entity contents.
     }
 
+    public Map<BlockPos,CompoundTag> checkpoint(String room){var copy=new LinkedHashMap<BlockPos,CompoundTag>();var values=rooms.get(room);if(values!=null)values.forEach((pos,value)->copy.put(pos,value.copy()));return copy;}
+    public void rollbackRecord(ServerLevel level,String room,Map<BlockPos,CompoundTag> checkpoint){if(checkpoint.isEmpty())rooms.remove(room);else rooms.put(room,checkpoint);setDirty();level.getDataStorage().save();}
+    public static CompoundTag snapshotCell(ServerLevel level,BlockPos pos) {
+        CompoundTag before = new CompoundTag();
+        before.put("state", NbtUtils.writeBlockState(level.getBlockState(pos)));
+        BlockEntity entity = level.getBlockEntity(pos);
+        if (entity != null) before.put("entity", entity.saveWithFullMetadata());
+        return before;
+    }
+    public static void restoreCells(ServerLevel level,Map<BlockPos,CompoundTag> cells) {
+        // Remove old block entities first so replacing containers cannot drop their contents.
+        for(var entry:cells.entrySet()){
+            var pos=entry.getKey();level.getChunk(pos);level.removeBlockEntity(pos);
+            var state=NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(),entry.getValue().getCompound("state"));
+            if(!level.setBlock(pos,state,18)&&!level.getBlockState(pos).equals(state))throw new IllegalStateException("Cannot restore scene block at "+pos);
+        }
+        for(var entry:cells.entrySet()){
+            var pos=entry.getKey();var state=level.getBlockState(pos);
+            if(entry.getValue().contains("entity",Tag.TAG_COMPOUND)){
+                var entity=BlockEntity.loadStatic(pos,state,entry.getValue().getCompound("entity").copy());
+                if(entity==null||!entity.getType().isValid(state))throw new IllegalStateException("Cannot restore scene block data at "+pos);
+                level.setBlockEntity(entity);entity.setChanged();
+            }else if(state.hasBlockEntity()&&level.getBlockEntity(pos)==null&&state.getBlock() instanceof net.minecraft.world.level.block.EntityBlock factory){var entity=factory.newBlockEntity(pos,state);if(entity!=null)level.setBlockEntity(entity);}
+            level.sendBlockUpdated(pos,state,state,3);
+            com.cdp.codpattern.app.zombies.service.navigation.NavigationWorldChanges.blockChanged(level,pos,"scene-restore");
+        }
+    }
+
     public void restore(ServerLevel level, String room) {
         Map<BlockPos, CompoundTag> cells = rooms.get(room);
         if (cells == null) return;
-        // Two passes avoid block entities dropping inventory during replacement.
-        for (var entry : cells.entrySet()) {
-            BlockPos pos = entry.getKey();
-            level.removeBlockEntity(pos);
-            BlockState state = NbtUtils.readBlockState(BuiltInRegistries.BLOCK.asLookup(), entry.getValue().getCompound("state"));
-            if (!level.setBlock(pos, state, 18) && !level.getBlockState(pos).equals(state)) {
-                throw new IllegalStateException("Cannot restore NPC block at " + pos);
-            }
-        }
-        for (var entry : cells.entrySet()) {
-            BlockEntity entity = level.getBlockEntity(entry.getKey());
-            if (entity != null && entry.getValue().contains("entity")) {
-                entity.load(entry.getValue().getCompound("entity"));
-                entity.setChanged();
-            }
-            level.sendBlockUpdated(entry.getKey(), level.getBlockState(entry.getKey()), level.getBlockState(entry.getKey()), 3);
-            com.cdp.codpattern.app.zombies.service.navigation.NavigationWorldChanges.blockChanged(level, entry.getKey(), "npc-reset");
-        }
+        restoreCells(level,cells);
         // Save the restored chunks before discarding recovery evidence.
         level.save(null, true, false);
         rooms.remove(room);

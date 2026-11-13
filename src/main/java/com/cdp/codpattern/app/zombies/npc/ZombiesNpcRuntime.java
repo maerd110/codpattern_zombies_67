@@ -65,26 +65,8 @@ public final class ZombiesNpcRuntime {
                     case NPC -> { if (action.appearance() != null) validateAppearance(action.appearance()); }
                     case SET_BLOCK -> {
                       for (var placement : action.blockPlacements()) {
-                        validatePosition(placement.position());
+                        validateSceneCell(blockPos(placement.position()));
                         parseBlock(placement.block());
-                        BlockPos pos = blockPos(placement.position());
-                        // Barrier blocks and configured interactive objects have their own reset owners.
-                        for (var barrier : map.barriers()) {
-                            if (inBox(pos, barrier.areaFrom(), barrier.areaTo())) throw new IllegalArgumentException("NPC block overlaps barrier " + barrier.objectId());
-                        }
-                        var objects = map.objects();
-                        boolean occupied = java.util.stream.Stream.of(
-                                objects.weaponWalls().stream().map(value -> value.pos()),
-                                objects.ammoBoxes().stream().map(value -> value.pos()),
-                                objects.armorStations().stream().map(value -> value.pos()),
-                                objects.powerSwitch().stream().map(value -> value.pos()),
-                                objects.sodaMachines().stream().map(value -> value.pos()),
-                                objects.ultimateMachines().stream().map(value -> value.pos()),
-                                objects.mysteryBoxes().stream().map(value -> value.pos()))
-                                .flatMap(stream -> stream).anyMatch(pos::equals);
-                        if (occupied || objects.windows().stream().anyMatch(window -> inBox(pos, window.areaFrom(), window.areaTo()))) {
-                            throw new IllegalArgumentException("NPC block overlaps a configured map object " + pos);
-                        }
                       }
                     }
                     case MAP_EVENT -> map.scenarioRuntime().requireEvent(action.text());
@@ -93,6 +75,28 @@ public final class ZombiesNpcRuntime {
                     default -> { }
                 }
             }
+        }
+    }
+
+    /** Geometry ownership is shared by generic scene snapshots and strict NPC block actions. */
+    public void validateSceneCell(BlockPos pos) {
+        validatePosition(new ZombiesNpcConfig.Position(pos.getX(),pos.getY(),pos.getZ(),0));
+        // Barrier blocks and configured interactive objects have their own reset owners.
+        for (var barrier : map.barriers()) {
+            if (inBox(pos, barrier.areaFrom(), barrier.areaTo())) throw new IllegalArgumentException("NPC block overlaps barrier " + barrier.objectId());
+        }
+        var objects = map.objects();
+        boolean occupied = java.util.stream.Stream.of(
+                objects.weaponWalls().stream().map(value -> value.pos()),
+                objects.ammoBoxes().stream().map(value -> value.pos()),
+                objects.armorStations().stream().map(value -> value.pos()),
+                objects.powerSwitch().stream().map(value -> value.pos()),
+                objects.sodaMachines().stream().map(value -> value.pos()),
+                objects.ultimateMachines().stream().map(value -> value.pos()),
+                objects.mysteryBoxes().stream().map(value -> value.pos()))
+                .flatMap(stream -> stream).anyMatch(pos::equals);
+        if (occupied || objects.windows().stream().anyMatch(window -> inBox(pos, window.areaFrom(), window.areaTo()))) {
+            throw new IllegalArgumentException("NPC block overlaps a configured map object " + pos);
         }
     }
 

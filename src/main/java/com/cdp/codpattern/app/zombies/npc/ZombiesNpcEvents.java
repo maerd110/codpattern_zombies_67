@@ -24,13 +24,15 @@ public final class ZombiesNpcEvents {
     }
     @SubscribeEvent public static void commands(RegisterCommandsEvent event) { ZombiesNpcCommands.register(event.getDispatcher()); }
     @SubscribeEvent public static void loaded(EntityJoinLevelEvent event) {
+        if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level&&event.getEntity().getPersistentData().contains(com.cdp.codpattern.app.zombies.scenario.ZombiesSceneEntityJournal.MARKER)&&!com.cdp.codpattern.app.zombies.scenario.ZombiesSceneEntityJournal.get(level).isLive(event.getEntity().getUUID())){event.setCanceled(true);event.getEntity().discard();return;}
+
         if (!event.getLevel().isClientSide && event.loadedFromDisk() && event.getEntity() instanceof ZombiesNpcEntity) {
             event.setCanceled(true);
             event.getEntity().discard();
         }
     }
     @SubscribeEvent(priority = EventPriority.HIGHEST) public static void started(ServerStartedEvent event) {
-        for (var level : event.getServer().getAllLevels()) ZombiesNpcBlockJournal.get(level).restoreAll(level);
+        for (var level : event.getServer().getAllLevels()){ZombiesNpcBlockJournal.get(level).restoreAll(level);com.cdp.codpattern.app.zombies.scenario.ZombiesSceneEntityJournal.get(level).restoreAll(level);}
     }
     @SubscribeEvent public static void tick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
         if (event.phase == net.minecraftforge.event.TickEvent.Phase.END && event.getServer().getTickCount() % 20 == 0

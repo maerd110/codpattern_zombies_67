@@ -30,7 +30,7 @@ public final class ZombiesScenarioRuntime {
         var keys=new HashSet<String>();for(var npc:npcs.npcs())for(var rule:npc.rules())keys.add(npc.id()+"."+rule.id());
         for(var e:candidate.events()){
             if(!e.rule().isBlank()&&!keys.contains(e.rule()))throw new IllegalArgumentException("事件引用未知 NPC 规则："+e.rule());
-            map.npcRuntime().validateMapBlocks(e.regions().stream().flatMap(r->r.placements().stream()).toList());
+            ZombiesSceneSnapshots.validate(map,e.regions());
         }
         for(var task:candidate.tasks())if(!task.rule().isBlank()&&!keys.contains(task.rule()))throw new IllegalArgumentException("任务引用未知 NPC 规则："+task.rule());
         for(var area:candidate.areaRewards()){
@@ -87,7 +87,7 @@ public final class ZombiesScenarioRuntime {
         var event=config.events().stream().filter(e->e.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("未知地图事件："+id));
         if(completed.contains(id)||failed.contains(id))return;
         try {
-        map.npcRuntime().applyMapBlocks(event.regions().stream().flatMap(r->r.placements().stream()).toList());
+        ZombiesSceneSnapshots.apply(map,event.regions());
         if(event.weather()!=null)weather=event.weather();if(event.time()!=null)time=event.time();completed.add(id);
         for(var player:map.npcPlayers()){environmentPlayers.put(player.getUUID(),player);sendEnvironment(player,false);}
         }catch(RuntimeException failure){
@@ -104,6 +104,6 @@ public final class ZombiesScenarioRuntime {
             player.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,strength));player.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,thunder));}
         if(time!=null)player.connection.send(new ClientboundSetTimePacket(level.getGameTime(),restore?level.getDayTime():time,restore&&level.getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DAYLIGHT)));
     }
-    public void reset(){if(active)ZombiesNpcBlockJournal.get(map.getServerLevel()).restore(map.getServerLevel(),map.getMapName());for(var player:environmentPlayers.values())sendEnvironment(player,true);environmentPlayers.clear();weather=null;time=null;completed.clear();failed.clear();taskDone.clear();areaClaimed.clear();areaBlocked.clear();areaCheckTicks=0;taskText="";cancelDialogue();config=ZombiesScenarioConfig.empty();active=false;ACTIVE.remove(this);}
+    public void reset(){if(active){ZombiesNpcBlockJournal.get(map.getServerLevel()).restore(map.getServerLevel(),map.getMapName());ZombiesSceneEntityJournal.get(map.getServerLevel()).restore(map.getServerLevel(),map.getMapName());}for(var player:environmentPlayers.values())sendEnvironment(player,true);environmentPlayers.clear();weather=null;time=null;completed.clear();failed.clear();taskDone.clear();areaClaimed.clear();areaBlocked.clear();areaCheckTicks=0;taskText="";cancelDialogue();config=ZombiesScenarioConfig.empty();active=false;ACTIVE.remove(this);}
     public static void cleanupDetached(net.minecraft.server.MinecraftServer server,boolean stopping){var rooms=stopping?List.of():com.cdp.codpattern.compat.fpsmatch.map.FpsMatchMapRegistry.listMaps(com.cdp.codpattern.app.match.BuiltInGameModes.ZOMBIES);for(var r:List.copyOf(ACTIVE))if(r.map.getServerLevel().getServer()==server&&(stopping||rooms.stream().noneMatch(m->m==r.map))){ZombiesNpcBlockJournal.get(r.map.getServerLevel()).restore(r.map.getServerLevel(),r.map.getMapName());r.reset();}}
 }

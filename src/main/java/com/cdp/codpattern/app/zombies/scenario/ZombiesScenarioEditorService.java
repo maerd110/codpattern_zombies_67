@@ -27,7 +27,7 @@ public final class ZombiesScenarioEditorService {
                 var request=JsonParser.parseString(payload).getAsJsonObject();
                 var from=ZombiesNpcRepository.GSON.fromJson(request.get("from"),net.minecraft.core.BlockPos.class);
                 var to=ZombiesNpcRepository.GSON.fromJson(request.get("to"),net.minecraft.core.BlockPos.class);
-                var scene=captureScene(player,map,from,to);
+                var scene=captureScene(player,map,from,to,!request.has("includeEntities")||request.get("includeEntities").getAsBoolean());
                 var response=new Snapshot(name,"",null,List.of(),List.of(),true,"",scene);
                 ZombiesNpcEditorWire.checkResponse(ZombiesNpcRepository.GSON.toJson(response));return response;
             }
@@ -44,20 +44,20 @@ public final class ZombiesScenarioEditorService {
         }catch(Exception e){return new Snapshot(name,"",null,List.of(),List.of(),false,e.getMessage()==null?e.toString():e.getMessage());}
     }
     static ZombiesScenarioConfig.Scene captureScene(ServerPlayer player,ZombiesMap map,net.minecraft.core.BlockPos from,net.minecraft.core.BlockPos to){
+        return captureScene(player,map,from,to,true);
+    }
+    static ZombiesScenarioConfig.Scene captureScene(ServerPlayer player,ZombiesMap map,net.minecraft.core.BlockPos from,net.minecraft.core.BlockPos to,boolean includeEntities){
         if(from==null||to==null||player.serverLevel()!=map.getServerLevel())throw new IllegalArgumentException("请在关卡所在维度选择场景");
         var bounds=new ZombiesScenarioConfig.Region(from,to,"minecraft:air"); // Bounds are checked before reading or allocating cells.
         var min=new net.minecraft.core.BlockPos(Math.min(from.getX(),to.getX()),Math.min(from.getY(),to.getY()),Math.min(from.getZ(),to.getZ()));
         int sx=Math.abs(from.getX()-to.getX())+1,sy=Math.abs(from.getY()-to.getY())+1,sz=Math.abs(from.getZ()-to.getZ())+1;
-        var palette=new ArrayList<String>();var indexes=new HashMap<String,Integer>();var blocks=new ArrayList<Integer>();
+
         for(int y=0;y<sy;y++)for(int z=0;z<sz;z++)for(int x=0;x<sx;x++){
             var pos=min.offset(x,y,z);var level=player.serverLevel();
             if(level.isOutsideBuildHeight(pos)||!level.getWorldBorder().isWithinBounds(pos)||player.distanceToSqr(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5)>256*256||!level.hasChunkAt(pos))throw new IllegalArgumentException("源场景必须在玩家附近 256 格内的已加载区域");
-            var state=level.getBlockState(pos);
-            if(!ZombiesNpcRuntime.supportsStoryBlock(state))throw new IllegalArgumentException("场景包含暂不支持的方块："+net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock())+"，位置 "+pos.toShortString());
-            String specification=net.minecraft.commands.arguments.blocks.BlockStateParser.serialize(state);
-            Integer index=indexes.get(specification);if(index==null){index=palette.size();indexes.put(specification,index);palette.add(specification);}blocks.add(index);
+
         }
-        return new ZombiesScenarioConfig.Scene(sx,sy,sz,palette,blocks);
+        return ZombiesSceneSnapshots.capture(player.serverLevel(),min,sx,sy,sz,includeEntities);
     }
     public static ZombiesScenarioConfig effective(net.minecraft.server.MinecraftServer server,String map){
         var path=ZombiesScenarioRepository.path(server,map);var current=ZombiesScenarioRepository.load(path);

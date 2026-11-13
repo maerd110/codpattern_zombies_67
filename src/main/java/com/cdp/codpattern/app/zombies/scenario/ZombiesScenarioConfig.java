@@ -38,13 +38,22 @@ public record ZombiesScenarioConfig(int version,List<JsonObject> waves,List<Spea
     public enum Weather { CLEAR,RAIN,THUNDER }
     public enum RegionMode { FILL, SCENE }
     /** Palette data is relative to the destination's minimum corner; air is deliberately included. */
-    public record Scene(int sizeX,int sizeY,int sizeZ,List<String> palette,List<Integer> blocks) {
+    public record SceneBlockEntity(int x,int y,int z,String nbt) { }
+    public record SceneEntity(String nbt) { }
+    public record Scene(int sizeX,int sizeY,int sizeZ,List<String> palette,List<Integer> blocks,List<SceneBlockEntity> blockEntities,List<SceneEntity> entities,boolean includesEntities) {
+        public Scene(int x,int y,int z,List<String> palette,List<Integer> blocks){this(x,y,z,palette,blocks,List.of(),List.of(),false);}
         public Scene {
             if(sizeX<1||sizeY<1||sizeZ<1||sizeX>4096||sizeY>4096||sizeZ>4096||(long)sizeX*sizeY*sizeZ>4096)throw new IllegalArgumentException("场景最多 4096 格");
             palette=List.copyOf(palette==null?List.of():palette);blocks=List.copyOf(blocks==null?List.of():blocks);
             if(palette.isEmpty()||palette.size()>4096||palette.stream().anyMatch(v->v==null||v.isBlank()||v.length()>1024)||blocks.size()!=sizeX*sizeY*sizeZ)throw new IllegalArgumentException("场景方块数据不完整");
             int count=palette.size();if(blocks.stream().anyMatch(i->i==null||i<0||i>=count))throw new IllegalArgumentException("场景方块索引无效");
+            blockEntities=List.copyOf(blockEntities==null?List.of():blockEntities);entities=List.copyOf(entities==null?List.of():entities);
+            if(blockEntities.size()>blocks.size()||entities.size()>128||!includesEntities&&!entities.isEmpty())throw new IllegalArgumentException("场景附加数据无效，实体最多 128 个");
+            var occupied=new HashSet<String>();long bytes=0;
+            for(var value:blockEntities){if(value.x()<0||value.x()>=sizeX||value.y()<0||value.y()>=sizeY||value.z()<0||value.z()>=sizeZ||!occupied.add(value.x()+","+value.y()+","+value.z()))throw new IllegalArgumentException("场景方块附加数据坐标无效或重复");bytes+=nbtSize(value.nbt());}
+            for(var value:entities)bytes+=nbtSize(value.nbt());if(bytes>1500000)throw new IllegalArgumentException("场景附加数据过大，请缩小框选区域");
         }
+        private static int nbtSize(String value){if(value==null||value.isBlank()||value.length()>262144)throw new IllegalArgumentException("场景单个对象数据过大或为空");return value.length();}
         public BlockPos endAt(BlockPos origin){return origin.offset(sizeX-1,sizeY-1,sizeZ-1);}
     }
     public record Region(BlockPos from,BlockPos to,String block,RegionMode mode,Scene scene,BlockPos sourceFrom,BlockPos sourceTo) {

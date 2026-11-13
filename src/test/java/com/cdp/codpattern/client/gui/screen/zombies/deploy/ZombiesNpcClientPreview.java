@@ -465,6 +465,7 @@ public final class ZombiesNpcClientPreview {
         var region=data.getAsJsonArray("events").get(0).getAsJsonObject().getAsJsonArray("regions").get(0).getAsJsonObject();
         if(!region.get("mode").getAsString().equals("SCENE"))throw new AssertionError("New regions offer prebuilt scene capture");
         screen.init(client,1280,1400);render(screen,640,1000,output.resolve("scenario-scene-detail-640.png"));
+        press(screen,"同时保存场景实体：开启");if(region.get("captureEntities").getAsBoolean())throw new AssertionError("Entity capture toggle disables inclusion");screen.init(client,1280,1400);press(screen,"同时保存场景实体：关闭");if(!region.get("captureEntities").getAsBoolean())throw new AssertionError("Entity capture toggle enables inclusion");
         // Simulate the world corner-selection path, without a live client world.
         press(screen,"到地图框选源场景");
         ZombiesScenarioScreen.selectionInput(true,false,false,new net.minecraft.core.BlockPos(4,-52,-40));ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(5,-51,-39));
@@ -479,7 +480,8 @@ public final class ZombiesNpcClientPreview {
         if(get(screen,"data")!=data||!region.has("scene")||region.getAsJsonObject("to").get("x").getAsInt()!=1)throw new AssertionError("Capture reply attaches the scene while preserving unsaved changes and sizes destination");
         screen.init(client,1280,1400);press(screen,"到地图选择放置位置");ZombiesScenarioScreen.selectionInput(false,true,false,new net.minecraft.core.BlockPos(3,-52,-39));
         if(region.getAsJsonObject("to").get("x").getAsInt()!=4||region.getAsJsonObject("to").get("y").getAsInt()!=-51||region.getAsJsonObject("to").get("z").getAsInt()!=-38||ZombiesScenarioScreen.selecting())throw new AssertionError("Target placement preserves captured dimensions and exits selection mode");
-        render(screen,640,1000,output.resolve("scenario-captured-scene-640.png"));
+        render(screen,640,1000,output.resolve("scenario-captured-scene-640.png"));var captureChoice=ZombiesScenarioScreen.class.getDeclaredMethod("captureEntities",com.google.gson.JsonObject.class);captureChoice.setAccessible(true);region.remove("captureEntities");if((boolean)captureChoice.invoke(null,region))throw new AssertionError("Saved legacy blocks-only scene keeps entity toggle disabled after reloading");
+
         screen.init(client,1280,1400);press(screen,"变化方式：场景快照 ▾");button(client.screen,"方块填充").onPress();screen.init(client,1280,1400);
         render(screen,640,1000,output.resolve("scenario-fill-detail-640.png"));screen.init(client,1280,1400);press(screen,"选择部署方块");render(client.screen,320,240,output.resolve("scenario-block-picker-320.png"));client.screen.onClose();screen.init(client,1280,1400);
         press(screen,"变化方式：方块填充 ▾");button(client.screen,"场景快照").onPress();
