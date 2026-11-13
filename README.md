@@ -1,6 +1,6 @@
 # COD Pattern Zombies
 
-0.2.29b 将屏障分组、购买入口、墙枪和神秘箱武器池编辑集成到部署工具。支持读取服务端已加载枪包的全部枪械，按品阶颜色选择与编辑权重、价格、刷新间隔及强化参数。保留 0.2.28b 的 NPC、剧情、鼠标位置与领取提示功能。客户端、服务端均需更新。见 [屏障与武器池部署说明](docs/RULES_EDITOR.md)。
+0.2.30b 为选枪页新增枪包分类，并支持编辑品阶颜色，统一同步到抽奖光柱、墙枪文字和武器卡片。屏障按原方式框选部署后，从该屏障设置中的“编辑屏障参数”调整规则。保留此前的 NPC、剧情、银行与武器池功能。客户端、服务端均需更新。见 [屏障与武器池部署说明](docs/RULES_EDITOR.md)。
 
 COD Pattern 的僵尸模式附属模组，独立维护、构建和发布。主模组作为已发布的二进制依赖加载；构建本仓库不需要主模组源码，也不需要同级的 `codPattern` 目录。
 
@@ -11,7 +11,7 @@ COD Pattern 的僵尸模式附属模组，独立维护、构建和发布。主�
 | Minecraft | 1.20.1 |
 | Forge | 构建使用 47.4.0 |
 | Java | JDK 17 |
-| 附属模组 | 0.2.29b，模组 ID 为 `codpattern_zombies` |
+| 附属模组 | 0.2.30b，模组 ID 为 `codpattern_zombies` |
 | COD Pattern | 构建固定使用 [0.8.8b](https://modrinth.com/mod/cod-pattern/version/zh5dnopt) |
 | TaCZ | 1.1.6 或以上；构建使用已固定的 Curse Maven 文件 |
 | LR Tactical | 可选；编译兼容依赖为 0.3.0 |
@@ -34,7 +34,7 @@ Windows PowerShell：
 .\gradlew.bat clean build
 ```
 
-正式构建产物位于 `build/libs/codpattern-zombies-0.2.29b.jar`。运行 `./gradlew buildSnapshot`（Windows 使用 `.\gradlew.bat buildSnapshot`）会额外生成带本地日期的 `-SNAPSHOT-yyyyMMdd.jar`；快照文件名不会改变模组内部版本。
+正式构建产物位于 `build/libs/codpattern-zombies-0.2.30b.jar`。运行 `./gradlew buildSnapshot`（Windows 使用 `.\gradlew.bat buildSnapshot`）会额外生成带本地日期的 `-SNAPSHOT-yyyyMMdd.jar`；快照文件名不会改变模组内部版本。
 
 附属模组 JAR 只包含本仓库的代码和资源，不会内嵌 COD Pattern、TaCZ 或其他前置模组。发布附属模组时需另外声明运行依赖。
 
@@ -44,7 +44,7 @@ Windows PowerShell：
 
 1. [COD Pattern 0.8.8b](https://modrinth.com/mod/cod-pattern/version/zh5dnopt)。
 2. TaCZ 1.1.6 或以上的兼容版本。
-3. 本仓库构建的 `codpattern-zombies-0.2.29b.jar`。
+3. 本仓库构建的 `codpattern-zombies-0.2.30b.jar`。
 
 客户端与服务器都必须安装附属模组，且附属模组版本必须完全一致。LR Tactical 属于可选扩展，使用对应内容时需另行安装。不要同时放入正式版和快照版附属模组，否则会出现重复模组 ID。
 

@@ -25,6 +25,11 @@ public final class ZombiesWeaponRulesConfig {
     public java.util.OptionalDouble damageMultiplier(String id) { String key = normalize(id); return getRarities().stream().filter(Objects::nonNull).filter(r -> key.equals(normalize(r.getId()))).mapToDouble(Rarity::getDamageMultiplier).findFirst(); }
     public double rarityDamageMultiplier(String id) { return damageMultiplier(id).orElse(1.0); }
 
+    public static String defaultColor(String id) {
+        return switch (normalize(id)) { case "common" -> "#22C55E"; case "rare" -> "#3B82F6"; case "epic" -> "#A855F7"; case "legendary" -> "#FF9800"; default -> "#83D9BA"; };
+    }
+    public static boolean validColor(String value) { return value != null && value.matches("#[0-9a-fA-F]{6}"); }
+
     public void normalize() {
         schemaVersion = SUPPORTED_SCHEMA_VERSION; getUpgrades().normalize();
         List<Rarity> values = new ArrayList<>();
@@ -36,11 +41,14 @@ public final class ZombiesWeaponRulesConfig {
     private static String normalize(String value) { return Objects.requireNonNullElse(value, "").trim().toLowerCase(Locale.ROOT); }
 
     public static final class Rarity {
-        private String id; private double damageMultiplier = 1.0;
+        private String id; private double damageMultiplier = 1.0; private String color;
         public Rarity() { this("common", 1.0); }
         public Rarity(String id, double damageMultiplier) { this.id = id; this.damageMultiplier = damageMultiplier; }
         public String getId() { return id; } public void setId(String value) { id = value; }
         public double getDamageMultiplier() { return damageMultiplier; } public void setDamageMultiplier(double value) { damageMultiplier = value; }
+        public String getColor() { return validColor(color) ? color : defaultColor(id); }
+        public void setColor(String value) { color = value; }
+        public int argbColor() { return 0xFF000000 | Integer.parseInt(getColor().substring(1), 16); }
         private void normalize() { id = ZombiesWeaponRulesConfig.normalize(id); if (!Double.isFinite(damageMultiplier) || damageMultiplier <= 0) damageMultiplier = 1.0; }
     }
     public static final class Upgrades {

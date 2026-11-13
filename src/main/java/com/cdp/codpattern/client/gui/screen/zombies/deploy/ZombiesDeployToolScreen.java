@@ -97,7 +97,7 @@ public class ZombiesDeployToolScreen extends Screen {
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
             var screen=new ZombiesScenarioScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
         })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
-        button("屏障与武器池",148,62,132,()->withCommitted(()->{
+        button("武器池与品阶",148,62,132,()->withCommitted(()->{
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
             var screen=new ZombiesRulesScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
         })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
@@ -255,6 +255,13 @@ public class ZombiesDeployToolScreen extends Screen {
         for (int row = session.fieldScroll; row < Math.min(rows.size(), session.fieldScroll + visibleRows()); row++) {
             FieldRow value = rows.get(row);
             int y = bodyTop + (row - session.fieldScroll) * ROW;
+            if (value.label().equals("编辑屏障参数")) {
+                button("编辑屏障参数",fieldX,y,fieldWidth,()->withCommitted(()->{
+                    if(session.dirty()){localError="请先保存已框选创建的屏障，再编辑参数。";return;}
+                    int group=Integer.parseInt(session.fields.getOrDefault("group","0")),entry=Integer.parseInt(session.fields.getOrDefault("entryId","0"));
+                    var screen=new ZombiesRulesScreen(this,snapshot().selectedMap(),group,entry);minecraft.setScreen(screen);screen.load();
+                })).active=!session.busy()&&snapshot().selectedIndex()>=0;continue;
+            }
             if (value.keys().isEmpty()) { label(value.label(), fieldX, y + 6, fieldWidth, ACCENT); continue; }
             int labelWidth = Math.min(128, Math.max(40, fieldWidth / 3));
             label(value.label(), fieldX, y + 6, labelWidth - 8, TEXT);
@@ -421,6 +428,7 @@ public class ZombiesDeployToolScreen extends Screen {
             }
         }
         if (snapshot().selectedObjectType().equals(ZombiesDeployFieldSchema.BARRIER)) {
+            result.add(new FieldRow("编辑屏障参数", List.of(), -1));
             result.add(new FieldRow(GROUP_SUMMARY, List.of(), -1));
             result.add(new FieldRow(PLAYER_GROUP_SUMMARY, List.of(), -1));
             result.add(new FieldRow(GROUP_SCOPE, List.of(), -1));

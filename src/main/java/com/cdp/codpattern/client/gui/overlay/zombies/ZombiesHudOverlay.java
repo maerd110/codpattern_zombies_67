@@ -717,7 +717,7 @@ public final class ZombiesHudOverlay implements IGuiOverlay {
         String label = "购买 " + displayRarityGun(rarityId, gunId)
                 + " - " + Math.max(0, payload.getInt(ZombiesObjectStateKeys.PAYLOAD_COST)) + "点";
         return Optional.of(payload.getBoolean(ZombiesObjectStateKeys.PAYLOAD_ENABLED)
-                ? activePrompt(label, taczInteractKey)
+                ? new InteractionPromptLine(label, true, taczInteractKey, ZombiesRarityDisplay.fromRarityId(rarityId).map(ZombiesRarityDisplay.Entry::color).orElse(TEXT_ACCENT))
                 : disabledPrompt(label));
     }
 
@@ -1225,7 +1225,7 @@ public final class ZombiesHudOverlay implements IGuiOverlay {
     }
 
     private static String displayRarityGun(String rarityId, String gunId) {
-        String rarity = rarityId == null || rarityId.isBlank() ? "" : rarityId.trim() + " ";
+        String rarity = rarityId == null || rarityId.isBlank() ? "" : ZombiesRarityDisplay.fromRarityId(rarityId).map(ZombiesRarityDisplay.Entry::label).orElse(rarityId.trim()) + " ";
         return rarity + com.cdp.codpattern.client.zombies.ZombiesGunNames.displayId(gunId).getString();
     }
 

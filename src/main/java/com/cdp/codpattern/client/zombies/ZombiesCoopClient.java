@@ -27,12 +27,12 @@ public final class ZombiesCoopClient {
         if(mc.screen instanceof com.cdp.codpattern.client.gui.screen.zombies.ZombiesCoopWheelScreen wheel&&(!next.getBoolean("active")||!next.hasUUID("session")||!wheel.session.equals(next.getUUID("session"))))mc.setScreen(null);
         if(mc.screen instanceof com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcCommandScreen choose&&(!next.getBoolean("active")||!next.hasUUID("session")||!choose.session.equals(next.getUUID("session"))))mc.setScreen(null);
         if(mc.screen instanceof ZombiesCoopScreen screen&&(!next.getBoolean("active")||!next.hasUUID("session")||!screen.session.equals(next.getUUID("session"))))mc.setScreen(null);
-        state=next;updated=System.currentTimeMillis();if(!next.getString("notice").isBlank()){notice=next.getString("notice");noticeUntil=updated+4000;}
+        ZombiesRarityDisplay.receive(next.getList("rarities",Tag.TAG_COMPOUND));state=next;updated=System.currentTimeMillis();if(!next.getString("notice").isBlank()){notice=next.getString("notice");noticeUntil=updated+4000;}
         if(next.getBoolean("active")&&!next.getString("page").isBlank())mc.setScreen(new ZombiesCoopScreen(next.getString("page").equals("npc"),next.getInt("focus"),next.hasUUID("token")?next.getUUID("token"):ZombiesCoopNetwork.ZERO));
     }
     public static String notice(){return System.currentTimeMillis()<noticeUntil?notice:"";}
     public static void request(String op,int amount,int entity,UUID token,UUID session){if(Minecraft.getInstance().getConnection()==null)return;ZombiesCoopNetwork.request(new ZombiesCoopNetwork.Action(op,session,token,amount,entity));}
-    public static void clear(){state=new CompoundTag();notice="";updated=0;}
+    public static void clear(){ZombiesRarityDisplay.clear();state=new CompoundTag();notice="";updated=0;}
     @Mod.EventBusSubscriber(modid=ZombiesAddonConstants.MOD_ID,value=Dist.CLIENT,bus=Mod.EventBusSubscriber.Bus.FORGE)
     public static final class Events {
         @SubscribeEvent(priority=net.minecraftforge.eventbus.api.EventPriority.HIGHEST) public static void mouse(net.minecraftforge.client.event.InputEvent.MouseButton.Pre e){var mc=Minecraft.getInstance();if(mc.screen!=null||mc.player==null||!active()||!state.getBoolean("interactive"))return;if(e.getAction()==GLFW.GLFW_PRESS&&DROP_GUN.matchesMouse(e.getButton())){e.setCanceled(true);request("drop_gun",0,0,ZombiesCoopNetwork.ZERO,state.getUUID("session"));return;}if(e.getAction()==GLFW.GLFW_PRESS&&mc.options.keyUse.matchesMouse(e.getButton())&&!state.getString("orderMode").isEmpty()){e.setCanceled(true);request("cancel_order",0,0,ZombiesCoopNetwork.ZERO,state.getUUID("session"));return;}if(e.getAction()==GLFW.GLFW_PRESS&&PING.matchesMouse(e.getButton())){e.setCanceled(true);request("ping",0,0,ZombiesCoopNetwork.ZERO,state.getUUID("session"));}else if(e.getAction()==GLFW.GLFW_PRESS&&mc.options.keyUse.matchesMouse(e.getButton())&&interactNpc()){e.setCanceled(true);}}

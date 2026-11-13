@@ -5,6 +5,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 public final class ZombiesRarityDisplay {
+    private static java.util.Map<String, Entry> roomEntries = java.util.Map.of();
+
+    /** Replace, never merge: the same tier ID can have a different color in another room. */
+    public static void receive(net.minecraft.nbt.ListTag rarities) {
+        var entries = new java.util.HashMap<String, Entry>();
+        for (int i = 0; i < Math.min(64, rarities.size()); i++) {
+            var value = rarities.getCompound(i); String id = normalize(value.getString("id"));
+            if (!id.isBlank()) entries.put(id, new Entry(id, defaultLabel(id), value.getInt("color") | 0xFF000000));
+        }
+        roomEntries = java.util.Map.copyOf(entries);
+    }
+    public static void clear() { roomEntries = java.util.Map.of(); }
+    public static String defaultLabel(String id) { return switch(normalize(id)) { case "common" -> "普通"; case "rare" -> "稀有"; case "epic" -> "史诗"; case "legendary" -> "传奇"; default -> id; }; }
     private static final int COMMON_COLOR = 0xFF22C55E;
     private static final int RARE_COLOR = 0xFF3B82F6;
     private static final int EPIC_COLOR = 0xFFA855F7;
@@ -14,6 +27,8 @@ public final class ZombiesRarityDisplay {
     }
 
     public static Optional<Entry> fromRarityId(String rarityId) {
+        Entry configured = roomEntries.get(normalize(rarityId));
+        if (configured != null) return Optional.of(configured);
         return switch (normalize(rarityId)) {
             case "common" -> Optional.of(new Entry("common", "普通", COMMON_COLOR));
             case "rare" -> Optional.of(new Entry("rare", "稀有", RARE_COLOR));

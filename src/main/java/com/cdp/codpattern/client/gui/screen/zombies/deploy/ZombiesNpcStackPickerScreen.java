@@ -19,6 +19,11 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
     private final List<Entry> entries;
     private final Consumer<Entry> choose;
     private final Integer tint;
+    private boolean gunPacks; private String pack="";
+    private java.util.Map<String,String> packNames=java.util.Map.of();
+    public ZombiesNpcStackPickerScreen gunPacks(){gunPacks=true;var names=new java.util.TreeMap<String,String>();for(var entry:entries){String key=packId(entry);String label=key;try{var info=com.tacz.guns.client.resource.ClientAssetsManager.INSTANCE.getPackInfo(key);if(info!=null&&info.getName()!=null&&!info.getName().isBlank())label=net.minecraft.client.resources.language.I18n.get(info.getName());}catch(RuntimeException ignored){}names.put(key,label);}packNames=names;return this;}
+    private static String packId(Entry entry){var id=net.minecraft.resources.ResourceLocation.tryParse(entry.value());return id==null?"其他":id.getNamespace();}
+    private String packLabel(String key){long count=entries.stream().filter(e->key.isEmpty()||packId(e).equals(key)).count();return (key.isEmpty()?"全部枪包":packNames.getOrDefault(key,key)+" ["+key+"]")+" · "+count+" 把";}
     private final List<Button> buttons = new ArrayList<>();
     private final List<Tile> tiles = new ArrayList<>();
     private boolean returning;
@@ -35,18 +40,19 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
         filter.setResponder(value -> { search = value; scroll = 0; buildTiles(); });
         addRenderableWidget(Button.builder(Component.translatable("gui.codpattern.zombies.npc.continue_editing"), ignored -> onClose())
                 .bounds(width / 2 - 70, height - 30, 140, 20).build());
+        if(gunPacks){var select=addRenderableWidget(Button.builder(Component.literal(font.plainSubstrByWidth("枪包："+packLabel(pack),width-40)),b->{var options=new ArrayList<String>();options.add("");options.addAll(packNames.keySet());minecraft.setScreen(new ZombiesNpcChoiceScreen(this,"按枪包分类",options,pack,this::packLabel,key->{pack=key;scroll=0;rebuildWidgets();}));}).bounds(16,60,width-32,20).build());select.setTooltip(Tooltip.create(Component.literal("枪包："+packLabel(pack))));}
         setInitialFocus(filter); buildTiles();
     }
     private void buildTiles() {
         buttons.forEach(this::removeWidget); buttons.clear(); tiles.clear();
         String query = search.toLowerCase(java.util.Locale.ROOT);
-        List<Entry> filtered = entries.stream().filter(entry -> (entry.caption() + " " + entry.value()).toLowerCase(java.util.Locale.ROOT).contains(query)).toList();
-        int columns = Math.max(1, (width - 32) / 96), rows = Math.max(1, (height - 104) / 64);
+        List<Entry> filtered = entries.stream().filter(e->!gunPacks||pack.isEmpty()||packId(e).equals(pack)).filter(entry -> (entry.caption() + " " + entry.value()).toLowerCase(java.util.Locale.ROOT).contains(query)).toList();
+        int columns = Math.max(1, (width - 32) / 96), rows = Math.max(1, (height - (gunPacks?132:104)) / 64);
         scroll = Math.max(0, Math.min(scroll, Math.max(0, (filtered.size() + columns - 1) / columns - rows)));
         int cell = (width - 32) / columns;
         for (int i = scroll * columns; i < Math.min(filtered.size(), (scroll + rows) * columns); i++) {
             Entry entry = filtered.get(i);
-            int x = 16 + (i % columns) * cell, y = 62 + (i / columns - scroll) * 64;
+            int x = 16 + (i % columns) * cell, y = (gunPacks?90:62) + (i / columns - scroll) * 64;
             Button button = addRenderableWidget(Button.builder(Component.empty(), ignored -> {
                 returning=true;minecraft.setScreen(parent); choose.accept(entry);
             }).bounds(x, y, cell - 4, 60).build());
@@ -73,7 +79,7 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
             }
             graphics.drawString(font,font.plainSubstrByWidth(com.cdp.codpattern.client.zombies.ZombiesGunNames.display(tile.entry.stack()).getString(),tile.width-8),tile.x+4,tile.y+30,stats==null&&tint==null?0xFFFFFFFF:color,false);
             if(stats!=null){String upgrade="+"+stats.upgradeLevel();graphics.drawString(font,upgrade,tile.x+tile.width-font.width(upgrade)-6,tile.y+9,0xFFFFE2A1,false);graphics.drawString(font,font.plainSubstrByWidth(rarity.map(com.cdp.codpattern.client.zombies.ZombiesRarityDisplay.Entry::label).orElse("预设")+" · Lv"+stats.weaponLevel(),tile.width-8),tile.x+4,tile.y+45,color,false);}
-            else graphics.drawString(font,font.plainSubstrByWidth(tile.entry.caption(),tile.width-8),tile.x+4,tile.y+45,0xFF9CB6C6,false);
+            else graphics.drawString(font,font.plainSubstrByWidth(gunPacks?packNames.getOrDefault(packId(tile.entry),packId(tile.entry)):tile.entry.caption(),tile.width-8),tile.x+4,tile.y+45,0xFF9CB6C6,false);
         }
     }
 }
