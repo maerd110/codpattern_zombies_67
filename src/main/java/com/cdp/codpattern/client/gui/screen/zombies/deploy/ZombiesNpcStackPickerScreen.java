@@ -18,6 +18,7 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
     private final Screen parent;
     private final List<Entry> entries;
     private final Consumer<Entry> choose;
+    private final Integer tint;
     private final List<Button> buttons = new ArrayList<>();
     private final List<Tile> tiles = new ArrayList<>();
     private boolean returning;
@@ -25,8 +26,9 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
     private String search = "";
     private int scroll;
     public ZombiesNpcStackPickerScreen(Screen parent, String title, List<Entry> entries, Consumer<Entry> choose) {
-        super(Component.literal(title)); this.parent = parent; this.entries = List.copyOf(entries); this.choose = choose;
+        this(parent,title,entries,choose,null);
     }
+    public ZombiesNpcStackPickerScreen(Screen parent,String title,List<Entry> entries,Consumer<Entry> choose,Integer tint){super(Component.literal(title));this.parent=parent;this.entries=List.copyOf(entries);this.choose=choose;this.tint=tint;}
     @Override protected void init() {
         EditBox filter = addRenderableWidget(new EditBox(font, 16, 34, width - 32, 20, Component.translatable("gui.codpattern.zombies.npc.search")));
         filter.setValue(search);
@@ -63,13 +65,13 @@ public final class ZombiesNpcStackPickerScreen extends Screen {
         for (Tile tile : tiles) {
             var stats=com.cdp.codpattern.app.zombies.npc.ZombiesCoopRuntime.tags(tile.entry.stack());
             var rarity=stats==null?java.util.Optional.<com.cdp.codpattern.client.zombies.ZombiesRarityDisplay.Entry>empty():com.cdp.codpattern.client.zombies.ZombiesRarityDisplay.fromRarityId(stats.rarityId());
-            int color=rarity.map(com.cdp.codpattern.client.zombies.ZombiesRarityDisplay.Entry::color).orElse(0xFF9CB6C6);
-            if(stats!=null){graphics.fill(tile.x+1,tile.y+1,tile.x+tile.width-1,tile.y+25,(color&0xFFFFFF)|0x40000000);graphics.fill(tile.x,tile.y,tile.x+2,tile.y+60,color);graphics.fill(tile.x,tile.y,tile.x+tile.width,tile.y+2,color);graphics.fill(tile.x,tile.y+58,tile.x+tile.width,tile.y+60,color);graphics.fill(tile.x+tile.width-2,tile.y,tile.x+tile.width,tile.y+60,color);}
+            int color=tint!=null?tint:rarity.map(com.cdp.codpattern.client.zombies.ZombiesRarityDisplay.Entry::color).orElse(0xFF9CB6C6);
+            if(stats!=null||tint!=null){graphics.fill(tile.x+1,tile.y+1,tile.x+tile.width-1,tile.y+25,(color&0xFFFFFF)|0x40000000);graphics.fill(tile.x,tile.y,tile.x+2,tile.y+60,color);graphics.fill(tile.x,tile.y,tile.x+tile.width,tile.y+2,color);graphics.fill(tile.x,tile.y+58,tile.x+tile.width,tile.y+60,color);graphics.fill(tile.x+tile.width-2,tile.y,tile.x+tile.width,tile.y+60,color);}
             if (!tile.entry.stack().isEmpty()) {
                 graphics.renderItem(tile.entry.stack(),tile.x+8,tile.y+6);
                 graphics.renderItemDecorations(font,tile.entry.stack(),tile.x+8,tile.y+6);
             }
-            graphics.drawString(font,font.plainSubstrByWidth(com.cdp.codpattern.client.zombies.ZombiesGunNames.display(tile.entry.stack()).getString(),tile.width-8),tile.x+4,tile.y+30,stats==null?0xFFFFFFFF:color,false);
+            graphics.drawString(font,font.plainSubstrByWidth(com.cdp.codpattern.client.zombies.ZombiesGunNames.display(tile.entry.stack()).getString(),tile.width-8),tile.x+4,tile.y+30,stats==null&&tint==null?0xFFFFFFFF:color,false);
             if(stats!=null){String upgrade="+"+stats.upgradeLevel();graphics.drawString(font,upgrade,tile.x+tile.width-font.width(upgrade)-6,tile.y+9,0xFFFFE2A1,false);graphics.drawString(font,font.plainSubstrByWidth(rarity.map(com.cdp.codpattern.client.zombies.ZombiesRarityDisplay.Entry::label).orElse("预设")+" · Lv"+stats.weaponLevel(),tile.width-8),tile.x+4,tile.y+45,color,false);}
             else graphics.drawString(font,font.plainSubstrByWidth(tile.entry.caption(),tile.width-8),tile.x+4,tile.y+45,0xFF9CB6C6,false);
         }

@@ -61,6 +61,7 @@ public class ZombiesDeployToolScreen extends Screen {
         this.session = session;
     }
     protected boolean mapPage() { return false; }
+    void refreshRules(){if(minecraft.player!=null&&!session.busy())send(Action.SAVE_SELECTIONS,session.draft(false),null);}
     private ZombiesDeploySnapshot snapshot() { return session.snapshot; }
     protected static String tr(String suffix, Object... args) {
         return Component.translatable("gui.codpattern.zombies.deploy." + suffix, args).getString();
@@ -95,6 +96,10 @@ public class ZombiesDeployToolScreen extends Screen {
         button("波次与地图剧情",12,62,132,()->withCommitted(()->{
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
             var screen=new ZombiesScenarioScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
+        })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
+        button("屏障与武器池",148,62,132,()->withCommitted(()->{
+            if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
+            var screen=new ZombiesRulesScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
         })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
         if (!compactDetails) {
             if (mapPage()) { buildMaps(); buildRegistration(); }
