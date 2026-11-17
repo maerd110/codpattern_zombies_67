@@ -19,7 +19,7 @@ public final class CampaignStore {
     private JsonObject state;
     public static CampaignStore get(MinecraftServer server){return STORES.computeIfAbsent(server,s->new CampaignStore(s.getWorldPath(LevelResource.ROOT).resolve("data/codpattern_zombies/campaign-state.json")));}
     public static Path definitions(MinecraftServer server){return server.getWorldPath(LevelResource.ROOT).resolve("serverconfig/codpattern_zombies/campaigns.json");}
-    public static CampaignDefinition definition(MinecraftServer server){var file=definitions(server);try{return Files.exists(file)?Objects.requireNonNull(GSON.fromJson(Files.readString(file),CampaignDefinition.class)):CampaignDefinition.empty();}catch(IOException e){throw new UncheckedIOException(e);}}
+    public static CampaignDefinition definition(MinecraftServer server){CampaignAuthoringTransaction.recover(server);var file=definitions(server);try{return Files.exists(file)?Objects.requireNonNull(GSON.fromJson(Files.readString(file),CampaignDefinition.class)):CampaignDefinition.empty();}catch(IOException e){throw new UncheckedIOException(e);}}
     public CampaignStore(Path file){this.file=file;try{state=Files.exists(file)?JsonParser.parseString(Files.readString(file)).getAsJsonObject():initial();if(state.get("version").getAsInt()!=1||!state.has("accounts"))throw new IllegalArgumentException("未知存档版本，停止读取以保护旧档");}catch(IOException e){throw new UncheckedIOException(e);}}
     private static JsonObject initial(){var s=new JsonObject();s.addProperty("version",1);s.add("accounts",new JsonObject());return s;}
     public JsonObject snapshot(){return state.deepCopy();}

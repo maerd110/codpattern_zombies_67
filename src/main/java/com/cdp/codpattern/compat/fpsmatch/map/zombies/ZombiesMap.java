@@ -723,15 +723,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     }
 
     private static Component startupFailureMessage(ZombiesServiceResult<?> result) {
-        String code = result == null ? "unknown" : result.code().key();
-        String firstIssue = resultParam(result, "firstIssueCode");
-        if (!firstIssue.isBlank()) {
-            return Component.translatable(
-                    "message.codpattern.zombies.startup_failed_with_issue",
-                    code,
-                    firstIssue);
-        }
-        return Component.translatable("message.codpattern.zombies.startup_failed", code);
+        return com.cdp.codpattern.app.zombies.service.ZombiesStartupDiagnostics.message(result);
     }
 
     private static Component voteFailureReasonMessage(ZombiesStartVoteService.FailureReason reason) {
@@ -1570,11 +1562,12 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                 ZombiesStartupFlow.ZombiesStartupContext context
         ) {
             if (stage == ZombiesStartupFlow.ParticipantStage.BEFORE_OCCUPANCY_ACQUIRE) {
+                com.cdp.codpattern.app.zombies.campaign.CampaignAuthoringTransaction.recover(getServerLevel().getServer());
                 preparedNpcConfig = ZombiesNpcRepository.load(
                         ZombiesNpcRepository.path(getServerLevel().getServer(), getMapName()));
                 preparedScenarioConfig=com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.load(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRepository.path(getServerLevel().getServer(),getMapName()));
-                scenarioRuntime.validate(preparedScenarioConfig,preparedNpcConfig);
-                npcRuntime.validate(preparedNpcConfig);
+                com.cdp.codpattern.app.zombies.service.ZombiesStartupDiagnostics.check("scenario.json", () -> scenarioRuntime.validate(preparedScenarioConfig,preparedNpcConfig));
+                com.cdp.codpattern.app.zombies.service.ZombiesStartupDiagnostics.check("npcs.json", () -> npcRuntime.validate(preparedNpcConfig));
                 if (recoveryBlocked()) throw new IllegalStateException("Terminated match cannot start");
                 for (UUID id : context.memberIds()) {
                     var player = getServerLevel().getServer().getPlayerList().getPlayer(id);

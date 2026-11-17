@@ -91,7 +91,7 @@ public class ZombiesDeployToolScreen extends Screen {
                         localError = Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();
                         return;
                     }
-                    ZombiesDeployClientActionHandler.openNpcEditor(this, session.draft(false));
+                    var canvas=new CampaignCanvasScreen(this,snapshot().selectedMap());minecraft.setScreen(canvas);canvas.load();
                 })).active = !session.busy() && !snapshot().selectedMap().isBlank();
         button("波次与地图剧情",12,62,(width-32)/3,()->withCommitted(()->{
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
@@ -101,9 +101,9 @@ public class ZombiesDeployToolScreen extends Screen {
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
             var screen=new ZombiesRulesScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
         })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
-        button("战役与跨关剧情",20+2*((width-32)/3),62,(width-32)/3,()->withCommitted(()->{
+        button("战役逻辑画布",20+2*((width-32)/3),62,(width-32)/3,()->withCommitted(()->{
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
-            var screen=new CampaignScreen(this,true);minecraft.setScreen(screen);screen.load();
+            var screen=new CampaignCanvasScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
         })).active=!session.busy();
         if (!compactDetails) {
             if (mapPage()) { buildMaps(); buildRegistration(); }

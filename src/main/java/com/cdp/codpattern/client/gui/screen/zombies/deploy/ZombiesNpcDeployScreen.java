@@ -29,7 +29,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class ZombiesNpcDeployScreen extends Screen {
     private static final AtomicLong REQUESTS = new AtomicLong();
     private static final int ROW = 25;
-    private final ZombiesDeployToolScreen parent;
+    private final Screen parent;
+    private Runnable workspaceSave;
     private final ZombiesDeployDraft deployment;
     private ZombiesNpcEditorDraft draft;
     private String revision = "";
@@ -53,10 +54,14 @@ public final class ZombiesNpcDeployScreen extends Screen {
     private final List<Label> labels = new ArrayList<>();
 
     public ZombiesNpcDeployScreen(ZombiesDeployToolScreen parent, ZombiesDeployDraft deployment) {
+        this((Screen)parent,deployment);
+    }
+    private ZombiesNpcDeployScreen(Screen parent,ZombiesDeployDraft deployment){
         super(Component.translatable("gui.codpattern.zombies.npc.title"));
         this.parent = parent;
         this.deployment = deployment.withFields(java.util.Map.of());
     }
+    ZombiesNpcDeployScreen(Screen parent,String map,ZombiesNpcEditorDraft draft,List<Integer> barriers,List<String> events,Runnable save){this(parent,new ZombiesDeployDraft(map,"barrier",-1,"MVP3_FULL_INITIAL",java.util.Map.of()));this.draft=draft;this.barriers=barriers;this.events=events;this.editable=true;this.workspaceSave=save;this.npcIndex=draft.npcs().isEmpty()?-1:0;this.ruleIndex=0;}
     private static String tr(String key, Object... values) { return Component.translatable("gui.codpattern.zombies.npc." + key, values).getString(); }
     private boolean busy() { return pending >= 0; }
     private boolean canEdit() { return editable && !busy() && draft != null; }
@@ -548,6 +553,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
 
     private void save(Runnable next) {
         if (!canEdit()) return;
+        if(workspaceSave!=null){workspaceSave.run();return;}
         try { request("save", draft.request(revision), next); }
         catch (RuntimeException failure) { message = detail(failure); }
     }
@@ -556,6 +562,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
             button(tr("graph.back"), 12, height - 34, width - 24, this::returnToGraph, true);
             return;
         }
+        if(workspaceSave!=null){button("完成并返回战役画布",12,height-34,width-24,()->minecraft.setScreen(parent),true);return;}
         int w = (width - 32) / 3;
         button(tr("save"), 12, height - 60, w, () -> save(null), canEdit());
         button(tr("preview"), 16 + w, height - 60, w, () -> save(() -> request("preview", "", this::collapse)), canEdit());
@@ -573,6 +580,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
     }
     @Override public void onClose() {
         if (graphReturn != null) { returnToGraph(); return; }
+        if(workspaceSave!=null){minecraft.setScreen(parent);return;}
         if (busy()) return;
         confirmDiscard(() -> { ZombiesDeployClientActionHandler.clearNpcEditor(this); minecraft.setScreen(parent); });
     }
@@ -621,6 +629,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         if (graphScreen == null) graphScreen = new ZombiesNpcGraphScreen(this);
         minecraft.setScreen(graphScreen);
     }
+    boolean workspaceMode(){return workspaceSave!=null;}
     ZombiesNpcEditorDraft graphDraft() { return draft; }
     JsonObject graphNpc() { return npc(); }
     JsonObject graphRule() { return rule(); }
@@ -642,6 +651,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
         minecraft.setScreen(graph);
     }
     void graphBack() { page = 0; scroll = 0; minecraft.setScreen(this); }
+    void workspaceNode(String npc,String rule,String node){for(int i=0;i<draft.npcs().size();i++)if(value(draft.npcs().get(i).getAsJsonObject(),"id","").equals(npc)){npcIndex=i;var rules=draft.npcs().get(i).getAsJsonObject().getAsJsonArray("rules");for(int r=0;r<rules.size();r++)if(value(rules.get(r).getAsJsonObject(),"id","").equals(rule)){ruleIndex=r;break;}break;}openGraph();}
     private static String detail(Throwable failure) {
         Throwable cause = failure;
         while (cause.getCause() != null) cause = cause.getCause();

@@ -96,7 +96,7 @@ public final class ZombiesSceneSnapshots {
         for(var child:tag.getList("Passengers",Tag.TAG_COMPOUND))translate((CompoundTag)child,offset);
     }
     private static int validateEntityTree(CompoundTag tag,int depth){
-        var id=net.minecraft.resources.ResourceLocation.tryParse(tag.getString("id"));if(depth>16||id==null||!BuiltInRegistries.ENTITY_TYPE.containsKey(id))throw new IllegalArgumentException("场景实体类型未加载或骑乘层级过深："+tag.getString("id"));
+        var id=net.minecraft.resources.ResourceLocation.tryParse(tag.getString("id"));if(depth>16)throw new IllegalArgumentException("场景骑乘层级超过 16 层："+tag.getString("id"));if(id==null||!BuiltInRegistries.ENTITY_TYPE.containsKey(id))throw new IllegalArgumentException("场景实体类型未加载："+tag.getString("id")+"；请启用对应模组，或重新读取不含该实体的场景快照");
         int count=1;for(var child:tag.getList("Passengers",Tag.TAG_COMPOUND)){count+=validateEntityTree((CompoundTag)child,depth+1);if(count>128)throw new IllegalArgumentException("场景骑乘实体过多");}return count;
     }
     private static void freshUuids(CompoundTag tag){tag.putUUID("UUID",UUID.randomUUID());tag.getCompound("ForgeData").remove(ZombiesSceneEntityJournal.MARKER);for(var child:tag.getList("Passengers",Tag.TAG_COMPOUND))freshUuids((CompoundTag)child);}

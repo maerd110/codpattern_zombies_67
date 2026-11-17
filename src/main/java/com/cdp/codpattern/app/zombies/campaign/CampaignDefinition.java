@@ -4,9 +4,11 @@ import java.util.*;
 
 /** Stable authoring identities are independent of entity UUIDs, graph node IDs and account rewards. */
 public record CampaignDefinition(int version, List<Campaign> campaigns, List<Entry> states,
-        List<Entry> actors, List<Entry> items, List<Entry> tasks, List<Entry> collections, List<Event> events) {
-    public record Entry(String id, String name, String description) {
-        public Entry { id = CampaignDefinition.id(id); name = text(name, 128); description = text(description, 2048); }
+        List<Entry> actors, List<Entry> items, List<Entry> tasks, List<Entry> collections, List<Event> events, CampaignCanvas canvas) {
+    public CampaignDefinition(int version,List<Campaign> campaigns,List<Entry> states,List<Entry> actors,List<Entry> items,List<Entry> tasks,List<Entry> collections,List<Event> events){this(version,campaigns,states,actors,items,tasks,collections,events,CampaignCanvas.empty());}
+    public record Entry(String id, String name, String description, String icon) {
+        public Entry(String id,String name,String description){this(id,name,description,"");}
+        public Entry { id = CampaignDefinition.id(id); name = text(name, 128); description = text(description, 2048);icon=text(icon,16384); }
     }
     public record Campaign(String id, String name, List<Chapter> chapters) {
         public Campaign { id = CampaignDefinition.id(id); name = text(name, 128); chapters = copy(chapters, 128); unique(chapters.stream().map(Chapter::id).toList()); }
@@ -25,6 +27,7 @@ public record CampaignDefinition(int version, List<Campaign> campaigns, List<Ent
     }
     public CampaignDefinition {
         if(version!=1)throw new IllegalArgumentException("未知战役配置版本");
+        canvas=canvas==null?CampaignCanvas.empty():canvas;
         campaigns=copy(campaigns,32);states=copy(states,256);actors=copy(actors,256);items=copy(items,256);tasks=copy(tasks,256);collections=copy(collections,256);events=copy(events,512);
         unique(campaigns.stream().map(Campaign::id).toList());
         for(var list:List.of(states,actors,items,tasks,collections))unique(list.stream().map(Entry::id).toList());
@@ -41,6 +44,7 @@ public record CampaignDefinition(int version, List<Campaign> campaigns, List<Ent
                 case COLLECTION->require(collections,f.key());default->{}
             }
         }
+        canvas.validate(campaigns,states,actors,items,tasks,collections,events);
     }
     public static CampaignDefinition empty(){return new CampaignDefinition(1,List.of(),List.of(),List.of(),List.of(),List.of(),List.of(),List.of());}
     public Chapter chapter(String id){return campaigns.stream().flatMap(c->c.chapters().stream()).filter(c->c.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("章节不存在："+id));}

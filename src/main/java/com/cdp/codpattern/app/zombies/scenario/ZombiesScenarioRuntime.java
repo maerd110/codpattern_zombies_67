@@ -36,7 +36,7 @@ public final class ZombiesScenarioRuntime {
         var keys=new HashSet<String>();for(var npc:npcs.npcs())for(var rule:npc.rules())keys.add(npc.id()+"."+rule.id());
         for(var e:candidate.events()){
             if(!e.rule().isBlank()&&!keys.contains(e.rule()))throw new IllegalArgumentException("事件引用未知 NPC 规则："+e.rule());
-            ZombiesSceneSnapshots.validate(map,e.regions());
+            com.cdp.codpattern.app.zombies.service.ZombiesStartupDiagnostics.check("地图事件 "+e.id()+"（"+e.name()+"）", () -> ZombiesSceneSnapshots.validate(map,e.regions()));
         }
         for(var task:candidate.tasks())if(!task.rule().isBlank()&&!keys.contains(task.rule()))throw new IllegalArgumentException("任务引用未知 NPC 规则："+task.rule());
         for(var area:candidate.areaRewards()){

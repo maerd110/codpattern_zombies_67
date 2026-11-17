@@ -108,7 +108,7 @@ public final class CampaignGameTests {
         try{CampaignStore.GSON.fromJson("{\"version\":1,\"events\":[{\"id\":\"bad\",\"chapter\":\"missing\"}]}",CampaignDefinition.class);throw new AssertionError("dangling chapter accepted");}catch(RuntimeException expected){}
         h.assertTrue(CampaignStore.GSON.fromJson("{\"version\":1}",CampaignDefinition.class).campaigns().isEmpty(),"missing optional catalog lists normalize safely");h.succeed();
     }
-    private static final class Fixture implements AutoCloseable {
+    static final class Fixture implements AutoCloseable {
         final List<String> messages=new ArrayList<>();final MinecraftMap a,b;final ServerPlayer owner,guest;final net.minecraft.server.MinecraftServer server;final Path definition;final String previous;final Map<UUID,ServerPlayer> registry;final List<ServerPlayer> players;
         @SuppressWarnings("unchecked") Fixture(GameTestHelper h)throws Exception{
             server=h.getLevel().getServer();definition=CampaignStore.definitions(server);previous=Files.exists(definition)?Files.readString(definition):null;
@@ -125,14 +125,14 @@ public final class CampaignGameTests {
         void join(MinecraftMap m,ServerPlayer p){m.campaignJoin(p);}
         public void close()throws Exception{CampaignVotes.clear(a);CampaignVotes.clear(b);a.resetGame();b.resetGame();setOnline(owner,false);setOnline(guest,false);FPSMCore.getInstance().unregisterMap(a);FPSMCore.getInstance().unregisterMap(b);if(previous==null)Files.deleteIfExists(definition);else CampaignStore.atomic(definition,previous);CampaignRuntime.stop(server);}
     }
-    private static final class MinecraftMap extends ZombiesMap {
+    static final class MinecraftMap extends ZombiesMap {
         ZombiesGamePhase phase=ZombiesGamePhase.WAITING;int wave=1;
         MinecraftMap(net.minecraft.server.level.ServerLevel level,String name,BlockPos origin){super(level,name,new AreaData(origin.offset(-1,-1,-1),origin.offset(8,5,8)));}
         @Override public ZombiesGamePhase currentPhase(){return phase;}
         @Override public int npcWave(){return wave;}
         @Override public void campaignWave(int value){wave=value;}
         @Override public void campaignStartGame(){startGame();}
-        @Override public void startGame(){CampaignRuntime.prepare(this);phase=ZombiesGamePhase.OPENING_COUNTDOWN;npcRuntime().start(ZombiesNpcConfig.empty(),false);scenarioRuntime().start(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.empty());CampaignRuntime.started(this);}
+        @Override public void startGame(){CampaignRuntime.prepare(this);phase=ZombiesGamePhase.OPENING_COUNTDOWN;npcRuntime().start(ZombiesNpcRepository.load(ZombiesNpcRepository.path(getServerLevel().getServer(),getMapName())),false);scenarioRuntime().start(com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioConfig.empty());CampaignRuntime.started(this);}
         @Override public void resetGame(){CampaignRuntime.cleanup(this);scenarioRuntime().reset();npcRuntime().reset();phase=ZombiesGamePhase.WAITING;}
         @Override public void tick(){}
         @Override public void sendNpcDialogue(net.minecraft.network.chat.Component text){}

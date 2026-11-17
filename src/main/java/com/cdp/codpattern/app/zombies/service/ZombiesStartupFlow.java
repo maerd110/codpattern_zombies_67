@@ -195,15 +195,18 @@ public final class ZombiesStartupFlow {
             try {
                 result = participant.onStartupStage(stage, work.context());
             } catch (RuntimeException exception) {
+                com.mojang.logging.LogUtils.getLogger().warn(
+                        "Zombies startup participant {} failed during {} in {}",
+                        participant.name(), stage.key(), request.mapName(), exception);
                 return ZombiesServiceResult.failure(
                         ZombiesErrorCode.STARTUP_PREFLIGHT_FAILED,
                         Map.of(
                                 "stage", ModePlayerValue.ofString(stage.key()),
                                 "participant", ModePlayerValue.ofString(participant.name()),
-                                "reason", ModePlayerValue.ofString(exception.getClass().getSimpleName())
+                                "reason", ModePlayerValue.ofString(ZombiesStartupDiagnostics.reason(exception))
                         ),
                         "Zombies startup participant " + participant.name()
-                                + " threw during " + stage.key() + ": " + exception.getClass().getName());
+                                + " threw during " + stage.key() + ": " + ZombiesStartupDiagnostics.reason(exception));
             }
             if (!result.success()) {
                 return ZombiesServiceResult.failure(

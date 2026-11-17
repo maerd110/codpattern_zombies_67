@@ -72,7 +72,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
             if (yes) { remember(); ZombiesNpcSharedCanvas.delete(owner.graphDraft(), activeKey()); owner.graphSelect(owner.graphNpcIndex(), 0); switchGraph(); }
             minecraft.setScreen(this);
         }, Component.literal(tr("delete_rule")), Component.literal(ruleName))), editable() && rule() != null);
-        toolbar(4, 20, w, tr("save"), () -> { validate(); owner.graphSave(); }, editable());
+        toolbar(4, 20, w, owner.workspaceMode()?"保存战役工作区":tr("save"), () -> { validate(); owner.graphSave(); }, editable());
         toolbar(5, 20, w, tr("graph.basic"), this::onClose, true);
         String[] types = {"ACTION", "BRANCH", "WAIT", "AWAIT", "INTERACT", "CHOICE", "END", "ENTRY"};
         int nodeWidth=(width-30)/8;

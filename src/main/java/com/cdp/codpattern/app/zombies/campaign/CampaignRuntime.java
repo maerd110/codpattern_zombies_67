@@ -91,19 +91,30 @@ public final class CampaignRuntime {
         if(!map.currentPhase().isRoundRunning())return;
         if(!s.pendingCheckpoint.isBlank()){commitPending(s);if(s.failed||s.settled)return;}
         captureActors(s);
-        for(var e:s.definition.events())if(e.chapter().equals(s.chapter)&&(e.minWave()>0||!e.rule().isBlank())&&!s.events.contains(e.id())&&map.npcWave()>=e.minWave()&&(e.rule().isBlank()||map.npcRuntime().isRuleComplete(e.rule()))&&eligible(s,e)){
+        for(var e:s.definition.events())if(e.chapter().equals(s.chapter)&&(e.minWave()>0||!e.rule().isBlank()||s.definition.canvas().links().stream().anyMatch(l->l.kind()==CampaignCanvas.LinkKind.REQUIRE&&l.to().equals("event:"+e.id())))&&!s.events.contains(e.id())&&e.effects().stream().noneMatch(f->(f.operation()==CampaignDefinition.Operation.GIVE||f.operation()==CampaignDefinition.Operation.TAKE)&&!f.everyone())&&map.npcWave()>=e.minWave()&&(e.rule().isBlank()||map.npcRuntime().isRuleComplete(e.rule()))&&eligible(s,e)){
             try{event(map,e.id(),null);}catch(RuntimeException error){s.failed=true;s.saveError=error.getMessage();map.sendNpcDialogue(Component.literal("战役事件已暂停："+error.getMessage()+"；原安全检查点仍保留。"));}if(s.settled||s.failed)break;
         }
         if(!s.pendingCheckpoint.isBlank())commitPending(s);
     }
-    private static void commitPending(Session s){try{checkpoint(s,s.pendingCheckpoint,s.pendingFinished,false);s.pendingCheckpoint="";if(s.pendingFinished)complete(s);s.pendingFinished=false;}catch(RuntimeException e){s.failed=true;s.saveError=e.getMessage();s.map.sendNpcDialogue(Component.literal("安全检查点未保存："+e.getMessage()+"；可在个人主页重试。"));}}
-    private static boolean eligible(Session s,CampaignDefinition.Event e){return e.state().isBlank()||str(object(s.world,"states"),e.state()).equals(e.equalsValue());}
+    private static void commitPending(Session s){if(s.map.currentPhase()!=ZombiesGamePhase.INTERMISSION&&s.map.currentPhase()!=ZombiesGamePhase.OPENING_COUNTDOWN&&s.map.currentPhase()!=ZombiesGamePhase.VICTORY)return;try{checkpoint(s,s.pendingCheckpoint,s.pendingFinished,false);s.pendingCheckpoint="";if(s.pendingFinished)complete(s);s.pendingFinished=false;}catch(RuntimeException e){s.failed=true;s.saveError=e.getMessage();s.map.sendNpcDialogue(Component.literal("安全检查点未保存："+e.getMessage()+"；可在个人主页重试。"));}}
+    private static boolean eligible(Session s,CampaignDefinition.Event e){return (e.state().isBlank()||str(object(s.world,"states"),e.state()).equals(e.equalsValue()))&&CampaignCanvasRuntime.ready(s.map,"event:"+e.id(),null);}
     public static boolean state(ZombiesMap map,String key,String expected){var s=session(map);return s!=null&&str(object(s.world,"states"),key).equals(expected);}
     public static boolean item(ZombiesMap map,ServerPlayer actor,String key,int amount){var s=session(map);return s!=null&&actor!=null&&s.inventories.containsKey(actor.getUUID())&&count(s.inventories.get(actor.getUUID()),key)>=amount;}
     private static int count(JsonObject items,String key){return items.has(key)?items.get(key).getAsInt():0;}
+    public static void canvasActors(Session s){applyActors(s);}
+    public static void canvasEffect(Session s,CampaignDefinition.Effect f,ServerPlayer actor){
+        switch(f.operation()){
+            case STATE->object(s.world,"states").addProperty(f.key(),f.value());
+            case TASK->{object(s.world,"tasks").addProperty(f.key(),f.value());if(f.value().equals("active"))s.world.addProperty("activeTask",f.key());else if(str(s.world,"activeTask").equals(f.key()))s.world.addProperty("activeTask","");}
+            case ACTOR->{if(!List.of("alive","dead","hidden").contains(f.value()))throw new IllegalArgumentException("人物状态为 alive、dead 或 hidden");object(s.world,"actors").addProperty(f.key(),f.value());}
+            case COLLECTION->{s.rewards.add(f.key());object(s.world,"rewards").addProperty(s.chapter+"."+f.key(),true);}
+            case GIVE,TAKE->{var ids=f.everyone()?online(s).stream().map(ServerPlayer::getUUID).toList():actor==null?List.<UUID>of():List.of(actor.getUUID());if(ids.isEmpty())throw new IllegalArgumentException("个人剧情物品效果需要玩家交互，或选择发给全队");for(var id:ids){var items=s.inventories.get(id);if(items==null)throw new IllegalArgumentException("玩家不在当前战役");int value=count(items,f.key())+(f.operation()==CampaignDefinition.Operation.GIVE?f.count():-f.count());if(value<0||value>2304)throw new IllegalArgumentException("剧情仓库数量不足或超出上限");items.addProperty(f.key(),value);}}
+            default->throw new IllegalArgumentException("此效果请使用检查点标签或战役事件");
+        }
+    }
     public static String task(ZombiesMap map){var s=session(map);if(s==null)return "";String id=str(s.world,"activeTask");var entry=s.definition.tasks().stream().filter(t->t.id().equals(id)).findFirst().orElse(null);return entry==null?"":entry.description().isBlank()?entry.name():entry.description();}
     public static void event(ZombiesMap map,String id,ServerPlayer actor){var s=session(map);if(s==null)throw new IllegalArgumentException("请先从战役主页启动对局");if(s.settled||s.failed)throw new IllegalArgumentException("当前战役已结束或暂停");
-        var e=s.definition.events().stream().filter(v->v.id().equals(id)&&v.chapter().equals(s.chapter)).findFirst().orElseThrow(()->new IllegalArgumentException("当前章节没有该战役事件："+id));if(s.events.contains(id))return;if(!eligible(s,e))throw new IllegalArgumentException("战役事件前置条件尚未满足");
+        var e=s.definition.events().stream().filter(v->v.id().equals(id)&&v.chapter().equals(s.chapter)).findFirst().orElseThrow(()->new IllegalArgumentException("当前章节没有该战役事件："+id));if(s.events.contains(id))return;if(!(e.state().isBlank()||str(object(s.world,"states"),e.state()).equals(e.equalsValue()))||!CampaignCanvasRuntime.ready(map,"event:"+e.id(),actor))throw new IllegalArgumentException("战役事件前置条件尚未满足");
         captureActors(s);var oldWorld=s.world.deepCopy();var oldInventories=new LinkedHashMap<UUID,JsonObject>();s.inventories.forEach((p,i)->oldInventories.put(p,i.deepCopy()));var oldRewards=new HashSet<>(s.rewards);
         String checkpoint="";boolean finish=false;
         try{for(var f:e.effects())switch(f.operation()){

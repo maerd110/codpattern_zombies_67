@@ -25,7 +25,7 @@ public final class ZombiesClientBootstrap {
             return;
         }
         ModeClientActionHandlers.register("codpattern:zombies_coop",packet->com.cdp.codpattern.client.zombies.ZombiesCoopClient.accept((com.cdp.codpattern.app.zombies.npc.ZombiesCoopNetwork.State)packet));
-        ModeClientActionHandlers.register("codpattern:zombies_scenario_editor",packet -> {var reply=(com.cdp.codpattern.app.zombies.npc.ZombiesNpcDialogueNetwork.EditorReply)packet;com.cdp.codpattern.client.zombies.CampaignClient.accept(reply);com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesRulesScreen.accept(reply);com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesScenarioScreen.accept(reply);});
+        ModeClientActionHandlers.register("codpattern:zombies_scenario_editor",packet -> {var reply=(com.cdp.codpattern.app.zombies.npc.ZombiesNpcDialogueNetwork.EditorReply)packet;com.cdp.codpattern.client.gui.screen.zombies.deploy.CampaignCanvasScreen.accept(reply.token(),com.google.gson.JsonParser.parseString(reply.payload()).getAsJsonObject());com.cdp.codpattern.client.zombies.CampaignClient.accept(reply);com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesRulesScreen.accept(reply);com.cdp.codpattern.client.gui.screen.zombies.deploy.ZombiesScenarioScreen.accept(reply);});
         ModeClientActionHandlers.register(
                 com.cdp.codpattern.app.zombies.npc.ZombiesNpcDialogueNetwork.CLIENT_ACTION,
                 packet -> com.cdp.codpattern.client.gui.screen.zombies.ZombiesNpcDialogueScreen.handle((com.cdp.codpattern.app.zombies.npc.ZombiesNpcDialogueNetwork.View)packet));

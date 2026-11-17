@@ -50,13 +50,18 @@ public final class CampaignService {
         return response;
     }
     public static void validate(ServerPlayer p,CampaignDefinition def){
+        validate(p,def,Map.of());
+    }
+    public static void validate(ServerPlayer p,CampaignDefinition def,Map<String,ZombiesNpcConfig> pending){
+        var validatedMaps=new HashMap<String,ZombiesNpcConfig>();
         for(var c:def.campaigns())for(var chapter:c.chapters()){
             var map=CampaignRuntime.maps().stream().filter(m->m.getMapName().equals(chapter.map())&&m.getServerLevel().getServer()==p.getServer()).findFirst().orElseThrow(()->new IllegalArgumentException("未部署章节地图："+chapter.map()));
-            var npcs=ZombiesNpcRepository.load(ZombiesNpcRepository.path(p.getServer(),map.getMapName()));var keys=new HashSet<String>();var rules=new HashSet<String>();for(var n:npcs.npcs()){keys.add(n.id());for(var r:n.rules())rules.add(n.id()+"."+r.id());}
+            var npcs=pending.containsKey(map.getMapName())?pending.get(map.getMapName()):ZombiesNpcRepository.load(ZombiesNpcRepository.path(p.getServer(),map.getMapName()));validatedMaps.put(map.getMapName(),npcs);var keys=new HashSet<String>();var rules=new HashSet<String>();for(var n:npcs.npcs()){keys.add(n.id());for(var r:n.rules())rules.add(n.id()+"."+r.id());}
             if(!keys.containsAll(chapter.actors().keySet()))throw new IllegalArgumentException("人物绑定引用不存在的 NPC："+chapter.id());
             for(var event:def.events())if(event.chapter().equals(chapter.id())&&!event.rule().isBlank()&&!rules.contains(event.rule()))throw new IllegalArgumentException("事件引用不存在的 NPC 规则："+event.rule());
             for(var n:npcs.npcs())for(var r:n.rules())for(var action:r.executableActions())if(action.kind()==ZombiesNpcConfig.Kind.CAMPAIGN&&def.events().stream().noneMatch(e->e.id().equals(action.text())&&e.chapter().equals(chapter.id())))throw new IllegalArgumentException("NPC 动作引用未知战役事件："+action.text());
         }
+        def.canvas().validateNodes(def,validatedMaps);
     }
     private static void publicDefinition(ServerPlayer p,JsonObject out){var d=CampaignStore.definition(p.getServer());out.add("campaigns",CampaignStore.GSON.toJsonTree(d.campaigns()));out.add("itemNames",CampaignStore.GSON.toJsonTree(d.items()));out.add("collectionNames",CampaignStore.GSON.toJsonTree(d.collections()));}
     private static void home(ServerPlayer p,JsonObject out){out.addProperty("view","home");publicDefinition(p,out);var a=CampaignStore.get(p.getServer()).account(p.getUUID());out.addProperty("public",a.get("public").getAsBoolean());var saves=new JsonArray();for(var entry:a.getAsJsonObject("saves").entrySet()){var save=entry.getValue().getAsJsonObject();var row=new JsonObject();row.addProperty("id",entry.getKey());row.addProperty("name",CampaignRuntime.str(save,"name"));row.addProperty("campaign",CampaignRuntime.str(save,"campaign"));row.add("point",CampaignStore.tip(save).deepCopy());row.getAsJsonObject("point").remove("world");row.getAsJsonObject("point").remove("local");row.getAsJsonObject("point").remove("items");saves.add(row);}out.add("saves",saves);

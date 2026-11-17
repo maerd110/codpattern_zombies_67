@@ -40,10 +40,12 @@ public final class ZombiesNpcRuntime {
     public void campaignActor(String id,String value){var e=entities.get(id);if(e!=null){e.setInvisible(value.equals("hidden"));if(e.storyAlive()!=value.equals("alive"))e.apply(new ZombiesNpcConfig.Appearance(null,null,null,value.equals("alive"),null));}}
     public void captureCampaign(com.google.gson.JsonObject state){
         state.add("npcRules",ZombiesNpcRepository.GSON.toJsonTree(completed));var local=new com.google.gson.JsonObject();entities.forEach((id,e)->{var n=new com.google.gson.JsonObject();n.addProperty("alive",e.storyAlive());n.addProperty("pose",e.basePosture());n.addProperty("x",e.getX());n.addProperty("y",e.getY());n.addProperty("z",e.getZ());n.addProperty("yaw",e.getYRot());local.add(id,n);});state.add("npcs",local);
+        var programs=new com.google.gson.JsonArray();for(var s:sequences.values())if(s.rule!=null){var n=new com.google.gson.JsonObject();n.addProperty("npc",s.npc.id());n.addProperty("rule",s.rule.id());n.addProperty("cursor",s.cursor);n.addProperty("index",s.index);n.addProperty("line",s.line);n.addProperty("segment",s.segment);n.addProperty("remaining",Math.max(0,s.due-level().getGameTime()));n.addProperty("nodeStarted",s.nodeStarted);n.addProperty("executedAction",s.executedAction);n.addProperty("actionCompleted",s.actionCompleted);n.addProperty("interactionReceived",s.interactionReceived);if(s.actor!=null)n.addProperty("actor",s.actor.getUUID().toString());programs.add(n);}state.add("npcPrograms",programs);
     }
     public void restoreCampaign(com.google.gson.JsonObject state){
         if(state.has("npcRules"))for(var id:state.getAsJsonArray("npcRules"))completed.add(id.getAsString());
         if(state.has("npcs"))for(var pair:state.getAsJsonObject("npcs").entrySet()){var e=entities.get(pair.getKey());if(e==null)throw new IllegalArgumentException("检查点引用的 NPC 已被删除："+pair.getKey());var n=pair.getValue().getAsJsonObject();e.apply(new ZombiesNpcConfig.Appearance(null,null,ZombiesNpcConfig.Pose.values()[n.get("pose").getAsInt()],n.get("alive").getAsBoolean(),new ZombiesNpcConfig.Position(n.get("x").getAsDouble(),n.get("y").getAsDouble(),n.get("z").getAsDouble(),n.get("yaw").getAsFloat())));}
+        if(state.has("npcPrograms"))for(var value:state.getAsJsonArray("npcPrograms")){var n=value.getAsJsonObject();var npc=config.npcs().stream().filter(v->v.id().equals(n.get("npc").getAsString())).findFirst().orElseThrow(()->new IllegalArgumentException("检查点中的 NPC 已被删除"));var rule=npc.rules().stream().filter(r->r.id().equals(n.get("rule").getAsString())).findFirst().orElseThrow(()->new IllegalArgumentException("检查点中的规则已被删除"));var actor=map.npcPlayers().stream().filter(p->n.has("actor")&&p.getUUID().toString().equals(n.get("actor").getAsString())).findFirst().orElseGet(()->map.npcPlayers().stream().findFirst().orElse(null));var s=new Sequence(npc,rule,rule.trigger()==ZombiesNpcConfig.Trigger.AUTO?null:actor,rule.executableActions());s.index=n.get("index").getAsInt();s.line=n.get("line").getAsInt();s.segment=n.get("segment").getAsInt();s.nodeStarted=n.get("nodeStarted").getAsBoolean();s.executedAction=n.get("executedAction").getAsBoolean();s.actionCompleted=n.get("actionCompleted").getAsBoolean();s.interactionReceived=n.get("interactionReceived").getAsBoolean();s.due=level().getGameTime()+n.get("remaining").getAsLong();if(s.graphNodes!=null){s.cursor=n.get("cursor").getAsString();var node=s.graphNodes.get(s.cursor);if(node==null)throw new IllegalArgumentException("检查点中的节点已被删除");if(node.type()==ZombiesNpcGraph.Type.CHOICE)s.nodeStarted=false;}sequences.put(npc.id(),s);}
     }
     public List<ZombiesNpcEntity> supportNpcs(){return entities.values().stream().filter(n->n.storyAlive()&&n.combat.active()).toList();}
     boolean managementPaused(ZombiesNpcEntity npc){return map.coopRuntime().managementPaused(npc);}
@@ -59,7 +61,7 @@ public final class ZombiesNpcRuntime {
 
     public void validate(ZombiesNpcConfig candidate) {
         for (var npc : candidate.npcs()) {
-            validateAppearance(npc.appearance());
+            com.cdp.codpattern.app.zombies.service.ZombiesStartupDiagnostics.check(npc.id()+" / 外观与位置", () -> validateAppearance(npc.appearance()));
             for (var rule : npc.rules()) {
                 if (!rule.requiredItem().isBlank()) ZombiesNpcInventory.parse(rule.requiredItem());
                 for (int group : rule.openedBarriers()) requireBarrier(group);
@@ -70,7 +72,7 @@ public final class ZombiesNpcRuntime {
                         default -> { }
                     }
                 }
-                for (var action : rule.executableActions()) switch (action.kind()) {
+                for (var action : rule.executableActions()) com.cdp.codpattern.app.zombies.service.ZombiesStartupDiagnostics.check(npc.id()+" / "+rule.id()+" / "+action.kind(), () -> { switch (action.kind()) {
                     case NPC -> { if (action.appearance() != null) validateAppearance(action.appearance()); }
                     case SET_BLOCK -> {
                       for (var placement : action.blockPlacements()) {
@@ -82,7 +84,7 @@ public final class ZombiesNpcRuntime {
                     case OPEN_BARRIER -> requireBarrier(action.barrierGroup());
                     case TAKE_ITEM, GIVE_ITEM -> ZombiesNpcInventory.parse(action.item());
                     default -> { }
-                }
+                } });
             }
         }
     }
@@ -384,9 +386,13 @@ public final class ZombiesNpcRuntime {
         // Graphs are acyclic and bounded on load. This budget also guards future interpreter changes.
         for (int steps = 0; steps < 256; steps++) {
             var node = sequence.graphNodes.get(sequence.cursor);
+            String campaignNode=com.cdp.codpattern.app.zombies.campaign.CampaignCanvasRuntime.key(map,sequence.npc.id(),sequence.rule.id(),node.id());
+            if(!com.cdp.codpattern.app.zombies.campaign.CampaignCanvasRuntime.ready(map,campaignNode,sequence.actor)){sequence.due=now+20;return;}
             String next = node.next();
+            String signalPort="done";
             switch (node.type()) {
                 case END -> {
+                    campaignReached(sequence,node,"done");
                     if (node.complete()) completed.add(sequence.npc.id() + "." + sequence.rule.id());
                     sequences.remove(sequence.npc.id()); releaseUnusedChunks(); return;
                 }
@@ -404,7 +410,7 @@ public final class ZombiesNpcRuntime {
                     return;
                 }
                 case ENTRY -> { }
-                case BRANCH -> next = condition(node.condition(), sequence.actor) ? node.next() : node.onFalse();
+                case BRANCH -> {boolean passed=condition(node.condition(),sequence.actor);next=passed?node.next():node.onFalse();signalPort=passed?"true":"false";}
                 case AWAIT -> {
                     if (!condition(node.condition(), sequence.actor)) { sequence.due = now + 20; if(sequence.notice.isEmpty())reportPending(sequence.actor,sequence); return; }
                 }
@@ -416,6 +422,7 @@ public final class ZombiesNpcRuntime {
                     }
                 }
                 case ACTION -> {
+                    if(sequence.actionCompleted)break;
                     var action = node.action();
                     if (!sequence.nodeStarted) {
                         sequence.nodeStarted = true;
@@ -435,18 +442,22 @@ public final class ZombiesNpcRuntime {
                         }
                     } else executeAction(action, target, sequence.actor);
                     sequence.executedAction = true; sequence.blockedMessage = "";
+                    sequence.actionCompleted=true;
                 }
             }
+            campaignReached(sequence,node,signalPort);
             if(next.equals(sequence.rule.graph().entry().id())) {
                 sequence.cursor=next;sequence.nodeStarted=false;sequence.line=0;sequence.segment=0;sequence.executedAction=false;
                 if(sequence.rule.trigger()==ZombiesNpcConfig.Trigger.INTERACT){sequences.remove(sequence.npc.id());releaseUnusedChunks();}
                 else sequence.due=now+20;
                 return;
             }
-            sequence.cursor = next; sequence.nodeStarted = false; sequence.line = 0; sequence.segment=0;sequence.notice="";
+            sequence.cursor = next; sequence.nodeStarted = false;sequence.actionCompleted=false; sequence.line = 0; sequence.segment=0;sequence.notice="";
         }
         throw new IllegalStateException("NPC graph execution budget exceeded");
     }
+
+    private void campaignReached(Sequence sequence,ZombiesNpcGraph.Node node,String port){com.cdp.codpattern.app.zombies.campaign.CampaignCanvasRuntime.reached(map,sequence.npc.id(),sequence.rule.id(),node.id(),port,sequence.actor);}
 
     private boolean canConverse(Sequence s) {
         var entity=entities.get(s.npc.id());
@@ -469,6 +480,7 @@ public final class ZombiesNpcRuntime {
                 var chosen=node.options().stream().filter(o->o.id().equals(option)).findFirst().orElseThrow();
                 s.actor=map.npcPlayers().stream().filter(p->map.isAliveSurvivor(p.getUUID())&&com.cdp.codpattern.app.zombies.campaign.CampaignVotes.connected(p)).findFirst().orElse(s.actor);
                 if(chosen.condition()!=null&&!condition(chosen.condition(),s.actor)){s.nodeStarted=false;return;}
+                try{if(!com.cdp.codpattern.app.zombies.campaign.CampaignCanvasRuntime.ready(map,com.cdp.codpattern.app.zombies.campaign.CampaignCanvasRuntime.key(map,s.npc.id(),s.rule.id(),node.id()),s.actor))throw new IllegalArgumentException("跨关前置条件尚未满足");campaignReached(s,node,chosen.id());}catch(IllegalArgumentException blocked){s.nodeStarted=false;s.voteQueued=false;if(s.actor!=null)s.actor.sendSystemMessage(Component.literal(blocked.getMessage()));return;}
                 s.cursor=chosen.next();s.nodeStarted=chosen.closeOnSelect()||chosen.next().equals(node.id());s.line=0;s.segment=0;s.due=level().getGameTime();
                 if(chosen.next().equals(s.rule.graph().entry().id())){sequences.remove(s.npc.id());releaseUnusedChunks();}
             });return;
@@ -509,6 +521,7 @@ public final class ZombiesNpcRuntime {
                     || selected.condition()!=null&&!runtime.condition(selected.condition(),player)) {
                 runtime.openDialogue(s,node);return false;
             }
+            try{if(!com.cdp.codpattern.app.zombies.campaign.CampaignCanvasRuntime.ready(runtime.map,com.cdp.codpattern.app.zombies.campaign.CampaignCanvasRuntime.key(runtime.map,s.npc.id(),s.rule.id(),node.id()),player))return false;runtime.campaignReached(s,node,selected.id());}catch(IllegalArgumentException blocked){player.sendSystemMessage(Component.literal(blocked.getMessage()));return false;}
             runtime.closeDialogue(s);
             if(selected.next().equals(s.rule.graph().entry().id())) {
                 runtime.sequences.remove(s.npc.id());runtime.releaseUnusedChunks();return true;
@@ -597,7 +610,7 @@ public final class ZombiesNpcRuntime {
         String notice="";long lastNotice;
         Map<String, ZombiesNpcGraph.Node> graphNodes;
         String cursor;
-        boolean nodeStarted, executedAction, interactionReceived, voteQueued;
+        boolean nodeStarted, executedAction, interactionReceived, voteQueued, actionCompleted;
         long armedAt, refreshAt;
         ZombiesNpcDialogueNetwork.View view;
         Sequence(ZombiesNpcConfig.Npc npc, ZombiesNpcConfig.Rule rule, ServerPlayer actor, List<ZombiesNpcConfig.Action> actions) {

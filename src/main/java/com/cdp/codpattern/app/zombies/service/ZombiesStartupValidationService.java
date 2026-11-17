@@ -187,6 +187,8 @@ public final class ZombiesStartupValidationService {
         snapshot.firstError().ifPresent(issue -> {
             params.put("firstIssueSource", ModePlayerValue.ofString(issue.source()));
             params.put("firstIssueCode", ModePlayerValue.ofString(issue.code().key()));
+            params.put("firstIssueSubject", ModePlayerValue.ofString(issue.subject()));
+            params.put("reason", ModePlayerValue.ofString(issue.message()));
         });
         return params;
     }

@@ -26,6 +26,7 @@ public final class ZombiesNpcEditorService {
     public static Snapshot perform(ServerPlayer player, String mapName, String operation, String payload) {
         ZombiesMap map = null;
         try {
+            com.cdp.codpattern.app.zombies.campaign.CampaignAuthoringTransaction.recover(player.getServer());
             if (!(player.getMainHandItem().getItem() instanceof ZombiesDeployTool) || !ToolAccessHelper.hasAdminAccess(player)) {
                 throw new IllegalArgumentException("gui.codpattern.zombies.npc.error.access");
             }
