@@ -339,6 +339,7 @@ public final class ZombiesNpcDeployScreen extends Screen {
                 blockPlacements(action);
             }
             case "MAP_EVENT" -> selection("map_event",value(action,"text",""),events,"",selected->{action.addProperty("text",selected);rebuildWidgets();});
+            case "CAMPAIGN" -> text("campaign_event",action,"text","");
             case "OPEN_BARRIER" -> {
                 List<String> groups = barriers.stream().map(String::valueOf).toList();
                 if (groups.isEmpty()) heading("no_barriers");

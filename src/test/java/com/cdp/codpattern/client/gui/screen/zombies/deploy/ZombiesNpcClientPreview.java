@@ -186,7 +186,8 @@ public final class ZombiesNpcClientPreview {
             cursorChecks(client);
             rulesEditorChecks(screen,client,output);
             raritySyncChecks(client,output);
-            Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
+            campaignScreens(output);
+            Files.writeString(output.resolve("result.txt"), "PASS "+renderCount+" client renders and interactions: campaign profile/save/editor/vote, scenario card navigation, isolated detail forms, nested entries, scene selection/capture replies, and NPC graph regression checks\n");
         } catch (Throwable failure) {
             Files.writeString(output.resolve("result.txt"), "FAIL " + failure + "\n");
             throw failure;
@@ -586,6 +587,14 @@ public final class ZombiesNpcClientPreview {
     }
     private static void set(Object target, String name, Object value) throws Exception {
         var field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value);
+    }
+    private static void campaignScreens(Path output)throws Exception{
+        var d=com.google.gson.JsonParser.parseString("{\"campaigns\":[{\"id\":\"story\",\"name\":\"失落之城\",\"chapters\":[{\"id\":\"school\",\"name\":\"品学楼\",\"map\":\"学校\"}]}],\"itemNames\":[{\"id\":\"letter\",\"name\":\"盖章通行证\"}],\"collectionNames\":[{\"id\":\"medal\",\"name\":\"品学楼通关纪念\"}],\"saves\":[{\"id\":\"s1\",\"name\":\"失落之城 · 老人获救路线\",\"point\":{\"chapter\":\"school\",\"checkpoint\":\"安全屋\"}}],\"people\":[{\"id\":\"p1\",\"name\":\"MIRinn\"}],\"public\":true}").getAsJsonObject();
+        var screen=new CampaignScreen(null,false);set(screen,"data",d);render(screen,640,360,output.resolve("campaign-home-640.png"));render(screen,320,240,output.resolve("campaign-home-320.png"));
+        var config=com.cdp.codpattern.app.zombies.campaign.CampaignStore.GSON.toJsonTree(com.cdp.codpattern.app.zombies.campaign.CampaignDefinition.empty()).getAsJsonObject();var editor=new CampaignScreen(null,true);set(editor,"config",config);set(editor,"view","editor");set(editor,"data",new com.google.gson.JsonObject());render(editor,640,360,output.resolve("campaign-editor-640.png"));render(editor,320,240,output.resolve("campaign-editor-320.png"));
+        press(editor,"战役");render(editor,320,240,output.resolve("campaign-catalog-320.png"));press(editor,"＋ 新增战役");render(editor,320,240,output.resolve("campaign-detail-320.png"));
+        var profile=d.deepCopy();profile.addProperty("name","MIRinn");profile.add("collections",com.google.gson.JsonParser.parseString("{\"medal\":1}"));profile.add("completed",com.google.gson.JsonParser.parseString("{\"school\":true}"));set(screen,"data",profile);set(screen,"view","profile");render(screen,640,360,output.resolve("campaign-profile-640.png"));
+        com.cdp.codpattern.client.zombies.CampaignClient.vote=com.google.gson.JsonParser.parseString("{\"token\":\"vote\",\"text\":\"老人知道出城的道路，你们决定怎么做？\",\"round\":0,\"seconds\":25,\"decider\":true,\"selected\":\"save\",\"options\":[{\"id\":\"save\",\"name\":\"救下老人，带他前往安全屋\"},{\"id\":\"leave\",\"name\":\"先寻找其他出口\"}]}").getAsJsonObject();screen.showVote();render(screen,640,360,output.resolve("campaign-vote-640.png"));render(screen,320,240,output.resolve("campaign-vote-320.png"));com.cdp.codpattern.client.zombies.CampaignClient.vote=new com.google.gson.JsonObject();
     }
     private static void press(Screen screen, String caption) {
         button(screen, caption).onPress();

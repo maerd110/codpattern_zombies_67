@@ -275,7 +275,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                 this::failurePriority,
                 state -> state.waveState().isWaveComplete(),
                 List.of(new ZombiesLifecycleRuntimeHooks()));
-        this.lifecycleRuntime.setIntermissionReady(()->!waveTextScheduler.isActive()&&!scenarioRuntime.dialogueActive());
+        this.lifecycleRuntime.setIntermissionReady(()->!waveTextScheduler.isActive()&&!scenarioRuntime.dialogueActive()&&!com.cdp.codpattern.app.zombies.campaign.CampaignVotes.active(this)&&com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.canAdvance(this));
         this.startVoteService = new ZombiesStartVoteService(new ZombiesStartVoteHooks());
         this.roomHandle = ZombiesRoomHandleFactory.create(this);
     }
@@ -323,9 +323,12 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
         if (runtimeState.phase() == ZombiesGamePhase.START_VOTE) {
             startVoteService.tickVoteSession();
         }
-        scenarioRuntime.tick();
-        lifecycleRuntime.tick();
-        npcRuntime.tick(npcWave());
+        if(!com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.hold(this)){
+            scenarioRuntime.tick();
+            lifecycleRuntime.tick();
+            npcRuntime.tick(npcWave());
+        }
+        com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.tick(this);
         tickCombatRegen();
         syncBuffRuntimeEffects();
         syncBarrierVisuals();
@@ -345,6 +348,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
 
     private void startGame(Collection<UUID> memberSnapshot) {
         if (recoveryBlocked()) return;
+        com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.prepare(this);
         MinecraftServer server = getServerLevel().getServer();
         List<UUID> members = normalizeStartMembers(memberSnapshot);
         if (server == null || members.isEmpty()) {
@@ -705,6 +709,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     }
 
     private void notifyStartupFailure(ZombiesServiceResult<?> result) {
+        com.mojang.logging.LogUtils.getLogger().warn("Zombies startup failed in {}: {}",getMapName(),result==null?"unknown":result.logMessage());
         notifySurvivors(startupFailureMessage(result));
     }
 
@@ -773,6 +778,38 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
 
     public int npcWave() { return runtimeState.waveState().targetWave(); }
     public List<ServerPlayer> npcPlayers() { return List.copyOf(survivorPlayers()); }
+
+    public void campaignJoin(ServerPlayer player) {
+        if(currentPhase()!=ZombiesGamePhase.WAITING||isSurvivorTeamFull())throw new IllegalArgumentException("目标房间不可加入");
+        if(!termination().canJoin(roomId,player.getUUID()))throw new IllegalArgumentException("玩家还有未完成的房间恢复，请稍后重试");
+        join(com.cdp.codpattern.app.zombies.model.ZombiesTeamNames.SURVIVORS,player);
+        if(!checkGameHasPlayer(player.getUUID()))throw new IllegalArgumentException("无法加入章节房间");
+        onSurvivorJoined(player);
+    }
+    public void campaignWave(int wave){if(wave<1||wave>runtimeState.waveState().maxWave())throw new IllegalArgumentException("检查点波次不再存在，请检查章节配置");runtimeState.waveState().prepareTargetWave(wave);}
+    public void campaignStartGame(){
+        if(currentPhase()!=ZombiesGamePhase.WAITING||termination().blocked(roomId))throw new IllegalArgumentException("房间尚未完成清理，不能启动战役");
+        // The normal start-vote path opens a new termination generation before startGame.
+        // Campaign starts must perform the same step, including when resuming an ended room.
+        beginAttempt(survivorPlayerIds());startGame();
+    }
+    public boolean campaignCanJoin(){var s=com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.session(this);return s!=null&&s.started&&!s.settled&&!s.failed&&currentPhase().isRoundRunning()&&!isSurvivorTeamFull()&&!recoveryBlocked();}
+    public void campaignLateJoin(ServerPlayer player){
+        if(!campaignCanJoin()||!termination().canJoin(roomId,player.getUUID()))throw new IllegalArgumentException("战役房间无法加入");
+        var distributor=new ZombiesStarterKitDistributor(this::backpackConfig);var kit=distributor.prepareStarterWeapons(roomId,List.of(player.getUUID()));
+        var teleporter=new ZombiesSpawnAssignmentService();var plan=teleporter.assignFromInitialSpawns(runtimeInitialSpawnPoints(),List.of(player.getUUID()));
+        if(!kit.success()||kit.value().isEmpty()||!plan.success()||plan.value().isEmpty())throw new IllegalArgumentException("入场装备或出生点无效");
+        termination().capture(roomId,player);
+        join(com.cdp.codpattern.app.zombies.model.ZombiesTeamNames.SURVIVORS,player);
+        if(!checkGameHasPlayer(player.getUUID()))throw new IllegalArgumentException("无法加入战役房间");
+        try{
+            termination().registerPersistentTag(player,"codpattern.zombies");termination().registerRoundInventory(player);onSurvivorJoined(player);
+            if(!distributor.applyStarterWeapons(getServerLevel(),kit.value().get()).success())throw new IllegalArgumentException("初始装备发放失败");
+            initializeStarterWeaponStates(kit.value());
+            if(!teleporter.executeTeleport(this,plan.value().get()).success())throw new IllegalArgumentException("入场传送失败");
+            restoreRespawnedPlayer(player);markActiveRoundPlayers(List.of(player.getUUID()));
+        }catch(RuntimeException failure){leaveRoomPlayer(player);throw failure;}
+    }
 
     public void failNpcRound() { lifecycleRuntime.fail(ZombiesErrorCode.of("npc.action_failed")); }
 
@@ -1636,6 +1673,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
                 restoreStartupHealth(startupContext.memberIds());
                 markActiveRoundPlayers(startupContext.memberIds());
                 lifecycleRuntime.beginOpeningCountdown(startupContext.preflightSnapshot().get().maxWave());
+                com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.started(ZombiesMap.this);
                 markRoomListDirty();
             }
             return ZombiesServiceResult.success(Optional.empty());
@@ -1710,6 +1748,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
     private final class ZombiesCleanupHooks implements ZombiesCleanupService.Hooks {
         @Override
         public void beforeCleanup(ZombiesCleanupParticipant.ZombiesCleanupContext context) {
+            com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.cleanup(ZombiesMap.this);
             scenarioRuntime.reset();
             npcRuntime.reset();
             clearRuntimeBarrierBlocks();
@@ -1765,6 +1804,7 @@ public class ZombiesMap extends BaseMap implements EndTeleportMap<ZombiesMap>, c
         @Override
         public ZombiesServiceResult<Void> onEnter(com.cdp.codpattern.app.zombies.runtime.ZombiesPhaseTransitionContext context) {
             if (recoveryBlocked()) return ZombiesServiceResult.ok();
+            if(runtimeState.phase()==ZombiesGamePhase.VICTORY)com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.victory(ZombiesMap.this);
             if (runtimeState.phase() == ZombiesGamePhase.INTERMISSION) {
                 objectStateStore.refreshWeaponWallOffersForWave(
                         runtimeObjects().weaponWalls(),

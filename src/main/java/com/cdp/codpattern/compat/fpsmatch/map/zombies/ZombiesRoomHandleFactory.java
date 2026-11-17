@@ -156,7 +156,7 @@ final class ZombiesRoomHandleFactory {
 
         @Override
         public boolean isJoinable() {
-            return !map.recoveryBlocked() && map.runtimeState().phase() == ZombiesGamePhase.WAITING && !map.isSurvivorTeamFull();
+            return !map.recoveryBlocked() && (map.runtimeState().phase() == ZombiesGamePhase.WAITING || map.campaignCanJoin()) && !map.isSurvivorTeamFull();
         }
 
         @Override
@@ -215,6 +215,10 @@ final class ZombiesRoomHandleFactory {
                 return JoinRoomResult.success(roomId(), CODE_ALREADY_JOINED);
             }
             if (map.runtimeState().phase() != ZombiesGamePhase.WAITING) {
+                if(map.campaignCanJoin()&&(request==null||!request.spectator())){
+                    try{map.campaignLateJoin(player);rosterCoordinator.broadcastFullSnapshot();return JoinRoomResult.success(roomId(),CODE_OK);}
+                    catch(RuntimeException failure){return JoinRoomResult.failure(roomId(),CODE_PHASE_LOCKED,failure.getMessage());}
+                }
                 return JoinRoomResult.failure(roomId(), CODE_PHASE_LOCKED, "");
             }
             JoinRoomRequest resolvedRequest = request == null ? JoinRoomRequest.autoTeam() : request;

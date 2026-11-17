@@ -6,7 +6,7 @@ import java.util.*;
 public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
     public ZombiesNpcGraph(List<Node> nodes) { this(nodes, 0); }
     public enum Type { ENTRY, ACTION, BRANCH, WAIT, AWAIT, INTERACT, CHOICE, END }
-    public enum TestKind { WAVE, BARRIER, ITEM_ROOM, ITEM_ACTOR, RULE_DONE, NPC_ALIVE }
+    public enum TestKind { WAVE, BARRIER, ITEM_ROOM, ITEM_ACTOR, RULE_DONE, NPC_ALIVE, CAMPAIGN_STATE, CAMPAIGN_ITEM }
     public enum Match { ALL, ANY }
     public record Test(TestKind kind, int value, String item, Integer count, String reference, boolean negated) {
         public Test {
@@ -17,7 +17,7 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             if (count < 1 || count > 2304 || value < 0) throw new IllegalArgumentException("条件数量或数值无效");
             if (kind == TestKind.BARRIER && value < 1) throw new IllegalArgumentException("屏障分组必须大于 0");
             if ((kind == TestKind.ITEM_ROOM || kind == TestKind.ITEM_ACTOR) && item.isBlank()) throw new IllegalArgumentException("物品条件需要选择物品");
-            if ((kind == TestKind.RULE_DONE || kind == TestKind.NPC_ALIVE) && reference.isBlank()) throw new IllegalArgumentException("条件需要选择目标");
+            if ((kind == TestKind.RULE_DONE || kind == TestKind.NPC_ALIVE || kind == TestKind.CAMPAIGN_STATE || kind == TestKind.CAMPAIGN_ITEM) && reference.isBlank()) throw new IllegalArgumentException("条件需要选择目标");
         }
     }
     public record Condition(Match match, List<Test> tests) {
@@ -48,7 +48,8 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
     }
     public record Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action,
                        Condition condition, double seconds, String next, String onFalse, Boolean complete,
-                       String text, String speaker, List<Option> options, List<Segment> segments) {
+                       String text, String speaker, List<Option> options, List<Segment> segments, Boolean teamVote) {
+        public Node(String id,Type type,double x,double y,ZombiesNpcConfig.Action action,Condition condition,double seconds,String next,String onFalse,Boolean complete,String text,String speaker,List<Option> options,List<Segment> segments){this(id,type,x,y,action,condition,seconds,next,onFalse,complete,text,speaker,options,segments,false);}
         public Node(String id,Type type,double x,double y,ZombiesNpcConfig.Action action,Condition condition,double seconds,String next,String onFalse,Boolean complete,String text,String speaker,List<Option> options){this(id,type,x,y,action,condition,seconds,next,onFalse,complete,text,speaker,options,List.of());}
         public Node(String id, Type type, double x, double y, ZombiesNpcConfig.Action action, Condition condition, double seconds, String next, String onFalse, Boolean complete) {
             this(id,type,x,y,action,condition,seconds,next,onFalse,complete,"","",List.of());
@@ -57,6 +58,7 @@ public record ZombiesNpcGraph(List<Node> nodes, Integer canvasVersion) {
             this(id,type,x,y,action,condition,seconds,next,onFalse,true);
         }
         public Node {
+            teamVote=Boolean.TRUE.equals(teamVote);
             text = text == null ? "" : text;
             speaker = speaker == null ? "" : speaker;
             options = options == null ? List.of() : List.copyOf(options);

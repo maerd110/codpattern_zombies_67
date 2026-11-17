@@ -35,6 +35,7 @@ public final class ZombiesNpcEvents {
         for (var level : event.getServer().getAllLevels()){ZombiesNpcBlockJournal.get(level).restoreAll(level);com.cdp.codpattern.app.zombies.scenario.ZombiesSceneEntityJournal.get(level).restoreAll(level);}
     }
     @SubscribeEvent public static void tick(net.minecraftforge.event.TickEvent.ServerTickEvent event) {
+        if(event.phase==net.minecraftforge.event.TickEvent.Phase.END){com.cdp.codpattern.app.zombies.campaign.CampaignVotes.tick();com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.drain(event.getServer());}
         if (event.phase == net.minecraftforge.event.TickEvent.Phase.END && event.getServer().getTickCount() % 20 == 0
                 && com.phasetranscrystal.fpsmatch.core.FPSMCore.initialized()) {
             ZombiesNpcRuntime.cleanupDetached(event.getServer(), false);
@@ -42,6 +43,7 @@ public final class ZombiesNpcEvents {
         }
     }
     @SubscribeEvent(priority = EventPriority.LOWEST) public static void stopping(net.minecraftforge.event.server.ServerStoppingEvent event) {
+        com.cdp.codpattern.app.zombies.campaign.CampaignVotes.stop(event.getServer());com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.stop(event.getServer());com.cdp.codpattern.app.zombies.campaign.CampaignService.clear();
         ZombiesNpcEditorUpload.clear();
         ZombiesNpcRuntime.cleanupDetached(event.getServer(), true);
         com.cdp.codpattern.app.zombies.scenario.ZombiesScenarioRuntime.cleanupDetached(event.getServer(),true);

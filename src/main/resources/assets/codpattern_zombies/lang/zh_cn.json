@@ -648,5 +648,10 @@
     "gui.codpattern.zombies.npc.conversation.stage_delete": "删除此段",
     "gui.codpattern.zombies.npc.conversation.stage_hint": "点击回应进入下一段；最后一段保留条件选项和连线。",
     "gui.codpattern.zombies.npc.conversation.close_wait": "选择后关闭 · 下次交互从目标对话继续",
-    "gui.codpattern.zombies.npc.conversation.continue": "选择后立即前往目标（点击改为关闭等待）"
+    "gui.codpattern.zombies.npc.conversation.continue": "选择后立即前往目标（点击改为关闭等待）",
+    "key.codpattern.zombies.campaign": "个人主页与战役存档",
+    "gui.codpattern.zombies.npc.kind.CAMPAIGN": "触发战役事件",
+    "gui.codpattern.zombies.npc.campaign_event": "战役事件内部编号",
+    "gui.codpattern.zombies.npc.graph.test.CAMPAIGN_STATE": "战役重要状态",
+    "gui.codpattern.zombies.npc.graph.test.CAMPAIGN_ITEM": "存档剧情仓库"
 }

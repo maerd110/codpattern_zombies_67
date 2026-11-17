@@ -1,24 +1,34 @@
-# 当前交付：0.2.33b 可调场景容量与大配置分段上传
+# 当前交付：0.2.34b 战役存档与连续关卡第一版
 
-用户询问 4096 格限制，进一步要求能无限制则无限制，否则作为独立参数由部署者调整。已实现为每关卡独立设置，并保留资源保护：
+## 已实现
 
-- ZombiesScenarioConfig 新增 snapshotLimits（SnapshotLimits），maxRegionBlocks 默认 65536、maxEventBlocks 默认 131072。允许 1..1048576，0／负数／超过保护范围拒绝。旧配置自动补默认值。保留原有 5／6／7 参数构造。
-- 配置构造时检查每区域及每事件合计，报错给出实际体积、设置上限与事件名。空气计入。Scene／Region 原本固定4096验证改为结构完整性和防溢出验证，MapEvent不再为计数生成全部 placements。
-- 部署 UI 任意条目列表左上“场景容量设置”；区域详情“调整本关卡场景容量上限”。设置独立详情页，不能被删除；返回保留工作副本。源场景下方实时显示体积与上限。工作副本容量可直接用于 capture，之后与配置一同保存。
-- ScenarioEditorService.capture 在世界读取／数组分配前检查所提交容量，默认取已保存当前关卡设置；权限及等待阶段限制保留。effective 导入旧波次时保留 snapshotLimits，运行时使用保存并冻结的配置。
-- 场景捕获缓存状态名称；放置计划缓存解析的状态 NBT，区域按格迭代，不先生成 Position/BlockPlacement 对象列表。区域边界与设备交叉保护整区检查一次；仅按区块加载。还原缓存相同 NBT 状态解析。保持失败回滚和原有实体恢复。
-- 编辑网络原 C2S28KB限制会阻止大配置保存。增加 EditorFragment 消息，NPC dialogue 协议 9->10。每片最多28000字节；管理员手持部署工具才能上传；按玩家隔离，只接收有序同token/map/op/total的片段。最多33片／900000压缩字节、解压2MiB、16并发、30秒超时，完整后才调用原保存服务。停服清空缓存。小请求沿用旧消息。Scenario/Rules编辑页面允许检查可分段的大请求。
+- 默认 H 个人主页（可在 MC 按键设置修改）：创建战役、选择/继续/命名/删除个人故事存档、历史章节起点回玩建立独立分支、个人剧情仓库、账号收藏和他人公开展示。
+- 部署工具新增“战役与跨关剧情”，沿用卡片与分层详情：战役/章节顺序、重要状态、人物身份与各关 NPC 绑定、剧情物品、任务、收藏、事件/效果。Gson records 校验引用、权限、WAITING阶段、并发编辑修订号，使用既有分段上传通道。
+- CampaignStore：配置 world/serverconfig/codpattern_zombies/campaigns.json，数据 world/data/codpattern_zombies/campaign-state.json；账户+多名队员存档同一 copy-on-write 原子文件事务，写入强制落盘，失败保留旧磁盘及提交状态。
+- CampaignRuntime：按房间尝试 UUID 隔离故事，存档历史与个人收藏分开；队员选择保留路线，不覆盖不兼容旧档；同路线继续更新对应档；通关后也可保留刚完成的结果。
+- 按个人存档持有剧情物品；新加入路线继承房主检查点当时仍持有的道具，匹配同一路线则保留自己的仓库。GIVE/TAKE 可个人或每名在线成员，整事件回滚；账号收益只在结算发给在线房间成员。
+- 安全检查点保存 NPC 生死/姿态/位置和完成规则、屏障开启、顺序地图事件、指引、波次与重要状态；中断/失败后从最后成功检查点恢复，战斗资源重新初始化。
+- 实际开局及中途加入接入原房间/装备/传送/回收接口。启动战役先 beginAttempt，与原开局投票生命周期一致，不能跳过未完成的恢复。
+- 通关暂停旧结算倒计时，房主选择下一关或结束；可在连续章节复用同一部署地图。下一关排队前后检查房间身份与占用；客户端旧请求必须匹配 instance。
+- 房主掉线或离开转交在线最低延迟成员，不改变世界；结算/保存失败等待期间全员离线60秒释放房间，空名单立即释放。
+- NPC 动作新增 CAMPAIGN 事件，条件新增 CAMPAIGN_STATE / CAMPAIGN_ITEM；玩家选择块 teamVote 开关，全队投票、平票重投、再平票房主选择。冻结投票初始成员，超时弃权，断线成员不阻塞。分段对话转投票关闭旧窗口，自返回必须重新交互。
+- 第一版账号收藏以卡片展示，没有实体红枪、称号、全服邮件；同地图多个世界副本尚未实现。完整任务日志、分支章节出口、迁移工具、主动复制等详见 docs/CAMPAIGNS.md。
 
 ## 验证
 
-- build/verification/limits-033-full.log：完整 build、93 项服务器必需检查、121 项客户端显示交互检查、部署兼容套件全部一次通过。
-- 真正 capture/save/apply/restore 65536 格，包含实际世界标记方块，验证新容量保存与effective读取、低上限提前拒绝、大场景放置与还原。整段测试含存盘耗时3545ms，只作为开发环境证据，不是性能保证；大场景仍同步执行，可能短暂卡顿。
-- 随机180KB不易压缩JSON通过多个实际编码／解码片段重组，检查单包<32767字节、部分数据不执行、内容和请求身份不变、未授权及串token拒绝。
-- 检查旧配置默认值、0/负数/极大值拒绝、单事件合计限制、设置页写入真实参数、返回保留工作副本。已查看 scene-capacity-settings-640.png / 320.png。
-- 安装包 build/libs/codpattern-zombies-0.2.33b.jar。版本、新生产类和测试类排除核对通过；校验值见 build/verification/release-0.2.33b.json。
-- 客户端与服务器都需更新（编辑网络协议变为10）。未在用户完整整合包前台多人环境人工复测。
+- build/verification/campaign-034-full.log：103项必需服务器检查、130项客户端渲染交互、完整构建与部署兼容回归全部通过。截图与结果见 build/verification/npc-client/。
+- 新增10项GameTests：真实完整开局/中途加入/统一初始装备与点数银行重置，队员采用更多进度路线与通关后保留，历史回玩隔离，个人消耗，离线不领奖与房主移交，实际写入失败后原子保留和重试，磁盘重新读取，投票平票规则与分段对话转投票/自返回，非法引用/权限。
+- 客户端新增个人主页、战役卡片详情、收藏和投票的640/320渲染交互，保持原NPC与部署回归。旧有 UI、场景快照、枪械、银行验证继续执行。
+- 测试专用真实关卡需要填入有效的墙枪池，原模板空传奇池会被原部署校验拒绝；测试没有放松生产校验。
+- 安装包 build/libs/codpattern-zombies-0.2.34b.jar。NPC dialogue网络协议11，客户端与服务端均需更新。
+- 仍需用户完整整合包四人实服验收。先在测试世界布置两关，验证保存、回玩、保留队友路线与切关。
+
+## 已定玩法
+
+以 docs/CAMPAIGNS.md 和本会话为准。旧 docs/多人副本与战役存档方案.md 已标为历史提案，房主独占进度、共享剧情背包、跨关继承战斗装备已撤销。收藏属于账号收益，不属于存档。
 
 ## 环境
 
-仓库 main；作者 maerd110 <yyu139301@gmail.com>。JDK D:/，GRADLE_USER_HOME=build/gradle-home。不要运行 clean。GitHub 单次代理：`-c http.proxy=http://127.0.0.1:7890 -c http.version=HTTP/1.1`。
-构建：build runGameTestServer runClient runZombiesDeployCompatSuite -PnpcGameTests -PnpcClientPreview -PgameTestRunDirectory=build/gametest/coop-033 --offline --continue --console=plain。
+main；作者 maerd110 <yyu139301@gmail.com>。JDK D:/；GRADLE_USER_HOME=build/gradle-home；绝对不要 clean。
+完整检查：build runGameTestServer runClient runZombiesDeployCompatSuite -PnpcGameTests -PnpcClientPreview -PgameTestRunDirectory=build/gametest/campaign-034-final --offline --continue --console=plain。
+GitHub单次代理：-c http.proxy=http://127.0.0.1:7890 -c http.version=HTTP/1.1。

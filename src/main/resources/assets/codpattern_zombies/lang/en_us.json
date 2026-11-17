@@ -648,5 +648,10 @@
     "gui.codpattern.zombies.npc.conversation.stage_delete": "Delete segment",
     "gui.codpattern.zombies.npc.conversation.stage_hint": "Replies advance to the next segment; final choices keep their conditions and routes.",
     "gui.codpattern.zombies.npc.conversation.close_wait": "Close after selection; resume target dialogue on next interaction",
-    "gui.codpattern.zombies.npc.conversation.continue": "Continue immediately (click to close and wait instead)"
+    "gui.codpattern.zombies.npc.conversation.continue": "Continue immediately (click to close and wait instead)",
+    "key.codpattern.zombies.campaign": "Profile and campaign saves",
+    "gui.codpattern.zombies.npc.kind.CAMPAIGN": "Campaign event",
+    "gui.codpattern.zombies.npc.campaign_event": "Campaign event ID",
+    "gui.codpattern.zombies.npc.graph.test.CAMPAIGN_STATE": "Campaign state",
+    "gui.codpattern.zombies.npc.graph.test.CAMPAIGN_ITEM": "Story warehouse item"
 }

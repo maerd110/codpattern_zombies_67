@@ -13,11 +13,17 @@ public final class ZombiesScenarioRuntime {
     private static final Set<ZombiesScenarioRuntime> ACTIVE=new HashSet<>();
     private final ZombiesMap map;
     private ZombiesScenarioConfig config=ZombiesScenarioConfig.empty();
-    private final Set<String> completed=new HashSet<>();
+    private final Set<String> completed=new LinkedHashSet<>();
     private final Set<String> taskDone=new HashSet<>();
     private final Map<String,Set<UUID>> areaClaimed=new HashMap<>(),areaBlocked=new HashMap<>();
     private String taskText="";
-    public String taskText(){return taskText;}
+    public String taskText(){String campaign=com.cdp.codpattern.app.zombies.campaign.CampaignRuntime.task(map);return campaign.isBlank()?taskText:campaign;}
+    public void captureCampaign(com.google.gson.JsonObject state){state.add("scenarioEvents",ZombiesNpcRepository.GSON.toJsonTree(completed));state.add("scenarioTasks",ZombiesNpcRepository.GSON.toJsonTree(taskDone));state.addProperty("taskText",taskText);}
+    public void restoreCampaign(com.google.gson.JsonObject state){
+        if(state.has("scenarioEvents"))for(var id:state.getAsJsonArray("scenarioEvents")){trigger(id.getAsString());if(!completed.contains(id.getAsString()))throw new IllegalArgumentException("无法恢复检查点地图事件："+id.getAsString());}
+        if(state.has("scenarioTasks"))for(var id:state.getAsJsonArray("scenarioTasks"))taskDone.add(id.getAsString());
+        if(state.has("taskText"))taskText=state.get("taskText").getAsString();
+    }
     private final Set<String> failed=new HashSet<>();
     private final Map<UUID,ServerPlayer> environmentPlayers=new HashMap<>();
     private ZombiesScenarioConfig.Weather weather;

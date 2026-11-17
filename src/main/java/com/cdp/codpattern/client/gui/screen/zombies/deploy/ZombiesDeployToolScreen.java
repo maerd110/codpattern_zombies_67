@@ -93,14 +93,18 @@ public class ZombiesDeployToolScreen extends Screen {
                     }
                     ZombiesDeployClientActionHandler.openNpcEditor(this, session.draft(false));
                 })).active = !session.busy() && !snapshot().selectedMap().isBlank();
-        button("波次与地图剧情",12,62,132,()->withCommitted(()->{
+        button("波次与地图剧情",12,62,(width-32)/3,()->withCommitted(()->{
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
             var screen=new ZombiesScenarioScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
         })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
-        button("武器池与品阶",148,62,132,()->withCommitted(()->{
+        button("武器池与品阶",16+(width-32)/3,62,(width-32)/3,()->withCommitted(()->{
             if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
             var screen=new ZombiesRulesScreen(this,snapshot().selectedMap());minecraft.setScreen(screen);screen.load();
         })).active=!session.busy()&&!snapshot().selectedMap().isBlank();
+        button("战役与跨关剧情",20+2*((width-32)/3),62,(width-32)/3,()->withCommitted(()->{
+            if(session.dirty()){localError=Component.translatable("gui.codpattern.zombies.npc.error.save_map").getString();return;}
+            var screen=new CampaignScreen(this,true);minecraft.setScreen(screen);screen.load();
+        })).active=!session.busy();
         if (!compactDetails) {
             if (mapPage()) { buildMaps(); buildRegistration(); }
             else { buildTypes(); buildObjects(); buildFields(); }

@@ -41,7 +41,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
             if (rule.graph() != null) for (var node : rule.graph().nodes()) for (var condition : node.conditions()) for (var test : condition.tests()) {
                 if (test.kind() == ZombiesNpcGraph.TestKind.RULE_DONE && !ruleKeys.contains(test.reference())) throw new IllegalArgumentException("条件引用未知规则：" + test.reference());
                 if (test.kind() == ZombiesNpcGraph.TestKind.NPC_ALIVE && !keys.contains(test.reference())) throw new IllegalArgumentException("条件引用未知 NPC：" + test.reference());
-                if (rule.trigger() == Trigger.AUTO && test.kind() == ZombiesNpcGraph.TestKind.ITEM_ACTOR) throw new IllegalArgumentException("交互玩家物品条件只能用于玩家交互入口");
+                if (rule.trigger() == Trigger.AUTO && (test.kind() == ZombiesNpcGraph.TestKind.ITEM_ACTOR || test.kind() == ZombiesNpcGraph.TestKind.CAMPAIGN_ITEM)) throw new IllegalArgumentException("交互玩家物品条件只能用于玩家交互入口");
             }
         }
         Set<String> reachable = new java.util.HashSet<>();
@@ -63,7 +63,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
 
     public enum Pose { STANDING, SITTING, LYING, GROUND_SITTING, SUPINE, KNEELING }
     public enum Trigger { INTERACT, AUTO }
-    public enum Kind { NPC, DIALOGUE, TAKE_ITEM, GIVE_ITEM, SET_BLOCK, OPEN_BARRIER, MAP_EVENT }
+    public enum Kind { NPC, DIALOGUE, TAKE_ITEM, GIVE_ITEM, SET_BLOCK, OPEN_BARRIER, MAP_EVENT, CAMPAIGN }
 
     public record Position(double x, double y, double z, float yaw) {
         public Position {
@@ -173,7 +173,7 @@ public record ZombiesNpcConfig(int version, List<Npc> npcs, List<ZombiesNpcGraph
             if (placements.size() > 256) throw new IllegalArgumentException("At most 256 blocks per action");
             if (kind == null) throw new IllegalArgumentException("Action needs kind");
             switch (kind) {
-                case MAP_EVENT -> { if(text==null||!text.matches("[a-zA-Z0-9_-]{1,64}"))throw new IllegalArgumentException("请选择地图事件"); }
+                case MAP_EVENT, CAMPAIGN -> { if(text==null||!text.matches("[a-zA-Z0-9_-]{1,64}"))throw new IllegalArgumentException("请选择事件编号"); }
                 case NPC -> { if (appearance == null && dialogue == null) throw new IllegalArgumentException("NPC action needs appearance or dialogue"); }
                 case DIALOGUE -> { if (text == null) throw new IllegalArgumentException("DIALOGUE needs text"); }
                 case TAKE_ITEM, GIVE_ITEM -> {

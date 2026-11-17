@@ -219,6 +219,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
         returnDrawRows();
     }
     private void choiceInspector(JsonObject n) {
+        boolean vote=Boolean.parseBoolean(value(n,"teamVote","false"));
+        rowButton(vote?"重要选择：全队投票":"普通选择：当前玩家",()->mutate(()->n.addProperty("teamVote",!vote)),editable());
         if(!n.has("segments"))n.add("segments",new JsonArray());
         var segments=n.getAsJsonArray("segments");
         int stage=conversationStages.getOrDefault(selected,-1);
@@ -285,7 +287,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
         for(int i=0;i<tests.size();i++) {
         final int index=i; line(tr("list.condition",i+1));
         var t = tests.get(i).getAsJsonObject();
-        List<String> types=new ArrayList<>(Arrays.stream(ZombiesNpcGraph.TestKind.values()).map(Enum::name).filter(k -> !k.equals("ITEM_ACTOR") || !editingAutomatic()).toList());
+        List<String> types=new ArrayList<>(Arrays.stream(ZombiesNpcGraph.TestKind.values()).map(Enum::name).filter(k -> (!k.equals("ITEM_ACTOR")&&!k.equals("CAMPAIGN_ITEM")) || !editingAutomatic()).toList());
         if(!editingAutomatic())types.add("ITEM_ACTOR_MISSING");
         String selectedType=value(t,"kind","WAVE");
         if(selectedType.equals("ITEM_ACTOR") && Boolean.parseBoolean(value(t,"negated","false")))selectedType="ITEM_ACTOR_MISSING";
@@ -294,6 +296,8 @@ public final class ZombiesNpcGraphScreen extends Screen {
         }));
         if(!value(t,"kind","").equals("ITEM_ACTOR"))rowButton(tr("graph.negate")+": "+tr("bool."+value(t,"negated","false")),()->mutate(()->t.addProperty("negated",!Boolean.parseBoolean(value(t,"negated","false")))),editable());
         switch (value(t, "kind", "WAVE")) {
+            case "CAMPAIGN_STATE"->{field("战役状态内部编号",t,"reference","");field("需要等于的状态值",t,"item","");}
+            case "CAMPAIGN_ITEM"->{field("剧情物品内部编号",t,"reference","");field(tr("count"),t,"count","1");}
             case "WAVE" -> field(tr("min_wave"), t, "value", "1");
             case "BARRIER" -> select(tr("barrier_group"), owner.graphBarriers().stream().map(String::valueOf).toList(), value(t, "value", "1"), Function.identity(), v -> mutate(() -> t.addProperty("value", Integer.parseInt(v))));
             case "ITEM_ROOM", "ITEM_ACTOR" -> {
@@ -343,6 +347,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
             select(tr("target"),targets,value(a,"target",""),v -> v.isBlank()?tr("self"):v,v -> mutate(() -> {if(v.isBlank())a.remove("target");else a.addProperty("target",v);}));
         }
         switch (value(a, "kind", "DIALOGUE")) {
+            case "CAMPAIGN"->field("战役事件内部编号（在战役编辑器中定义）",a,"text","");
             case "DIALOGUE" -> {
                 List<String> lines = new ArrayList<>(Arrays.asList(value(a, "text", "").split("\\n", -1)));
                 for (int i = 0; i < lines.size(); i++) {
@@ -584,7 +589,7 @@ public final class ZombiesNpcGraphScreen extends Screen {
             case "ACTION" -> {
                 var a = n.getAsJsonObject("action");
                 yield switch (value(a, "kind", "")) {
-                    case "DIALOGUE", "MAP_EVENT" -> value(a, "text", "");
+                    case "DIALOGUE", "MAP_EVENT", "CAMPAIGN" -> value(a, "text", "");
                     case "TAKE_ITEM", "GIVE_ITEM" -> value(a, "item", "") + " × " + value(a, "count", "1");
                     case "OPEN_BARRIER" -> tr("barrier", value(a, "barrierGroup", "1"));
                     case "SET_BLOCK" -> value(a, "block", "") + (a.has("placements") ? " × " + a.getAsJsonArray("placements").size() : "");
